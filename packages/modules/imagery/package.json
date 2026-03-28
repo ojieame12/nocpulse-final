@@ -1,0 +1,13 @@
+{
+  "name": "@fieldpulse/module-imagery",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fieldpulse/module-moisture": "workspace:*",
+    "@fieldpulse/platform-db": "workspace:*",
+    "@fieldpulse/raster": "workspace:*"
+  }
+}

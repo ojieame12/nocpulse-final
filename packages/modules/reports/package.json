@@ -1,0 +1,19 @@
+{
+  "name": "@fieldpulse/module-reports",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fieldpulse/pdf": "workspace:*",
+    "@fieldpulse/module-alerts": "workspace:*",
+    "@fieldpulse/module-crop-intelligence": "workspace:*",
+    "@fieldpulse/module-field-crop-context": "workspace:*",
+    "@fieldpulse/module-fields": "workspace:*",
+    "@fieldpulse/module-moisture": "workspace:*",
+    "@fieldpulse/module-weather": "workspace:*",
+    "@fieldpulse/platform-db": "workspace:*",
+    "@fieldpulse/platform-storage": "workspace:*"
+  }
+}

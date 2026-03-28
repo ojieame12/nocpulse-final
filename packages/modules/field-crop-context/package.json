@@ -1,0 +1,11 @@
+{
+  "name": "@fieldpulse/module-field-crop-context",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fieldpulse/platform-db": "workspace:*"
+  }
+}

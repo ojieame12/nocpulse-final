@@ -1,0 +1,26 @@
+{
+  "name": "@fieldpulse/platform-runtime",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fieldpulse/module-alerts": "workspace:*",
+    "@fieldpulse/module-auth": "workspace:*",
+    "@fieldpulse/module-crop-intelligence": "workspace:*",
+    "@fieldpulse/module-field-crop-context": "workspace:*",
+    "@fieldpulse/module-field-intake": "workspace:*",
+    "@fieldpulse/module-field-onboarding": "workspace:*",
+    "@fieldpulse/module-fields": "workspace:*",
+    "@fieldpulse/module-hail": "workspace:*",
+    "@fieldpulse/module-imagery": "workspace:*",
+    "@fieldpulse/module-moisture": "workspace:*",
+    "@fieldpulse/module-reports": "workspace:*",
+    "@fieldpulse/module-weather": "workspace:*",
+    "@fieldpulse/module-workspaces": "workspace:*",
+    "@fieldpulse/platform-config": "workspace:*",
+    "@fieldpulse/platform-db": "workspace:*",
+    "@fieldpulse/platform-storage": "workspace:*"
+  }
+}

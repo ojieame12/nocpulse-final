@@ -1,0 +1,684 @@
+[
+  {
+    "name": "Biehn",
+    "crop": "Rye",
+    "quarters": [
+      {
+        "quarter": "SE",
+        "section": 15,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 15,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NE",
+        "section": 15,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NW",
+        "section": 15,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Bricks",
+    "crop": "Faba bean",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 14,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SE",
+        "section": 14,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NE",
+        "section": 23,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NW",
+        "section": 23,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SE",
+        "section": 23,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 23,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Carl Yard",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "NW",
+        "section": 4,
+        "township": 37,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 4,
+        "township": 37,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Christoph Creek",
+    "crop": "Rye",
+    "quarters": [
+      {
+        "quarter": "SE",
+        "section": 19,
+        "township": 34,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 19,
+        "township": 34,
+        "range": 22,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Church",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "SW",
+        "section": 30,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Cristoph Hwy",
+    "crop": "Rye",
+    "quarters": [
+      {
+        "quarter": "NW",
+        "section": 12,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 12,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NW",
+        "section": 1,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Crooks",
+    "crop": "Wheat",
+    "quarters": [
+      {
+        "quarter": "NW",
+        "section": 27,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NW",
+        "section": 34,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 34,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Darren Home",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 9,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SE",
+        "section": 9,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Dasher",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 28,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SE",
+        "section": 28,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Debs Yard",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 30,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NW",
+        "section": 30,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Dougs",
+    "crop": "Faba bean",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 16,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Elevator",
+    "crop": "Rye",
+    "quarters": [
+      {
+        "quarter": "SE",
+        "section": 9,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 9,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NE",
+        "section": 9,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NW",
+        "section": 9,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Germaine",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "NW",
+        "section": 15,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Harvey Barn",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "NW",
+        "section": 29,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 32,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Harvey Butler",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "SE",
+        "section": 26,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 26,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Kennedy 1/2",
+    "crop": "Wheat",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 9,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NW",
+        "section": 9,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Kennedy Q",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 6,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Main Farm",
+    "crop": "Wheat",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 23,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SE",
+        "section": 23,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Moffonbier",
+    "crop": "Rye",
+    "quarters": [
+      {
+        "quarter": "SW",
+        "section": 10,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Phylis",
+    "crop": "Rye",
+    "quarters": [
+      {
+        "quarter": "SW",
+        "section": 13,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Poss",
+    "crop": "Faba bean",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 15,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NW",
+        "section": 15,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SE",
+        "section": 15,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 15,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Railway Q",
+    "crop": "Faba bean",
+    "quarters": [
+      {
+        "quarter": "NW",
+        "section": 20,
+        "township": 34,
+        "range": 22,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Rath",
+    "crop": "Faba bean",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 22,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NW",
+        "section": 22,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SE",
+        "section": 22,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 22,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Rath West",
+    "crop": "Faba bean",
+    "quarters": [
+      {
+        "quarter": "SE",
+        "section": 21,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 21,
+        "township": 35,
+        "range": 22,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Robbie",
+    "crop": "Wheat",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 33,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Roman East Q",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "SE",
+        "section": 19,
+        "township": 36,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Roman Yard",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 24,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NW",
+        "section": 24,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SE",
+        "section": 24,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 24,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Senko",
+    "crop": "Rye",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 17,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "NW",
+        "section": 17,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Sigurson",
+    "crop": "Rye",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 2,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SE",
+        "section": 11,
+        "township": 34,
+        "range": 23,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Solomon",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "SE",
+        "section": 31,
+        "township": 36,
+        "range": 13,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Towes",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "NE",
+        "section": 3,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SE",
+        "section": 3,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      },
+      {
+        "quarter": "SW",
+        "section": 3,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      }
+    ]
+  },
+  {
+    "name": "Towes Dugout",
+    "crop": "Canola",
+    "quarters": [
+      {
+        "quarter": "SE",
+        "section": 11,
+        "township": 36,
+        "range": 24,
+        "meridian": "W2"
+      }
+    ]
+  }
+]

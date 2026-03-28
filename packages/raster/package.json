@@ -1,0 +1,11 @@
+{
+  "name": "@fieldpulse/raster",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "geotiff": "^3.0.5"
+  }
+}

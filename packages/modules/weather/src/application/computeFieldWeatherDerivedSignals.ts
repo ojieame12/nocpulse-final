@@ -1,0 +1,63 @@
+import type { FieldWeatherDerivedSignalSet } from "../contracts/FieldWeatherDerivedSignalSet";
+import type { ComputeFieldWeatherDerivedSignalsInput } from "../contracts/ComputeFieldWeatherDerivedSignalsInput";
+import { deriveWeatherSignalSet } from "./deriveWeatherSignalSet";
+
+type LoadLatestFieldWeatherObservationRepository = {
+  getLatestByField(
+    workspaceId: string,
+    fieldId: string,
+  ): Promise<import("../contracts/FieldWeatherObservation").FieldWeatherObservation | null>;
+};
+
+type ListFieldWeatherForecastRepository = {
+  listByField(input: {
+    workspaceId: string;
+    fieldId: string;
+    validAfter?: string;
+    limit?: number;
+  }): Promise<readonly import("../contracts/FieldWeatherForecast").FieldWeatherForecast[]>;
+};
+
+type UpsertFieldWeatherDerivedSignalSetRepository = {
+  upsertSignalSet(
+    input: ReturnType<typeof deriveWeatherSignalSet>,
+  ): Promise<FieldWeatherDerivedSignalSet>;
+};
+
+export type ComputeFieldWeatherDerivedSignalsUseCaseInput = {
+  observations: LoadLatestFieldWeatherObservationRepository;
+  forecasts: ListFieldWeatherForecastRepository;
+  signalSets: UpsertFieldWeatherDerivedSignalSetRepository;
+  input: ComputeFieldWeatherDerivedSignalsInput;
+};
+
+export async function computeFieldWeatherDerivedSignals(
+  input: ComputeFieldWeatherDerivedSignalsUseCaseInput,
+): Promise<FieldWeatherDerivedSignalSet | null> {
+  const observation = await input.observations.getLatestByField(
+    input.input.workspaceId,
+    input.input.fieldId,
+  );
+
+  if (!observation) {
+    return null;
+  }
+
+  const forecasts = await input.forecasts.listByField({
+    workspaceId: input.input.workspaceId,
+    fieldId: input.input.fieldId,
+    validAfter: observation.observedAt,
+    limit: input.input.forecastLimit ?? 72,
+  });
+
+  return input.signalSets.upsertSignalSet(
+    deriveWeatherSignalSet({
+      workspaceId: input.input.workspaceId,
+      fieldId: input.input.fieldId,
+      observation,
+      forecasts,
+      signalVersion: input.input.signalVersion,
+      gddBaseC: input.input.gddBaseC,
+    }),
+  );
+}

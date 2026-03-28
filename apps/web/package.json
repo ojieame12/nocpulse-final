@@ -1,0 +1,35 @@
+{
+  "name": "@fieldpulse/web",
+  "private": true,
+  "dependencies": {
+    "@fieldpulse/map": "workspace:*",
+    "@fieldpulse/module-auth": "workspace:*",
+    "@fieldpulse/module-fields": "workspace:*",
+    "@fieldpulse/module-moisture": "workspace:*",
+    "@fieldpulse/module-workspaces": "workspace:*",
+    "@fieldpulse/platform-config": "workspace:*",
+    "@fieldpulse/platform-runtime": "workspace:*",
+    "@supabase/ssr": "^0.5.2",
+    "lucide-react": "^1.7.0",
+    "maplibre-gl": "^5.4.0",
+    "next": "^15.3.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.1",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "typescript": "^5.8.3"
+  },
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "lint": "echo \"eslint is not wired yet\"",
+    "smoke:imagery-providers": "tsx src/server/smoke/imageryProviderRoutes.ts",
+    "smoke:field-intake": "tsx src/server/smoke/fieldIntakeRoutes.ts",
+    "start": "next start",
+    "test": "echo \"web tests not wired yet\"",
+    "typecheck": "tsc --noEmit"
+  }
+}

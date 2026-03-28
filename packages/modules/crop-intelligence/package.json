@@ -1,0 +1,15 @@
+{
+  "name": "@fieldpulse/module-crop-intelligence",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fieldpulse/module-alerts": "workspace:*",
+    "@fieldpulse/module-hail": "workspace:*",
+    "@fieldpulse/module-moisture": "workspace:*",
+    "@fieldpulse/module-weather": "workspace:*",
+    "@fieldpulse/platform-db": "workspace:*"
+  }
+}

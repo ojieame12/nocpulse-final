@@ -1,0 +1,8 @@
+{
+  "name": "@fieldpulse/module-market",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

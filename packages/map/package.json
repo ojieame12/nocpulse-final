@@ -1,0 +1,15 @@
+{
+  "name": "@fieldpulse/map",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "maplibre-gl": "^5.4.0",
+    "@deck.gl/core": "^9.1.0",
+    "@deck.gl/layers": "^9.1.0",
+    "@deck.gl/mapbox": "^9.1.0",
+    "@deck.gl/extensions": "^9.1.0"
+  }
+}

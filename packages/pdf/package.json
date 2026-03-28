@@ -1,0 +1,8 @@
+{
+  "name": "@fieldpulse/pdf",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

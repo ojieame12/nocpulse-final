@@ -1,0 +1,15 @@
+{
+  "name": "@fieldpulse/module-field-intake",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fieldpulse/module-fields": "workspace:*",
+    "@fieldpulse/platform-db": "workspace:*",
+    "@tmcw/togeojson": "^7.1.2",
+    "@xmldom/xmldom": "^0.8.11",
+    "xlsx": "^0.18.5"
+  }
+}

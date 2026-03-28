@@ -1,0 +1,13 @@
+{
+  "name": "@fieldpulse/module-auth",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fieldpulse/module-workspaces": "workspace:*",
+    "@fieldpulse/platform-db": "workspace:*",
+    "@supabase/supabase-js": "^2.53.0"
+  }
+}

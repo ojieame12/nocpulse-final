@@ -1,0 +1,33 @@
+{
+  "name": "fieldpulse-v3",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "bootstrap:dev-data": "tsx ./scripts/bootstrap-dev-data.ts",
+    "bootstrap:hope-creek": "tsx ./scripts/bootstrap-hope-creek.ts",
+    "build": "corepack pnpm --filter @fieldpulse/web build && corepack pnpm --filter @fieldpulse/worker build",
+    "check": "corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build",
+    "dev": "echo \"Run 'pnpm dev:web' and 'pnpm dev:worker' in separate terminals.\"",
+    "dev:web": "corepack pnpm --filter @fieldpulse/web dev",
+    "dev:worker": "corepack pnpm --filter @fieldpulse/worker dev",
+    "check:boundaries": "node ./scripts/check-boundaries.mjs",
+    "lint": "node ./scripts/check-boundaries.mjs",
+    "test:field-intake": "node --import tsx --test packages/modules/field-intake/src/application/lookupLldBoundary.test.ts",
+    "test:imagery": "node --import tsx --test packages/modules/imagery/src/application/syncLatestImagery.test.ts",
+    "test:imagery-report": "node --import tsx --test packages/modules/imagery/src/application/buildImagerySyncReport.test.ts",
+    "test:crop-intelligence": "node --import tsx --test packages/modules/crop-intelligence/src/application/resolveCropRuleContext.test.ts",
+    "test:crop-intelligence-disease": "node --import tsx --test packages/modules/crop-intelligence/src/application/generateDiseaseRiskFindings.test.ts",
+    "test:crop-intelligence-hail": "node --import tsx --test packages/modules/crop-intelligence/src/application/generateHailRiskFindings.test.ts",
+    "test:crop-intelligence-moisture": "node --import tsx --test packages/modules/crop-intelligence/src/application/generateMoistureStressFindings.test.ts",
+    "test:crop-intelligence-weather": "node --import tsx --test packages/modules/crop-intelligence/src/application/generateWeatherRiskFindings.test.ts",
+    "test:worker-imagery-cadence": "node --import tsx --test apps/worker/src/imageryCadence.test.ts",
+    "typecheck": "./node_modules/.bin/tsc --noEmit -p tsconfig.packages.json && corepack pnpm --filter @fieldpulse/web typecheck && corepack pnpm --filter @fieldpulse/worker typecheck",
+    "test": "corepack pnpm test:field-intake && corepack pnpm test:imagery && corepack pnpm test:imagery-report && corepack pnpm test:crop-intelligence && corepack pnpm test:crop-intelligence-disease && corepack pnpm test:crop-intelligence-hail && corepack pnpm test:crop-intelligence-moisture && corepack pnpm test:crop-intelligence-weather && corepack pnpm test:worker-imagery-cadence"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.1",
+    "tsx": "^4.19.4",
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.3"
+  }
+}

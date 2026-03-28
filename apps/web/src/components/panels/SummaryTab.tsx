@@ -1,0 +1,324 @@
+'use client';
+
+import { useState } from 'react';
+import {
+  Cloud,
+  Droplets,
+  Thermometer,
+  TrendingDown,
+  RefreshCw,
+  FileText,
+  Sun,
+  CheckCircle,
+  ArrowLeftRight,
+  Flame,
+  Leaf,
+  Waves,
+  BarChart3,
+  ShieldCheck,
+} from 'lucide-react';
+import { DonutChart, SectionHeader } from '../ui';
+import { Button } from '../ui/Button';
+
+/* ── Types ── */
+
+export interface SummaryAlert {
+  label: string;
+  desc: string;
+  severity: 'warning' | 'danger';
+}
+
+export interface SummaryOutlookDay {
+  day: string;
+  high: number;
+  low: number;
+  precip: string;
+}
+
+export interface FieldSummaryProps {
+  name: string;
+  lld: string;
+  crop: string;
+  cropStage: string;
+  moisture: number;
+  cloudCover: string;
+  surfaceMoisture: string;
+  fieldState: string;
+  fieldStateColor: string;
+  rootMoisture: string;
+  rootMoistureSub: string;
+  trend: string;
+  trendSub: string;
+  spread: string;
+  spreadSub: string;
+  confidence: string;
+  confidenceSub: string;
+  precipitation: string;
+  precipitationSub: string;
+  nextRain: string;
+  nextRainSub: string;
+  rainChance: string;
+  rainChanceSub: string;
+  sevenDayTotal: string;
+  sevenDayTotalSub: string;
+  alerts: SummaryAlert[];
+  outlook: SummaryOutlookDay[];
+}
+
+/* ── Layer Pills ── */
+
+const LAYERS = ['NDVI', 'NDRE', 'NDMI'] as const;
+const EXTRA = ['Moisture'] as const;
+type Layer = (typeof LAYERS)[number] | (typeof EXTRA)[number];
+
+function LayerPills({ active, onChange }: { active: Layer; onChange: (l: Layer) => void }) {
+  return (
+    <div className="layer-pills">
+      {LAYERS.map((l) => (
+        <button
+          key={l}
+          type="button"
+          className={`layer-pill${active === l ? ' layer-pill--active' : ''}`}
+          onClick={() => onChange(l)}
+        >
+          {l}
+        </button>
+      ))}
+      <div className="layer-pills__divider" />
+      {EXTRA.map((l) => (
+        <button
+          key={l}
+          type="button"
+          className={`layer-pill${active === l ? ' layer-pill--active' : ''}`}
+          onClick={() => onChange(l)}
+        >
+          {l}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ── Component ── */
+
+export function SummaryTab({ field }: { field: FieldSummaryProps }) {
+  const [activeLayer, setActiveLayer] = useState<Layer>('NDVI');
+  const moistureColor = field.moisture < 0.3 ? '#ef4444' : '#16a34a';
+
+  return (
+    <div className="panel__body">
+      {/* Title */}
+      <div className="panel__title-section">
+        <h2 className="panel__title-main">{field.name}</h2>
+        <span className="panel__title-sub">
+          {field.lld} &middot; Legal Land Description
+        </span>
+      </div>
+
+      {/* Layer Pills */}
+      <LayerPills active={activeLayer} onChange={setActiveLayer} />
+
+      {/* Donut + Info */}
+      <div>
+        <div className="donut-container__label">
+          <div className="donut-container__label-dot" />
+          <span className="donut-container__label-text">Field overview</span>
+        </div>
+        <div className="donut-container">
+          <DonutChart
+            value={field.moisture}
+            size={120}
+            color={moistureColor}
+            caption="Root moisture"
+          />
+          <div className="donut-info">
+            <div className="donut-info__row">
+              <Cloud size={12} className="donut-info__icon" />
+              <div className="donut-info__text">
+                <span className="donut-info__label">Cloud cover</span>
+                <span className="donut-info__value">{field.cloudCover}</span>
+              </div>
+            </div>
+            <div className="donut-info__row">
+              <Droplets size={12} className="donut-info__icon" />
+              <div className="donut-info__text">
+                <span className="donut-info__label">Surface moisture</span>
+                <span className="donut-info__value" style={{ color: '#f59e0b' }}>{field.surfaceMoisture}</span>
+              </div>
+            </div>
+            <div className="donut-info__row">
+              <Leaf size={12} className="donut-info__icon" />
+              <div className="donut-info__text">
+                <span className="donut-info__label">Field state</span>
+                <span className="donut-info__value" style={{ color: field.fieldStateColor }}>{field.fieldState}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CONDITIONS */}
+      <div className="panel__section">
+        <SectionHeader label="CONDITIONS" meta="Field average" />
+        <div className="panel__data-grid">
+          <div className="panel__data-row">
+            <div className="panel__data-cell">
+              <div className="panel__data-cell-icon-label">
+                <Waves size={12} />
+                <span className="panel__data-cell-label">Root Moisture</span>
+              </div>
+              <span className="panel__data-cell-value">{field.rootMoisture}</span>
+              <span className="panel__data-cell-sub" style={{ color: 'var(--status-positive)', fontWeight: 600 }}>{field.rootMoistureSub}</span>
+            </div>
+            <div className="panel__data-cell">
+              <div className="panel__data-cell-icon-label">
+                <TrendingDown size={12} />
+                <span className="panel__data-cell-label">Trend (7d)</span>
+              </div>
+              <span className="panel__data-cell-value panel__data-cell-value--text">
+                <TrendingDown size={14} style={{ color: '#f59e0b' }} />
+                <span style={{ color: '#f59e0b' }}>{field.trend}</span>
+              </span>
+              <span className="panel__data-cell-sub">{field.trendSub}</span>
+            </div>
+          </div>
+          <div className="panel__data-row">
+            <div className="panel__data-cell">
+              <div className="panel__data-cell-icon-label">
+                <BarChart3 size={12} />
+                <span className="panel__data-cell-label">Spread (σ)</span>
+              </div>
+              <span className="panel__data-cell-value">{field.spread}</span>
+              <span className="panel__data-cell-sub">{field.spreadSub}</span>
+            </div>
+            <div className="panel__data-cell">
+              <div className="panel__data-cell-icon-label">
+                <ShieldCheck size={12} />
+                <span className="panel__data-cell-label">Confidence</span>
+              </div>
+              <span className="panel__data-cell-value panel__data-cell-value--text" style={{ color: '#f59e0b' }}>{field.confidence}</span>
+              <span className="panel__data-cell-sub">{field.confidenceSub}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ATMOSPHERE */}
+      <div className="panel__section">
+        <SectionHeader label="ATMOSPHERE" />
+        <div className="panel__data-grid">
+          <div className="panel__data-row">
+            <div className="panel__data-cell">
+              <div className="panel__data-cell-icon-label">
+                <Droplets size={12} />
+                <span className="panel__data-cell-label">Precipitation</span>
+              </div>
+              <span className="panel__data-cell-value">{field.precipitation}</span>
+              <span className="panel__data-cell-sub">{field.precipitationSub}</span>
+            </div>
+            <div className="panel__data-cell">
+              <div className="panel__data-cell-icon-label">
+                <Cloud size={12} />
+                <span className="panel__data-cell-label">Next Rain</span>
+              </div>
+              <span className="panel__data-cell-value">{field.nextRain}</span>
+              <span className="panel__data-cell-sub">{field.nextRainSub}</span>
+            </div>
+          </div>
+          <div className="panel__data-row">
+            <div className="panel__data-cell">
+              <div className="panel__data-cell-icon-label">
+                <Droplets size={12} />
+                <span className="panel__data-cell-label">Rain Chance</span>
+              </div>
+              <span className="panel__data-cell-value">{field.rainChance}</span>
+              <span className="panel__data-cell-sub">{field.rainChanceSub}</span>
+            </div>
+            <div className="panel__data-cell">
+              <div className="panel__data-cell-icon-label">
+                <Droplets size={12} />
+                <span className="panel__data-cell-label">7-Day Total</span>
+              </div>
+              <span className="panel__data-cell-value">{field.sevenDayTotal}</span>
+              <span className="panel__data-cell-sub" style={{ color: '#f59e0b', fontWeight: 600 }}>{field.sevenDayTotalSub}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ACTIVE ALERTS */}
+      <div className="panel__section">
+        <SectionHeader label="ACTIVE ALERTS" meta={<span style={{ color: '#ef4444' }}>{field.alerts.length} active</span>} />
+        {field.alerts.map((alert, i) => (
+          <div className="alert-card" key={i}>
+            <div className="alert-card__icon">
+              {alert.severity === 'danger' ? (
+                <Flame size={16} style={{ color: 'var(--status-danger)' }} />
+              ) : (
+                <Thermometer size={16} style={{ color: 'var(--status-warning)' }} />
+              )}
+            </div>
+            <div className="alert-card__content">
+              <span className="alert-card__label">{alert.label}</span>
+              <span className="alert-card__desc">{alert.desc}</span>
+            </div>
+            <span className={`alert-card__badge alert-card__badge--${alert.severity}`}>
+              {alert.severity === 'danger' ? 'High' : 'Medium'}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* 7-DAY OUTLOOK */}
+      <div className="panel__section">
+        <SectionHeader label="7-DAY OUTLOOK" />
+        <div className="outlook-grid">
+          {field.outlook.map((day) => (
+            <div className="outlook-card" key={day.day}>
+              <span className="outlook-card__day">{day.day}</span>
+              <Sun size={16} className="outlook-card__icon" />
+              <span className="outlook-card__temps">{day.high}/{day.low}</span>
+              <span className="outlook-card__precip">{day.precip}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* UPDATED TIMESTAMP */}
+      <span className="panel__updated">UPDATED MAR 27, 2026, 11:34 AM</span>
+
+      {/* IMAGE VIEWER */}
+      <div className="image-viewer">
+        <div className="image-viewer__frames">
+          <div className="image-viewer__frame" />
+          <div className="image-viewer__frame image-viewer__frame--right" />
+          <div className="image-viewer__divider" />
+          <div className="image-viewer__handle">
+            <ArrowLeftRight size={12} />
+          </div>
+        </div>
+        <div className="image-viewer__caption">
+          <div className="image-viewer__meta">
+            <span className="image-viewer__status">
+              <CheckCircle size={12} /> Clear pass
+            </span>
+            <span className="image-viewer__date">Mar 26, 2026, 2:00 AM</span>
+          </div>
+          <span className="image-viewer__title">
+            Clear pass — trusted for NDVI assessment.
+          </span>
+          <span className="image-viewer__desc">
+            10m native resolution. Rendered overlays are smoothed for readability.
+          </span>
+        </div>
+      </div>
+
+      {/* QUICK ACTIONS */}
+      <SectionHeader label="QUICK ACTIONS" />
+      <div className="panel__action-row">
+        <Button variant="panel-primary" icon={RefreshCw}>Sync Field</Button>
+        <Button variant="panel-secondary" icon={FileText}>Report</Button>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@fieldpulse/module-field-onboarding",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fieldpulse/module-imagery": "workspace:*"
+  }
+}

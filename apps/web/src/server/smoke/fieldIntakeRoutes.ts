@@ -1,0 +1,196 @@
+import { loadEnvFile } from "@fieldpulse/platform-config";
+import { createServerRuntime } from "@fieldpulse/platform-runtime";
+import { POST as parseGeofile } from "../../app/api/field-intake/geofile/parse/route";
+import { POST as lookupLld } from "../../app/api/field-intake/lld/lookup/route";
+import { GET as getActor } from "../../app/api/auth/actor/route";
+import { POST as saveBatch } from "../../app/api/field-intake/spreadsheet/batches/route";
+import { POST as commitBatch } from "../../app/api/field-intake/spreadsheet/batches/[batchId]/commit/route";
+import { POST as previewSpreadsheet } from "../../app/api/field-intake/spreadsheet/preview/route";
+
+const FALLBACK_ACTOR_USER_ID = "00000000-0000-4000-8000-000000000001";
+
+async function main() {
+  loadEnvFile();
+  const runId = Date.now().toString(36);
+
+  const runtime = createServerRuntime(process.env);
+
+  if (runtime.mode !== "supabase") {
+    throw new Error("Supabase runtime is not configured");
+  }
+
+  const actorUserId = runtime.env.devActorUserId ?? FALLBACK_ACTOR_USER_ID;
+  const workspace = (await runtime.services.workspaces.listForUser(actorUserId))[0];
+
+  if (!workspace) {
+    throw new Error(`No workspace is available for actor ${actorUserId}`);
+  }
+
+  const lldResponse = await lookupLld(
+    new Request("http://localhost/api/field-intake/lld/lookup", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        code: "NW-25-042-04-W4",
+        suggestedFieldName: `Route LLD North ${runId}`,
+      }),
+    }),
+  );
+  const lldJson = await lldResponse.json();
+  const actorResponse = await getActor(
+    new Request("http://localhost/api/auth/actor", {
+      headers: {
+        "x-fieldpulse-user-id": actorUserId,
+        "x-fieldpulse-workspace-id": workspace.id,
+      },
+    }),
+  );
+  const actorJson = await actorResponse.json();
+
+  const geojson = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: {
+          name: "Route Geojson Field",
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [-104.7, 50.45],
+              [-104.69, 50.45],
+              [-104.69, 50.44],
+              [-104.7, 50.44],
+              [-104.7, 50.45],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+
+  const geofileForm = new FormData();
+  geofileForm.set(
+    "file",
+    new File([JSON.stringify(geojson)], "field.geojson", {
+      type: "application/geo+json",
+    }),
+  );
+  const geofileResponse = await parseGeofile(
+    new Request("http://localhost/api/field-intake/geofile/parse", {
+      method: "POST",
+      body: geofileForm,
+    }),
+  );
+  const geofileJson = await geofileResponse.json();
+
+  const csv = [
+    "Field Name,Quarter,Section,Township,Range,Meridian,Crop",
+    `Route Import North ${runId},NW,28,42,4,4,barley`,
+    `Route Import North ${runId},NE,28,42,4,4,barley`,
+  ].join("\n");
+
+  const previewForm = new FormData();
+  previewForm.set(
+    "file",
+    new File([csv], "field-import.csv", {
+      type: "text/csv",
+    }),
+  );
+  const previewResponse = await previewSpreadsheet(
+    new Request("http://localhost/api/field-intake/spreadsheet/preview", {
+      method: "POST",
+      body: previewForm,
+    }),
+  );
+  const previewJson = await previewResponse.json();
+
+  const saveResponse = await saveBatch(
+    new Request("http://localhost/api/field-intake/spreadsheet/batches", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-fieldpulse-user-id": actorUserId,
+        "x-fieldpulse-workspace-id": workspace.id,
+      },
+      body: JSON.stringify({
+        preview: previewJson.result,
+      }),
+    }),
+  );
+  const saveJson = await saveResponse.json();
+
+  const batchId = saveJson.result.batch.id as string;
+
+  const commitResponse = await commitBatch(
+    new Request(
+      `http://localhost/api/field-intake/spreadsheet/batches/${batchId}/commit`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-fieldpulse-user-id": actorUserId,
+          "x-fieldpulse-workspace-id": workspace.id,
+        },
+        body: JSON.stringify({
+          onboardingDryRun: false,
+        }),
+      },
+    ),
+    {
+      params: Promise.resolve({
+        batchId,
+      }),
+    },
+  );
+  const commitJson = await commitResponse.json();
+
+  console.log(
+    JSON.stringify(
+      {
+        workspaceId: workspace.id,
+        actorStatus: actorResponse.status,
+        actorWorkspaceId: actorJson.actor?.workspaceId,
+        lldStatus: lldResponse.status,
+        lldFieldName: lldJson.result?.draft?.name,
+        geofileStatus: geofileResponse.status,
+        geofileFieldName: geofileJson.result?.draft?.name,
+        previewStatus: previewResponse.status,
+        previewFieldCount: previewJson.result?.fieldCount,
+        saveStatus: saveResponse.status,
+        savedBatchId: batchId,
+        commitStatus: commitResponse.status,
+        commitBatchStatus: commitJson.result?.batch?.status,
+        commitFieldIds:
+          commitJson.result?.candidates?.map(
+            (entry: { field: { id: string } }) => entry.field.id,
+          ) ?? [],
+        queueDispatchIds:
+          commitJson.result?.onboardingDispatches?.flatMap(
+            (
+              entry: {
+                receipts: Array<{
+                  result: {
+                    id: string;
+                  };
+                }>;
+              },
+            ) => entry.receipts.map((receipt) => receipt.result.id),
+          ) ?? [],
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+void main().catch((error: unknown) => {
+  const message =
+    error instanceof Error ? error.message : "Unknown field-intake route smoke error";
+  console.error(`[field-intake-routes-smoke] ${message}`);
+  process.exitCode = 1;
+});
