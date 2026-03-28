@@ -237,9 +237,33 @@ importers:
 
   packages/modules/reports:
     dependencies:
+      '@fieldpulse/module-alerts':
+        specifier: workspace:*
+        version: link:../alerts
+      '@fieldpulse/module-crop-intelligence':
+        specifier: workspace:*
+        version: link:../crop-intelligence
+      '@fieldpulse/module-field-crop-context':
+        specifier: workspace:*
+        version: link:../field-crop-context
+      '@fieldpulse/module-fields':
+        specifier: workspace:*
+        version: link:../fields
+      '@fieldpulse/module-moisture':
+        specifier: workspace:*
+        version: link:../moisture
+      '@fieldpulse/module-weather':
+        specifier: workspace:*
+        version: link:../weather
+      '@fieldpulse/pdf':
+        specifier: workspace:*
+        version: link:../../pdf
       '@fieldpulse/platform-db':
         specifier: workspace:*
         version: link:../../platform/db
+      '@fieldpulse/platform-storage':
+        specifier: workspace:*
+        version: link:../../platform/storage
 
   packages/modules/weather:
     dependencies:
@@ -322,6 +346,9 @@ importers:
       '@fieldpulse/platform-db':
         specifier: workspace:*
         version: link:../db
+      '@fieldpulse/platform-storage':
+        specifier: workspace:*
+        version: link:../storage
 
   packages/platform/storage: {}
 
