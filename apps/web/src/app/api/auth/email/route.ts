@@ -25,6 +25,19 @@ const AUTH_EMAIL_ADDRESS_RATE_LIMIT = {
   windowSeconds: 15 * 60,
 } as const;
 
+const REQUEST_ACCESS_REQUIRED_MESSAGE =
+  "This email has not been provisioned for NocPulse yet.";
+
+function jsonRequestAccessRequired(email: string, nextPath: string) {
+  return jsonOk({
+    ok: true,
+    email,
+    next: nextPath,
+    disposition: "request_access_required" as const,
+    message: REQUEST_ACCESS_REQUIRED_MESSAGE,
+  });
+}
+
 /**
  * POST /api/auth/email
  *
@@ -102,10 +115,7 @@ export async function POST(request: Request) {
       });
 
       if (!access.canRequestSignIn || (access.shouldCreateUser && !allowSignup)) {
-        return jsonError(
-          404,
-          "This email has not been provisioned for NocPulse yet.",
-        );
+        return jsonRequestAccessRequired(email, nextPath);
       }
 
       const admin = createAdminSupabaseClient();
@@ -176,10 +186,7 @@ export async function POST(request: Request) {
     });
 
     if (!access.canRequestSignIn || (access.shouldCreateUser && !allowSignup)) {
-      return jsonError(
-        404,
-        "This email has not been provisioned for NocPulse yet.",
-      );
+      return jsonRequestAccessRequired(email, nextPath);
     }
 
     const callbackUrl = new URL("/auth/callback", getAppOrigin(request));

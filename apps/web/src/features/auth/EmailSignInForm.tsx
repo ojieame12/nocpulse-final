@@ -45,8 +45,16 @@ export function EmailSignInForm({
           allowSignup: true,
         }),
       });
-      const payload = (await response.json()) as { error?: { message?: string } };
+      const payload = (await response.json()) as {
+        disposition?: "request_access_required";
+        message?: string;
+        error?: { message?: string };
+      };
       if (!response.ok) throw new Error(payload.error?.message ?? "Email sign-in failed.");
+      if (payload.disposition === "request_access_required") {
+        setError(payload.message ?? "This email has not been provisioned for NocPulse yet.");
+        return;
+      }
       const target = new URL("/auth/check-email", window.location.origin);
       target.searchParams.set("email", email);
       target.searchParams.set("next", nextPath);

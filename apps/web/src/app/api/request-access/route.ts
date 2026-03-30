@@ -23,8 +23,8 @@ const DEFAULT_GRANT_ACCESS_ROLE = "member" as const;
 
 const REQUEST_ACCESS_IP_RATE_LIMIT = {
   scope: "request-access:ip",
-  maxAttempts: 5,
-  windowSeconds: 60 * 60,
+  maxAttempts: 8,
+  windowSeconds: 15 * 60,
 } as const;
 
 const REQUEST_ACCESS_EMAIL_RATE_LIMIT = {
