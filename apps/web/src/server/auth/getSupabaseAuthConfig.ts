@@ -1,25 +1,30 @@
-import { loadEnvFile, readAppEnv } from "@fieldpulse/platform-config";
-
-let envLoaded = false;
-
-export function getSupabaseAuthConfig() {
-  if (!envLoaded) {
-    loadEnvFile();
-    envLoaded = true;
+function extractProjectRef(supabaseUrl: string | undefined) {
+  if (!supabaseUrl) {
+    return undefined;
   }
 
-  const env = readAppEnv(process.env);
+  try {
+    const hostname = new URL(supabaseUrl).hostname;
+    return hostname.split(".")[0];
+  } catch {
+    return undefined;
+  }
+}
 
-  if (!env.supabase.url || !env.supabase.anonKey) {
+export function getSupabaseAuthConfig() {
+  const url = process.env.SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
     throw new Error(
       "[auth] Supabase auth config requires SUPABASE_URL and SUPABASE_ANON_KEY.",
     );
   }
 
   return {
-    nodeEnv: env.nodeEnv,
-    url: env.supabase.url,
-    anonKey: env.supabase.anonKey,
-    projectRef: env.supabase.projectRef,
+    nodeEnv: process.env.NODE_ENV ?? "development",
+    url,
+    anonKey,
+    projectRef: extractProjectRef(url),
   };
 }
