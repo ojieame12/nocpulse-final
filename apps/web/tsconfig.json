@@ -22,6 +22,9 @@
   "exclude": [
     "node_modules",
     "src/__archive__",
-    "**/__archive__/**"
+    "**/__archive__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/__tests__/**"
   ]
 }
