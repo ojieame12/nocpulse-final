@@ -60,3 +60,15 @@ export type FieldAgronomicSurfaceRenderModel = {
   material: MapExtrusionMaterial;
   cells: FieldAgronomicCellRenderModel[];
 };
+
+export type FieldAgronomicAlternateCellRenderModel = Omit<
+  FieldAgronomicCellRenderModel,
+  "polygon" | "centroid"
+>;
+
+export type FieldAgronomicAlternateSurfaceRenderModel = Omit<
+  FieldAgronomicSurfaceRenderModel,
+  "cells"
+> & {
+  cells: Record<string, FieldAgronomicAlternateCellRenderModel>;
+};

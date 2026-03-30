@@ -1,6 +1,6 @@
-import Link from 'next/link';
 import { buildPreviewViewModel } from './buildPreviewViewModel';
 import { PreviewShell, type FieldViewModel } from './PreviewShell';
+import { PreviewEmptyShell } from './PreviewEmptyShell';
 import { ErrorBoundary } from '../../components/layout/ErrorBoundary';
 export const dynamic = 'force-dynamic';
 
@@ -16,56 +16,15 @@ export default async function PreviewPage({ searchParams }: PreviewPageProps) {
   const viewModel = await buildPreviewViewModel(requestedFieldId);
 
   if (viewModel.status === 'no-runtime') {
-    return (
-      <main>
-        <div className="shell">
-          <section className="hero">
-            <span className="pill">Runtime unavailable</span>
-            <h1>Supabase runtime not configured</h1>
-            <p>
-              Set <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code> in your
-              environment to enable live data.
-            </p>
-          </section>
-        </div>
-      </main>
-    );
+    return <PreviewEmptyShell status="no-runtime" />;
   }
 
   if (viewModel.status === 'unauthenticated') {
-    return (
-      <main>
-        <div className="shell">
-          <section className="hero">
-            <span className="pill">Authentication required</span>
-            <h1>Sign in to view the preview</h1>
-            <p>
-              <Link href="/auth/sign-in?next=/preview">Continue to sign in</Link>
-            </p>
-          </section>
-        </div>
-      </main>
-    );
+    return <PreviewEmptyShell status="unauthenticated" />;
   }
 
   if (viewModel.status === 'no-fields') {
-    return (
-      <main>
-        <div className="shell">
-          <section className="hero">
-            <span className="pill">No fields</span>
-            <h1>No fields found in your workspace</h1>
-            <p>
-              Run <code>corepack pnpm bootstrap:dev-data</code> to seed Hope Creek Farms, or import
-              fields from the home page.
-            </p>
-            <p>
-              <Link href="/">Return home</Link>
-            </p>
-          </section>
-        </div>
-      </main>
-    );
+    return <PreviewEmptyShell status="no-fields" />;
   }
 
   // viewModel.status === 'ready' — pass all data to the client shell
@@ -90,7 +49,7 @@ export default async function PreviewPage({ searchParams }: PreviewPageProps) {
 
   return (
     <ErrorBoundary fallbackMessage="The preview environment crashed unexpectedly.">
-      <PreviewShell initial={initial} />
+      <PreviewShell initial={initial} initialPanelsPromise={vm.panelsPromise} />
     </ErrorBoundary>
   );
 }

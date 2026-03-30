@@ -70,7 +70,23 @@ export type FieldViewModel = {
 
 export type PreviewShellProps = {
   initial: FieldViewModel;
+  initialPanelsPromise?: Promise<Partial<FieldViewModel>>;
 };
+
+import React from "react";
+function StreamingPanels({
+  promise,
+  onResolve,
+}: {
+  promise: Promise<Partial<FieldViewModel>>;
+  onResolve: (data: Partial<FieldViewModel>) => void;
+}) {
+  const data = React.use(promise);
+  React.useEffect(() => {
+    onResolve(data);
+  }, [data, onResolve]);
+  return null;
+}
 
 const PREFETCH_DELAY_MS = 250;
 const FAILED_FETCH_RETRY_MS = 15_000;
@@ -318,7 +334,7 @@ function buildZoneDetailSelection(
 
 /* ── Main shell ── */
 
-export function PreviewShell({ initial }: PreviewShellProps) {
+export function PreviewShell({ initial, initialPanelsPromise }: PreviewShellProps) {
   const [theme, setTheme] = useState<AppTheme>("dark");
 
   /* Field data state — starts with server-loaded initial */
@@ -1103,6 +1119,16 @@ export function PreviewShell({ initial }: PreviewShellProps) {
         onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
       />
       <div className="app-body">
+        {initialPanelsPromise && (
+          <React.Suspense fallback={null}>
+            <StreamingPanels
+              promise={initialPanelsPromise}
+              onResolve={(panels) =>
+                setFieldData((prev) => ({ ...prev, ...panels }))
+              }
+            />
+          </React.Suspense>
+        )}
         <div className="map-area">
           <AppShellErrorBoundary
             resetKey={`${activeFieldId}:${activePanel}:${activeLayer}`}

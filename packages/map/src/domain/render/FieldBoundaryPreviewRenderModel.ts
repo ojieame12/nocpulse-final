@@ -1,5 +1,6 @@
 import type { FieldBoundaryPreviewPresentation } from "../../contracts/presentation";
 import type {
+  FieldAgronomicAlternateSurfaceRenderModel,
   FieldAgronomicSurfaceMetricKey,
   FieldAgronomicSurfaceRenderModel,
 } from "./FieldAgronomicSurfaceRenderModel";
@@ -57,7 +58,7 @@ export type FieldBoundaryPreviewRenderModel = {
   zones?: FieldBoundaryZoneRenderModel[];
   agronomicSurface: FieldAgronomicSurfaceRenderModel | null;
   alternateAgronomicSurfaces?: Partial<
-    Record<FieldAgronomicSurfaceMetricKey, FieldAgronomicSurfaceRenderModel>
+    Record<FieldAgronomicSurfaceMetricKey, FieldAgronomicAlternateSurfaceRenderModel>
   >;
   focusedZoneId?: string | null;
   presentation: FieldBoundaryPreviewPresentation;

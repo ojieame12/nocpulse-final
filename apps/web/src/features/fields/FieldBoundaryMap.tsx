@@ -52,12 +52,27 @@ export function FieldBoundaryMap({
     const alternateSurface = model.alternateAgronomicSurfaces?.[activeMetric] ?? null;
     if (!alternateSurface) return model;
 
+    const baseCells = model.agronomicSurface?.cells ?? [];
+    const hydratedCells = baseCells
+      .map((baseCell) => {
+        const altCell = alternateSurface.cells[baseCell.id];
+        if (!altCell) return null;
+        return {
+          ...altCell,
+          polygon: baseCell.polygon,
+          centroid: baseCell.centroid,
+        };
+      })
+      .filter((cell): cell is NonNullable<typeof cell> => cell !== null);
+
     return {
       ...model,
-      agronomicSurface: alternateSurface,
+      agronomicSurface: {
+        ...alternateSurface,
+        cells: hydratedCells,
+      },
     };
   }, [model, activeMetric, serverMetric]);
-
   // Stable callback refs so the runtime doesn't need re-creation on prop changes.
   const onCellClickRef = useRef(onCellClick);
   onCellClickRef.current = onCellClick;

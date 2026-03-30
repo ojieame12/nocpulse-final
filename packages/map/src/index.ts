@@ -32,6 +32,8 @@ export {
   type FieldAgronomicSurfaceMetricKey,
   type FieldAgronomicCellRenderModel,
   type FieldAgronomicSurfaceRenderModel,
+  type FieldAgronomicAlternateCellRenderModel,
+  type FieldAgronomicAlternateSurfaceRenderModel,
   type CellAnomalyClass,
 } from "./domain/render/FieldAgronomicSurfaceRenderModel";
 export {

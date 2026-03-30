@@ -405,13 +405,13 @@ export async function buildFieldOverviewViewModel(
       );
       return null;
     }),
-    runtime.services.fieldCropContext
-      .listWorkspaceCropContexts(selection.selectedWorkspace.id)
-      .catch((err) => {
-        console.error("[buildFieldOverviewViewModel] failed to load crop contexts:", err);
-        return [];
-      }),
   ]);
+  const allCropContextsPromise = runtime.services.fieldCropContext
+    .listWorkspaceCropContexts(selection.selectedWorkspace.id)
+    .catch((err) => {
+      console.error("[buildFieldOverviewViewModel] failed to load crop contexts:", err);
+      return [];
+    });
   const rasterFamilyObservations = await rasterFamilyPromise;
   const rasterFamilyDurationMs = finishPerfTimer(
     rasterFamilyStartedAt,
@@ -594,41 +594,54 @@ export async function buildFieldOverviewViewModel(
           ? "Resolved alert history could not be loaded. Active alerts are current, but recent resolution history may be incomplete."
           : undefined,
   };
-  const reportPanel: FieldReportProps = buildReportProps(
-    effectiveReadModel,
-    field.name,
-    formatTimeAgo,
-  );
-  const actionPanel: FieldActionProps = buildActionProps(effectiveReadModel, field.name);
-  const [
-    scoutNotes,
-    recentMarketPrices,
-    fieldBasisAssumption,
-    fieldYieldAssumption,
-    allCropContexts,
-  ] = await serviceReadsPromise;
-  const serviceReadsDurationMs = finishPerfTimer(
-    serviceReadsStartedAt,
-    debugPerfEnabled,
-  );
-  const notesPanel: FieldNotesProps = buildNotesProps(
-    effectiveReadModel,
-    field.id,
-    field.name,
-    scoutNotes,
-  );
-  const marketPanel: FieldMarketProps = buildMarketProps(
-    effectiveReadModel,
-    field.id,
-    field.name,
-    field.areaHa,
-    null,
-    recentMarketPrices,
-    fieldBasisAssumption,
-    fieldYieldAssumption,
-  );
-  const cropPanel: FieldCropProps = buildCropProps(effectiveReadModel);
-  const activityPanel: FieldActivityPanelModel = buildActivityPanelModel(effectiveReadModel);
+  const allCropContexts = await allCropContextsPromise;
+
+  const resolvePanels = async () => {
+    const reportPanel: FieldReportProps = buildReportProps(
+      effectiveReadModel,
+      field.name,
+      formatTimeAgo,
+    );
+    const actionPanel: FieldActionProps = buildActionProps(effectiveReadModel, field.name);
+    const [
+      scoutNotes,
+      recentMarketPrices,
+      fieldBasisAssumption,
+      fieldYieldAssumption,
+    ] = await serviceReadsPromise;
+    const serviceReadsDurationMs = finishPerfTimer(
+      serviceReadsStartedAt,
+      debugPerfEnabled,
+    );
+    const notesPanel: FieldNotesProps = buildNotesProps(
+      effectiveReadModel,
+      field.id,
+      field.name,
+      scoutNotes,
+    );
+    const marketPanel: FieldMarketProps = buildMarketProps(
+      effectiveReadModel,
+      field.id,
+      field.name,
+      field.areaHa,
+      null,
+      recentMarketPrices,
+      fieldBasisAssumption,
+      fieldYieldAssumption,
+    );
+    const cropPanel: FieldCropProps = buildCropProps(effectiveReadModel);
+    const activityPanel: FieldActivityPanelModel = buildActivityPanelModel(effectiveReadModel);
+
+    return {
+      reportPanel,
+      actionPanel,
+      notesPanel,
+      marketPanel,
+      cropPanel,
+      activityPanel,
+      serviceReadsDurationMs,
+    };
+  };
 
   const zoneAssignments = new Map<string, string>();
   for (const zone of readModel.zones.zones) {
@@ -674,10 +687,15 @@ export async function buildFieldOverviewViewModel(
         surface
           ? {
               ...surface,
-              cells: surface.cells.map((cell) => ({
-                ...cell,
-                zoneId: zoneAssignments.get(cell.id) ?? cell.zoneId,
-              })),
+              cells: Object.fromEntries(
+                Object.entries(surface.cells).map(([id, cell]) => [
+                  id,
+                  {
+                    ...cell,
+                    zoneId: zoneAssignments.get(id) ?? cell.zoneId,
+                  },
+                ]),
+              ),
             }
           : surface,
       ]),
@@ -927,32 +945,23 @@ export async function buildFieldOverviewViewModel(
     sidebarFields,
     summary,
     alertsPanel,
-    activityPanel,
-    reportPanel,
-    actionPanel,
-    notesPanel,
-    marketPanel,
-    cropPanel,
     cellInspector,
+    resolvePanels,
   };
 
   if (debugPerfEnabled) {
-    console.debug("[stability][field-overview] build", {
+    console.debug("[stability][field-overview] build core shell", {
       fieldId,
       workspaceId,
       durationMs: finishPerfTimer(requestStartTime, debugPerfEnabled),
       actorContextDurationMs,
       selectionDurationMs,
       rasterFamilyDurationMs,
-      serviceReadsDurationMs,
       boundaryVertexCount: vertexCount,
       latestCellCount: readModel.moisture.latestCells.length,
       mapPreviewBytes: estimateJsonSize(viewModel.mapPreview),
       alertsBytes: estimateJsonSize(viewModel.alertsPanel),
-      activityBytes: estimateJsonSize(viewModel.activityPanel),
       cellInspectorBytes: estimateJsonSize(viewModel.cellInspector),
-      marketBytes: estimateJsonSize(viewModel.marketPanel),
-      cropBytes: estimateJsonSize(viewModel.cropPanel),
     });
   }
 
@@ -986,14 +995,14 @@ function buildAlternateAgronomicSurfaces(input: {
   latestOpticalObservation: any;
   latestSarObservation: any;
   opticalSeasonality?: OpticalSeasonality | null;
-}): Partial<Record<FieldAgronomicSurfaceMetricKey, FieldAgronomicSurfaceRenderModel>> {
+}): Partial<Record<FieldAgronomicSurfaceMetricKey, any>> {
   const metrics: FieldAgronomicSurfaceMetricKey[] = [
     "ndvi",
     "ndre",
     "ndmi",
     "radar-wetness",
   ];
-  const surfaces: Partial<Record<FieldAgronomicSurfaceMetricKey, FieldAgronomicSurfaceRenderModel>> = {};
+  const surfaces: Partial<Record<FieldAgronomicSurfaceMetricKey, any>> = {};
 
   for (const metricKey of metrics) {
     const observation =
@@ -1026,7 +1035,7 @@ function buildAlternateAgronomicSurfaces(input: {
       sourceKey: observation.sourceKey,
     }));
 
-    surfaces[metricKey] = buildFieldAgronomicSurfaceRenderModel({
+    const baseSurface = buildFieldAgronomicSurfaceRenderModel({
       fieldId: input.fieldId,
       boundaryFeature: input.mapPreview.boundaryFeature,
       bbox: input.mapPreview.bbox,
@@ -1041,6 +1050,17 @@ function buildAlternateAgronomicSurfaces(input: {
           : observation.sourceKey,
       persistedCells,
     });
+
+    const cellDict: Record<string, any> = {};
+    for (const cell of baseSurface.cells) {
+      const { polygon, centroid, ...rest } = cell;
+      cellDict[cell.id] = rest;
+    }
+
+    surfaces[metricKey] = {
+      ...baseSurface,
+      cells: cellDict,
+    };
   }
 
   return surfaces;

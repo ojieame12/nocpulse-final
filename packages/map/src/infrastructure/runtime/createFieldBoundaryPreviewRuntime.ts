@@ -61,14 +61,17 @@ const SELECTED_LIFT_M = 6;
  *  Subtle dim rather than dramatic — keeps the overall scene bright. */
 const HOVER_DIM_TARGET_ALPHA = 130;
 
-/** How fast hover dim fades in/out (0–1 per ms). */
-const HOVER_DIM_RATE = 1 / 70; // 70ms to full dim — snappy response
 
 /** Entrance animation duration (ms). Extrusions grow + colors fade in. */
-const ENTRANCE_DURATION_MS = 400;
+const ENTRANCE_DURATION_MS = 420;
 
 /** Slight overshoot for bounce-settle feel on entrance. */
 const ENTRANCE_OVERSHOOT = 1.06;
+
+/** How much of the camera fly to wait before starting cell extrusion (0–1).
+ *  0.65 = cells begin rising when the camera is ~65% through its flight,
+ *  so the extrusion is well underway as the view settles. */
+const ENTRANCE_FLY_OVERLAP = 0.65;
 
 /** How much non-hovered cells shrink when a cell is hovered (0 = flat, 1 = full). */
 const HOVER_SQUASH_FLOOR = 0.3;
@@ -93,10 +96,7 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
-/** Lerp between two numbers. */
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
+
 
 // ── Interaction state ──────────────────────────────────────
 
@@ -105,10 +105,6 @@ type InteractionState = {
   selectedCellId: string | null;
   /** 0 → fully collapsed/transparent, 1 → fully visible. */
   entranceProgress: number;
-  /** 0 → no dim, 1 → fully dimmed. Interpolated smoothly. */
-  hoverDimProgress: number;
-  /** Timestamp of last hover-dim tick (for delta-time interpolation). */
-  hoverDimLastTick: number;
 };
 
 // ── Zone geometry helpers ─────────────────────────────────
@@ -243,8 +239,8 @@ function createLayers(
 ) {
   const palette = model.presentation.palette;
   const surface = model.agronomicSurface;
-  const { hoveredCellId, selectedCellId, entranceProgress, hoverDimProgress } = interaction;
-  const anyHovered = hoveredCellId !== null || hoverDimProgress > 0.005;
+  const { hoveredCellId, selectedCellId, entranceProgress } = interaction;
+  const anyHovered = hoveredCellId !== null;
   const focusedZoneId = model.focusedZoneId ?? null;
   const anyZoneFocused = focusedZoneId !== null;
   const zoneFeatures =
@@ -273,8 +269,7 @@ function createLayers(
   // Entrance-driven alpha multiplier: colors fade from 0 → 1
   const alphaMultiplier = Math.min(rawEntrance, 1);
 
-  // Smooth hover dim: blend from full alpha → dim alpha based on hoverDimProgress
-  const dimAlpha = lerp(255, HOVER_DIM_TARGET_ALPHA, hoverDimProgress);
+  // Smooth hover dim is now handled natively by Deck.gl via getFillColor transitions
 
   return [
     // ── 0. Workspace field context outlines (clickable) ──
@@ -414,10 +409,10 @@ function createLayers(
               if (anyHovered) {
                 if (cell.id === hoveredCellId) {
                   // Hovered cell lifts slightly
-                  return base + HOVER_LIFT_M * hoverDimProgress;
+                  return base + HOVER_LIFT_M;
                 }
-                // Others squash down smoothly
-                const squash = lerp(1, HOVER_SQUASH_FLOOR, hoverDimProgress);
+                // Others squash down natively interpolated via transitions
+                const squash = HOVER_SQUASH_FLOOR;
                 return (surface.baseElevationM + cell.displayHeightM * squash);
               }
 
@@ -433,7 +428,7 @@ function createLayers(
 
               if (anyHovered) {
                 // Hovered cell stays full brightness; others smoothly dim
-                alpha = cell.id === hoveredCellId ? alpha : Math.round(dimAlpha);
+                alpha = cell.id === hoveredCellId ? alpha : HOVER_DIM_TARGET_ALPHA;
               } else if (anyZoneFocused && cell.zoneId !== focusedZoneId) {
                 alpha = 120;
               } else if (anyZoneFocused && cell.zoneId === focusedZoneId) {
@@ -472,19 +467,18 @@ function createLayers(
             onHover: callbacks.onCellHover,
             onClick: callbacks.onCellClick,
 
-            // ── Smooth transitions — kept short to prevent ghost extrusions
-            //    when hopping between cells quickly ──
+            // ── Smooth transitions — exact timing matched natively by deck.gl shaders ──
             transitions: {
-              getElevation: { duration: 80, easing: easeOutCubic },
-              getFillColor: { duration: 60 },
-              getLineColor: { duration: 60 },
+              getElevation: { duration: 70, easing: easeOutCubic },
+              getFillColor: { duration: 70, easing: easeOutCubic },
+              getLineColor: { duration: 70, easing: easeOutCubic },
             },
 
             // ── Update triggers ──
             updateTriggers: {
-              getFillColor: [surface.id, hoveredCellId, focusedZoneId, entranceProgress, hoverDimProgress],
-              getLineColor: [surface.id, selectedCellId, focusedZoneId, entranceProgress, hoverDimProgress],
-              getElevation: [surface.id, selectedCellId, hoveredCellId, hoverDimProgress],
+              getFillColor: [surface.id, hoveredCellId, focusedZoneId, entranceProgress],
+              getLineColor: [surface.id, selectedCellId, focusedZoneId, entranceProgress],
+              getElevation: [surface.id, selectedCellId, hoveredCellId],
             },
           }),
         ]
@@ -724,15 +718,15 @@ export function createFieldBoundaryPreviewRuntime({
     hoveredCellId: null,
     selectedCellId: null,
     entranceProgress: 0,
-    hoverDimProgress: 0,
-    hoverDimLastTick: 0,
   };
 
   /** Active entrance animation frame handle (0 = none running). */
   let entranceRafId = 0;
 
-  /** Active hover-dim animation frame handle (0 = none running). */
-  let hoverDimRafId = 0;
+  /** Delay timer that staggers entrance behind the camera fly. */
+  let entranceDelayTimer: ReturnType<typeof setTimeout> | null = null;
+
+
 
   /** Hover-out debounce timer — prevents flicker when moving between cells. */
   let hoverOutTimer: ReturnType<typeof setTimeout> | null = null;
@@ -745,46 +739,6 @@ export function createFieldBoundaryPreviewRuntime({
       throw new Error("[map] field boundary runtime is not mounted");
     }
     return { map, overlay };
-  }
-
-  // ── Hover dim animation loop ──
-
-  function startHoverDimLoop() {
-    if (hoverDimRafId) return; // already running
-    interaction.hoverDimLastTick = performance.now();
-
-    function tickHoverDim(now: number) {
-      const dt = now - interaction.hoverDimLastTick;
-      interaction.hoverDimLastTick = now;
-
-      const target = interaction.hoveredCellId !== null ? 1 : 0;
-      const step = dt * HOVER_DIM_RATE;
-      const prev = interaction.hoverDimProgress;
-
-      if (target > prev) {
-        interaction.hoverDimProgress = Math.min(prev + step, 1);
-      } else {
-        interaction.hoverDimProgress = Math.max(prev - step, 0);
-      }
-
-      // Only rebuild when the change is visually meaningful (> ~1 alpha unit)
-      const delta = Math.abs(interaction.hoverDimProgress - prev);
-      if (delta > 0.004) {
-        rebuildLayers();
-      }
-
-      // Keep looping until we've settled at the target
-      const settled = Math.abs(interaction.hoverDimProgress - target) < 0.005;
-      if (!settled) {
-        hoverDimRafId = requestAnimationFrame(tickHoverDim);
-      } else {
-        interaction.hoverDimProgress = target;
-        hoverDimRafId = 0;
-        rebuildLayers();
-      }
-    }
-
-    hoverDimRafId = requestAnimationFrame(tickHoverDim);
   }
 
   // ── Interaction callbacks (called by deck.gl layers) ──
@@ -804,14 +758,7 @@ export function createFieldBoundaryPreviewRuntime({
       interaction.hoveredCellId = cell.id;
 
       if (changed) {
-        if (interaction.hoverDimProgress < 0.01) {
-          // First cell hovered — kick off the squash animation
-          startHoverDimLoop();
-        } else {
-          // Moving between cells — just swap the lift target,
-          // deck.gl transitions handle the smooth elevation change.
-          rebuildLayers();
-        }
+        rebuildLayers();
       }
 
       onCellHover?.({
@@ -837,7 +784,7 @@ export function createFieldBoundaryPreviewRuntime({
         hoverOutTimer = setTimeout(() => {
           hoverOutTimer = null;
           interaction.hoveredCellId = null;
-          startHoverDimLoop();
+          rebuildLayers();
           onCellHover?.(null);
         }, HOVER_OUT_DELAY_MS);
       }
@@ -971,9 +918,9 @@ export function createFieldBoundaryPreviewRuntime({
     }
 
     // ── Camera: fly on first render, field switch, or zone focus change ──
+    let flyDuration = 0;
     if (isFirstRender || fieldChanged || zoneFocusChanged) {
       // Distance-adaptive duration: farther jumps get more time to feel smooth
-      let flyDuration = 0;
       if (!isFirstRender && previousModel) {
         const prevCenter = [
           (previousModel.bbox[0] + previousModel.bbox[2]) / 2,
@@ -1003,37 +950,56 @@ export function createFieldBoundaryPreviewRuntime({
     const shouldAnimate = isFirstRender || fieldChanged;
 
     if (shouldAnimate && model.agronomicSurface) {
-      // Cancel any running entrance animation
+      // Cancel any running entrance animation or pending delay
+      if (entranceDelayTimer !== null) {
+        clearTimeout(entranceDelayTimer);
+        entranceDelayTimer = null;
+      }
       if (entranceRafId) {
         cancelAnimationFrame(entranceRafId);
         entranceRafId = 0;
       }
 
       interaction.entranceProgress = 0;
-      // Push effects immediately (lighting doesn't change per frame)
+      // Push effects + lighting immediately (cells invisible at progress 0)
       mounted.overlay.setProps({
         layers: createLayers(model, interaction, layerCallbacks),
         effects: createEffects(model),
       });
-      const startTime = performance.now();
 
-      function animateEntrance(now: number) {
-        const elapsed = now - startTime;
-        const raw = Math.min(elapsed / ENTRANCE_DURATION_MS, 1);
-        interaction.entranceProgress = easeOutCubic(raw);
-        rebuildLayers();
+      function startEntranceAnimation() {
+        entranceDelayTimer = null;
+        const startTime = performance.now();
 
-        if (raw < 1) {
-          entranceRafId = requestAnimationFrame(animateEntrance);
-        } else {
-          interaction.entranceProgress = 1;
-          entranceRafId = 0;
+        function animateEntrance(now: number) {
+          const elapsed = now - startTime;
+          const raw = Math.min(elapsed / ENTRANCE_DURATION_MS, 1);
+          interaction.entranceProgress = easeOutCubic(raw);
           rebuildLayers();
+
+          if (raw < 1) {
+            entranceRafId = requestAnimationFrame(animateEntrance);
+          } else {
+            interaction.entranceProgress = 1;
+            entranceRafId = 0;
+            rebuildLayers();
+          }
         }
+
+        entranceRafId = requestAnimationFrame(animateEntrance);
       }
 
-      // Start after a micro-delay so the camera fly begins first
-      entranceRafId = requestAnimationFrame(animateEntrance);
+      // Stagger: wait for the camera fly to mostly complete before extruding.
+      // On first render there's no fly, so start immediately.
+      const staggerMs = isFirstRender
+        ? 0
+        : Math.round(flyDuration * ENTRANCE_FLY_OVERLAP);
+
+      if (staggerMs > 0) {
+        entranceDelayTimer = setTimeout(startEntranceAnimation, staggerMs);
+      } else {
+        startEntranceAnimation();
+      }
     } else {
       // No animation needed — show full state immediately
       interaction.entranceProgress = 1;
@@ -1107,14 +1073,14 @@ export function createFieldBoundaryPreviewRuntime({
     },
 
     async unmount() {
-      // Cancel any running animations
+      // Cancel any running animations or pending delays
+      if (entranceDelayTimer !== null) {
+        clearTimeout(entranceDelayTimer);
+        entranceDelayTimer = null;
+      }
       if (entranceRafId) {
         cancelAnimationFrame(entranceRafId);
         entranceRafId = 0;
-      }
-      if (hoverDimRafId) {
-        cancelAnimationFrame(hoverDimRafId);
-        hoverDimRafId = 0;
       }
       if (hoverOutTimer !== null) {
         clearTimeout(hoverOutTimer);

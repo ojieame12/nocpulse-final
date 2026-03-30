@@ -97,20 +97,19 @@ export function buildFieldDetailModeData({
   const sourceSummary = describeMetricSource(surface?.sourceLabel, surface?.confidence);
   const preseasonOpticalContext = isPreseasonOpticalContextSurface(surface);
   const heroParts = splitMetricDisplayParts(metricKey, effectiveMetricPct);
-  const sortedMetricValues = surface
-    ? [...surface.cells].map((cell) => cell.metricValuePct).sort((left, right) => left - right)
-    : [];
+  const cellsList = surface ? (Array.isArray(surface.cells) ? surface.cells : Object.values(surface.cells)) : [];
+  const sortedMetricValues = cellsList.map((cell) => cell.metricValuePct).sort((left, right) => left - right);
   const p10 = percentile(sortedMetricValues, 0.1);
   const p50 = percentile(sortedMetricValues, 0.5);
   const p90 = percentile(sortedMetricValues, 0.9);
-  const mappedCells = surface?.cells.length ?? 0;
+  const mappedCells = cellsList.length;
   const stressedCellCount =
-    surface?.cells.filter((cell) => cell.severityLabel === "stressed" || cell.severityLabel === "critical").length ?? 0;
+    cellsList.filter((cell) => cell.severityLabel === "stressed" || cell.severityLabel === "critical").length;
   const zonedCellCount =
-    surface?.cells.filter((cell) => cell.zoneId != null).length ?? 0;
+    cellsList.filter((cell) => cell.zoneId != null).length;
   const stressedPct = mappedCells > 0 ? Math.round((stressedCellCount / mappedCells) * 100) : 0;
   const zonedPct = mappedCells > 0 ? Math.round((zonedCellCount / mappedCells) * 100) : 0;
-  const attentionLevels = surface?.cells.map((cell) =>
+  const attentionLevels = cellsList.map((cell) =>
     resolveCellAttentionLevel({
       metricKey,
       severityLabel: cell.severityLabel,
@@ -118,36 +117,36 @@ export function buildFieldDetailModeData({
       deltaFromFieldAvgPct: cell.deltaFromFieldAvgPct,
       percentileInField: cell.percentileInField,
     }),
-  ) ?? [];
+  );
   const localizedWatchCount = attentionLevels.filter((level) => level === "watch" || level === "critical").length;
   const localizedCriticalCount = attentionLevels.filter((level) => level === "critical").length;
   const localizedWatchInZonesCount =
-    surface?.cells.reduce((count, cell, index) => {
+    cellsList.reduce((count, cell, index) => {
       const level = attentionLevels[index];
       if ((level === "watch" || level === "critical") && cell.zoneId) {
         return count + 1;
       }
 
       return count;
-    }, 0) ?? 0;
+    }, 0);
   const localizedWatchOutsideZonesCount =
-    surface?.cells.reduce((count, cell, index) => {
+    cellsList.reduce((count, cell, index) => {
       const level = attentionLevels[index];
       if ((level === "watch" || level === "critical") && !cell.zoneId) {
         return count + 1;
       }
 
       return count;
-    }, 0) ?? 0;
+    }, 0);
   const localizedCriticalInZonesCount =
-    surface?.cells.reduce((count, cell, index) => {
+    cellsList.reduce((count, cell, index) => {
       const level = attentionLevels[index];
       if (level === "critical" && cell.zoneId) {
         return count + 1;
       }
 
       return count;
-    }, 0) ?? 0;
+    }, 0);
   const localizedWatchPct =
     mappedCells > 0 ? Math.round((localizedWatchCount / mappedCells) * 100) : 0;
   const localizedCriticalPct =

@@ -104,6 +104,8 @@ export async function GET(
       return jsonError(404, `Field ${fieldId} not found.`);
     }
 
+    const panels = await viewModel.resolvePanels();
+
     // Return the serializable parts the client shell needs
     return jsonOk({
       status: "ready",
@@ -115,12 +117,12 @@ export async function GET(
       sidebarFields: viewModel.sidebarFields,
       summary: viewModel.summary,
       alertsPanel: viewModel.alertsPanel,
-      activityPanel: viewModel.activityPanel,
-      reportPanel: viewModel.reportPanel,
-      actionPanel: viewModel.actionPanel,
-      notesPanel: viewModel.notesPanel,
-      marketPanel: viewModel.marketPanel,
-      cropPanel: viewModel.cropPanel,
+      activityPanel: panels.activityPanel,
+      reportPanel: panels.reportPanel,
+      actionPanel: panels.actionPanel,
+      notesPanel: panels.notesPanel,
+      marketPanel: panels.marketPanel,
+      cropPanel: panels.cropPanel,
       cellInspector: viewModel.cellInspector,
     });
   } catch (error: unknown) {

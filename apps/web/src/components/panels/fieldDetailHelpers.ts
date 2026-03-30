@@ -9,6 +9,7 @@ import {
   formatMetricDisplayValue,
   type FieldAgronomicSurfaceMetricKey,
   type FieldAgronomicSurfaceRenderModel,
+  type FieldAgronomicAlternateSurfaceRenderModel,
   type FieldBoundaryPreviewRenderModel,
 } from "@fieldpulse/map";
 import type { ModeKey } from "./fieldDetailTypes";
@@ -88,12 +89,13 @@ export function formatSignedMetricDelta(
 
 /* ── Spark builders ─────────────────────────────────────────────── */
 
-export function buildSparkFromSurface(surface: FieldAgronomicSurfaceRenderModel | null) {
-  if (!surface || surface.cells.length === 0) {
+export function buildSparkFromSurface(surface: FieldAgronomicSurfaceRenderModel | FieldAgronomicAlternateSurfaceRenderModel | null) {
+  const cellsList = surface ? (Array.isArray(surface.cells) ? surface.cells : Object.values(surface.cells)) : [];
+  if (!surface || cellsList.length === 0) {
     return [0, 0, 0, 0, 0, 0];
   }
 
-  const sorted = [...surface.cells]
+  const sorted = [...cellsList]
     .map((cell) => cell.metricValuePct)
     .sort((left, right) => left - right);
 
@@ -153,7 +155,7 @@ export function formatSurfaceMetricValue(
 }
 
 export function isPreseasonOpticalContextSurface(
-  surface: FieldAgronomicSurfaceRenderModel | null | undefined,
+  surface: FieldAgronomicSurfaceRenderModel | FieldAgronomicAlternateSurfaceRenderModel | null | undefined,
 ) {
   return surface?.sourceLabel?.toLowerCase().includes("preseason-optical-context") ?? false;
 }
