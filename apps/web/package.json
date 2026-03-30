@@ -4,10 +4,13 @@
   "dependencies": {
     "@fieldpulse/map": "workspace:*",
     "@fieldpulse/module-auth": "workspace:*",
+    "@fieldpulse/module-field-intake": "workspace:*",
     "@fieldpulse/module-fields": "workspace:*",
     "@fieldpulse/module-moisture": "workspace:*",
+    "@fieldpulse/module-reports": "workspace:*",
     "@fieldpulse/module-workspaces": "workspace:*",
     "@fieldpulse/platform-config": "workspace:*",
+    "@fieldpulse/platform-db": "workspace:*",
     "@fieldpulse/platform-runtime": "workspace:*",
     "@supabase/ssr": "^0.5.2",
     "lucide-react": "^1.7.0",
@@ -24,12 +27,12 @@
   },
   "scripts": {
     "build": "next build",
-    "dev": "next dev",
+    "dev": "NEXT_DIST_DIR=.next-dev next dev",
     "lint": "echo \"eslint is not wired yet\"",
     "smoke:imagery-providers": "tsx src/server/smoke/imageryProviderRoutes.ts",
     "smoke:field-intake": "tsx src/server/smoke/fieldIntakeRoutes.ts",
     "start": "next start",
-    "test": "echo \"web tests not wired yet\"",
+    "test": "node --import tsx --test src/app/preview/resolvePreviewFieldSelection.test.ts src/app/preview/previewRoutes.test.ts src/app/preview/previewShellRouting.test.ts src/features/fields/fieldPageShellRouting.test.ts src/features/fields/buildFieldOverviewViewModel.raster.test.ts src/features/fields/buildFieldOverviewViewModel.test.ts src/features/fields/zoneGeometry.test.ts src/features/settings/workspaceSettings.test.ts src/components/panels/__tests__/colorSystem.test.ts src/components/panels/__tests__/helpers.test.ts src/components/panels/__tests__/modeDataBuilder.test.ts src/components/panels/__tests__/fieldDetailPanel.render.test.tsx src/components/panels/__tests__/alertsPanel.render.test.tsx src/components/panels/__tests__/addFieldPanel.render.test.tsx src/server/fields/manualFieldDraft.test.ts",
     "typecheck": "tsc --noEmit"
   }
 }

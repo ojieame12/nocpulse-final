@@ -13,8 +13,12 @@ export type ServerComponentActorContext = {
 
 export async function resolveServerComponentActorContext(
   runtime: ServerRuntime,
+  options: {
+    preferredWorkspaceId?: string | null;
+    request?: Request;
+  } = {},
 ): Promise<ServerComponentActorContext> {
-  const request = await createServerComponentRequest();
+  const request = await createServerComponentRequest("/", options.request);
   const hasSupabaseSession =
     runtime.mode === "supabase" &&
     Boolean(
@@ -22,7 +26,9 @@ export async function resolveServerComponentActorContext(
         projectRef: runtime.env.supabase.projectRef,
       }),
     );
-  const actor = await resolveRequestActor(request, runtime);
+  const actor = await resolveRequestActor(request, runtime, {
+    preferredWorkspaceId: options.preferredWorkspaceId,
+  });
 
   return {
     actor,

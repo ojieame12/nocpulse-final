@@ -1,0 +1,224 @@
+import { pathToFileURL } from "node:url";
+import { createServerRuntime } from "@fieldpulse/platform-runtime";
+import { loadWorkerEnv } from "./runtime/loadEnv";
+import {
+  normalizeRequestedMarketSymbols,
+  SUPPORTED_MARKET_CROP_SYMBOLS,
+} from "./marketRefreshQuotes";
+import {
+  parseCliArgs,
+  readBooleanFlag,
+  readCsvFlag,
+  readNumberFlag,
+} from "./runtime/parseCliArgs";
+
+type MarketSnapshotForReport = {
+  cropSymbol: string;
+  closePriceCadPerTonne: number;
+  basisCadPerTonne: number;
+  sourceCurrency: string;
+  sourceUnit: string;
+  sourceClosePrice: number;
+  fxRateToCad: number;
+  sourceKey: string;
+  capturedAt: string;
+};
+
+export type MarketRefreshReportEntry = {
+  cropSymbol: string;
+  status: "fresh" | "stale" | "missing" | "error";
+  capturedAt: string | null;
+  ageHours: number | null;
+  priceCadPerTonne: number | null;
+  basisCadPerTonne: number | null;
+  sourceKey: string | null;
+  normalizationLabel: string | null;
+  errorMessage: string | null;
+};
+
+export type MarketRefreshReport = {
+  generatedAt: string;
+  staleBefore: string;
+  staleAfterHours: number;
+  cropSymbols: readonly string[];
+  freshCount: number;
+  staleCount: number;
+  missingCount: number;
+  errorCount: number;
+  entries: readonly MarketRefreshReportEntry[];
+};
+
+function classifyMarketSnapshotStatus(
+  capturedAt: string,
+  staleBefore: string,
+): MarketRefreshReportEntry["status"] {
+  return Date.parse(capturedAt) < Date.parse(staleBefore) ? "stale" : "fresh";
+}
+
+function formatNormalizationLabel(snapshot: MarketSnapshotForReport) {
+  if (snapshot.sourceCurrency === "CAD" && snapshot.sourceUnit === "tonne") {
+    return "Native CAD/t";
+  }
+
+  return `${snapshot.sourceClosePrice.toFixed(4)} ${snapshot.sourceCurrency}/${snapshot.sourceUnit} × FX ${snapshot.fxRateToCad.toFixed(4)}`;
+}
+
+export async function buildMarketRefreshReport(input: {
+  cropSymbols?: readonly string[];
+  staleAfterHours?: number;
+  now?: string;
+  loadLatestPrice: (cropSymbol: string) => Promise<MarketSnapshotForReport | null>;
+}): Promise<MarketRefreshReport> {
+  const cropSymbols = normalizeRequestedMarketSymbols(input.cropSymbols);
+  const staleAfterHours = input.staleAfterHours ?? 24;
+
+  if (!Number.isFinite(staleAfterHours) || staleAfterHours < 0) {
+    throw new Error("[worker-market-refresh-report] --stale-after-hours must be non-negative");
+  }
+
+  const generatedAt = input.now ? new Date(input.now).toISOString() : new Date().toISOString();
+
+  if (Number.isNaN(Date.parse(generatedAt))) {
+    throw new Error(`[worker-market-refresh-report] invalid now value "${input.now}"`);
+  }
+
+  const staleBefore = new Date(
+    Date.parse(generatedAt) - staleAfterHours * 60 * 60 * 1000,
+  ).toISOString();
+
+  const entries = await Promise.all(
+    cropSymbols.map(async (cropSymbol) => {
+      try {
+        const snapshot = await input.loadLatestPrice(cropSymbol);
+
+        if (!snapshot) {
+          return {
+            cropSymbol,
+            status: "missing" as const,
+            capturedAt: null,
+            ageHours: null,
+            priceCadPerTonne: null,
+            basisCadPerTonne: null,
+            sourceKey: null,
+            normalizationLabel: null,
+            errorMessage: null,
+          };
+        }
+
+        const ageHours =
+          (Date.parse(generatedAt) - Date.parse(snapshot.capturedAt)) / (60 * 60 * 1000);
+        const status = classifyMarketSnapshotStatus(
+          snapshot.capturedAt,
+          staleBefore,
+        );
+
+        return {
+          cropSymbol,
+          status,
+          capturedAt: snapshot.capturedAt,
+          ageHours,
+          priceCadPerTonne: snapshot.closePriceCadPerTonne,
+          basisCadPerTonne: snapshot.basisCadPerTonne,
+          sourceKey: snapshot.sourceKey,
+          normalizationLabel: formatNormalizationLabel(snapshot),
+          errorMessage: null,
+        };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[worker-market-refresh-report] failed to load latest price for ${cropSymbol}: ${message}`,
+        );
+        return {
+          cropSymbol,
+          status: "error" as const,
+          capturedAt: null,
+          ageHours: null,
+          priceCadPerTonne: null,
+          basisCadPerTonne: null,
+          sourceKey: null,
+          normalizationLabel: null,
+          errorMessage: message,
+        };
+      }
+    }),
+  );
+
+  return {
+    generatedAt,
+    staleBefore,
+    staleAfterHours,
+    cropSymbols,
+    freshCount: entries.filter((entry) => entry.status === "fresh").length,
+    staleCount: entries.filter((entry) => entry.status === "stale").length,
+    missingCount: entries.filter((entry) => entry.status === "missing").length,
+    errorCount: entries.filter((entry) => entry.status === "error").length,
+    entries,
+  };
+}
+
+async function main() {
+  loadWorkerEnv();
+  const runtime = createServerRuntime(process.env);
+  const args = parseCliArgs();
+  const asJson = readBooleanFlag(args, "json");
+  const cropSymbols = readCsvFlag(args, "crop-symbols");
+  const staleAfterHours = readNumberFlag(args, "stale-after-hours");
+
+  if (runtime.mode !== "supabase") {
+    throw new Error("Supabase runtime is not configured");
+  }
+
+  const report = await buildMarketRefreshReport({
+    cropSymbols,
+    staleAfterHours,
+    loadLatestPrice(cropSymbol) {
+      return runtime.services.market.latestPrice({ cropSymbol });
+    },
+  });
+
+  if (asJson) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  console.log(
+    [
+      `Generated: ${report.generatedAt}`,
+      `Stale before: ${report.staleBefore}`,
+      `Supported symbols: ${SUPPORTED_MARKET_CROP_SYMBOLS.join(", ")}`,
+      `Requested symbols: ${report.cropSymbols.join(", ")}`,
+      `Fresh quotes: ${report.freshCount}`,
+      `Stale quotes: ${report.staleCount}`,
+      `Missing quotes: ${report.missingCount}`,
+      `Errored quotes: ${report.errorCount}`,
+    ].join("\n"),
+  );
+
+  console.log("\nMarket quote coverage");
+  console.table(
+    report.entries.map((entry) => ({
+      cropSymbol: entry.cropSymbol,
+      status: entry.status,
+      priceCadPerTonne: entry.priceCadPerTonne ?? "",
+      basisCadPerTonne: entry.basisCadPerTonne ?? "",
+      capturedAt: entry.capturedAt ?? "",
+      ageHours: entry.ageHours == null ? "" : entry.ageHours.toFixed(2),
+      sourceKey: entry.sourceKey ?? "",
+      normalization: entry.normalizationLabel ?? "",
+      error: entry.errorMessage ?? "",
+    })),
+  );
+}
+
+const executedAsScript =
+  typeof process.argv[1] === "string" &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (executedAsScript) {
+  void main().catch((error: unknown) => {
+    const message =
+      error instanceof Error ? error.message : "Unknown market refresh report failure";
+    console.error(`[worker-market-refresh-report] ${message}`);
+    process.exitCode = 1;
+  });
+}

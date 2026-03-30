@@ -60,6 +60,21 @@ export function createSupabaseWorkspaceMembershipRepository(
       return result.data != null;
     },
 
+    async getByWorkspaceAndUser(workspaceId: WorkspaceId, userId: UserId) {
+      const result = await client
+        .from("workspace_memberships")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      return result.data ? mapWorkspaceMembership(result.data) : null;
+    },
+
     async listByUser(userId: UserId) {
       const result = await client
         .from("workspace_memberships")

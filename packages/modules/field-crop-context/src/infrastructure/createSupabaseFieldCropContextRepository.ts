@@ -53,6 +53,29 @@ export function createSupabaseFieldCropContextRepository(
 
       return result.data ? mapFieldCropContext(result.data) : null;
     },
+    async listLatestByWorkspace(workspaceId) {
+      // Get all crop contexts for the workspace, ordered so the latest per field comes first
+      const result = await client
+        .from("field_crop_contexts")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .order("season_year", { ascending: false })
+        .order("updated_at", { ascending: false });
+
+      const rows = requireSupabaseData(result, "fieldCropContext.listLatestByWorkspace");
+
+      // Deduplicate: keep only the latest context per field_id
+      const seen = new Set<string>();
+      const latest: FieldCropContext[] = [];
+      for (const row of rows) {
+        if (!seen.has(row.field_id)) {
+          seen.add(row.field_id);
+          latest.push(mapFieldCropContext(row));
+        }
+      }
+
+      return latest;
+    },
     async deleteContext(workspaceId, fieldId, seasonYear) {
       const result = await client
         .from("field_crop_contexts")

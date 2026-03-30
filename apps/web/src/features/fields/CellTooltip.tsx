@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { CellHoverEvent, FieldAgronomicSurfaceMetricKey } from "@fieldpulse/map";
+import {
+  describeCellAttentionLevel,
+  type CellHoverEvent,
+  resolveMetricModeContract,
+  formatMetricDisplayValue,
+  resolveRampColor,
+  describeCellSourceTier,
+  describeCellAnomalyClass,
+  formatCellPercentile,
+  resolveCellAttentionLevel,
+} from "@fieldpulse/map";
 
 /* ============================================================
    FieldPulse V3 — Cell Tooltip
@@ -43,23 +53,6 @@ const CURSOR_OFFSET_X = 18;
 const CURSOR_OFFSET_Y = 14;
 const VIEWPORT_MARGIN = 12;
 
-/* ── Metric display ── */
-
-const METRIC_LABELS: Record<FieldAgronomicSurfaceMetricKey, string> = {
-  ndvi: "NDVI",
-  ndre: "NDRE",
-  ndmi: "NDMI",
-  "root-zone-moisture-pct": "Root Moisture",
-  "surface-moisture-pct": "Surface Moisture",
-};
-
-function formatHeroValue(metricKey: FieldAgronomicSurfaceMetricKey, pct: number): string {
-  if (metricKey === "root-zone-moisture-pct" || metricKey === "surface-moisture-pct") {
-    return `${pct.toFixed(1)}%`;
-  }
-  return (pct / 100).toFixed(2);
-}
-
 function formatDelta(delta: number): string {
   const abs = Math.abs(delta);
   if (abs < 0.5) return "at avg";
@@ -67,52 +60,30 @@ function formatDelta(delta: number): string {
   return `${sign}${delta.toFixed(1)}% vs avg`;
 }
 
-function deltaTrend(delta: number): string {
-  if (delta > 5) return "↑ above";
-  if (delta < -5) return "↓ below";
-  return "~ average";
-}
+function describeTooltipSource(
+  hover: CellHoverEvent,
+  baseLabel: string,
+): string {
+  const isOpticalMetric =
+    hover.metricKey === "ndvi" ||
+    hover.metricKey === "ndre" ||
+    hover.metricKey === "ndmi";
+  const isOpticalSource =
+    hover.sourceTier === "sentinel-fresh" || hover.sourceTier === "sentinel-stale";
 
-/* ── Hero color by metric value ── */
-
-const MOISTURE_COLORS: [number, string][] = [
-  [0, "#B91C1C"],
-  [30, "#F97316"],
-  [55, "#EAB308"],
-  [78, "#22C55E"],
-  [100, "#0EA5E9"],
-];
-
-const INDEX_COLORS: [number, string][] = [
-  [0, "#9E9E9E"],
-  [15, "#C62828"],
-  [32, "#F57C00"],
-  [52, "#FBC02D"],
-  [75, "#7CB342"],
-  [100, "#1B5E20"],
-];
-
-function resolveHeroColor(metricKey: FieldAgronomicSurfaceMetricKey, pct: number): string {
-  const stops =
-    metricKey === "root-zone-moisture-pct" || metricKey === "surface-moisture-pct"
-      ? MOISTURE_COLORS
-      : INDEX_COLORS;
-
-  // Find the bracket
-  for (let i = 0; i < stops.length - 1; i++) {
-    if (pct <= stops[i + 1][0]) {
-      return stops[i][1]; // snap to lower stop color for simplicity
-    }
+  if (isOpticalMetric && isOpticalSource && hover.confidence <= 0.4) {
+    return "Preseason optical context";
   }
-  return stops[stops.length - 1][1];
+
+  return baseLabel;
 }
 
 /* ── Health severity color ── */
 
 function severityColor(label: string | null): string {
-  if (label === "healthy") return "#4ADE80";
-  if (label === "stressed") return "#FBBF24";
-  if (label === "critical") return "#F87171";
+  if (label === "Field Typical") return "#4ADE80";
+  if (label === "Localized Watch") return "#FBBF24";
+  if (label === "Localized Critical") return "#F87171";
   return "rgba(241,245,249,0.38)";
 }
 
@@ -190,11 +161,18 @@ export function CellTooltip({ hover }: CellTooltipProps) {
         clearTimeout(exitTimer.current);
         exitTimer.current = null;
       }
-      setDisplayHover(hover);
-      setAnimState("entering");
-      const id = setTimeout(() => setAnimState("visible"), ENTER_MS);
-      return () => clearTimeout(id);
-    } else if (displayHover) {
+
+      if (animState === "hidden" || animState === "exiting") {
+        setDisplayHover(hover);
+        setAnimState("entering");
+        const id = setTimeout(() => setAnimState("visible"), ENTER_MS);
+        return () => clearTimeout(id);
+      }
+
+      return;
+    }
+
+    if (displayHover && animState !== "hidden" && animState !== "exiting") {
       setAnimState("exiting");
       exitTimer.current = setTimeout(() => {
         setAnimState("hidden");
@@ -202,16 +180,45 @@ export function CellTooltip({ hover }: CellTooltipProps) {
         exitTimer.current = null;
       }, EXIT_MS);
     }
-  }, [hover]); // intentionally not including displayHover
+  }, [hover, displayHover, animState]);
 
-  if (animState === "hidden" || !displayHover) return null;
+  useEffect(() => {
+    return () => {
+      if (exitTimer.current) {
+        clearTimeout(exitTimer.current);
+        exitTimer.current = null;
+      }
+    };
+  }, []);
 
-  const h = displayHover;
-  const metricLabel = METRIC_LABELS[h.metricKey] ?? h.metricKey;
-  const heroValue = formatHeroValue(h.metricKey, h.metricValuePct);
-  const heroColor = resolveHeroColor(h.metricKey, h.metricValuePct);
-  const contextParts = [formatDelta(h.deltaFromFieldAvgPct), deltaTrend(h.deltaFromFieldAvgPct)];
+  const activeHover = hover ?? displayHover;
+
+  if (animState === "hidden" || !activeHover) return null;
+
+  const h = activeHover;
+  const mode = resolveMetricModeContract(h.metricKey, h.sourceTier);
+  const metricLabel = mode.label;
+  const heroValue = formatMetricDisplayValue(h.metricKey, h.metricValuePct);
+  const [heroRed, heroGreen, heroBlue] = resolveRampColor(h.metricKey, h.metricValuePct);
+  const heroColor = `rgb(${heroRed}, ${heroGreen}, ${heroBlue})`;
+  const contextParts = [
+    formatDelta(h.deltaFromFieldAvgPct),
+    describeCellAnomalyClass(h.anomalyClass),
+  ];
   const confidencePct = `${Math.round(h.confidence * 100)}%`;
+  const sourceLabel = describeTooltipSource(
+    h,
+    describeCellSourceTier(h.sourceTier, h.metricKey),
+  );
+  const attentionLabel = describeCellAttentionLevel(
+    resolveCellAttentionLevel({
+      metricKey: h.metricKey,
+      severityLabel: h.severityLabel,
+      anomalyClass: h.anomalyClass,
+      deltaFromFieldAvgPct: h.deltaFromFieldAvgPct,
+      percentileInField: h.percentileInField,
+    }),
+  );
 
   const animName = animState === "exiting" ? "tooltipExit" : "tooltipEnter";
   const animDuration = animState === "exiting" ? `${EXIT_MS}ms` : `${ENTER_MS}ms`;
@@ -305,9 +312,10 @@ export function CellTooltip({ hover }: CellTooltipProps) {
           {/* ── Stat chips (staggered entrance) ── */}
           <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: "6px 6px" }}>
             {[
+              formatCellPercentile(h.percentileInField),
               `σ ${h.varianceBucket}`,
               confidencePct,
-              h.sourceTier.replace(/-/g, " "),
+              sourceLabel,
             ].map((label, i) => (
               <span
                 key={label}
@@ -325,18 +333,18 @@ export function CellTooltip({ hover }: CellTooltipProps) {
 
           {/* ── Meta separator + footer ── */}
           <div style={metaSeparatorStyle}>
-            <span style={metaTextStyle}>{h.sourceTier}</span>
-            {h.severityLabel ? (
+            <span style={metaTextStyle}>{sourceLabel}</span>
+            {attentionLabel ? (
               <span
                 style={{
                   fontSize: 10,
                   fontWeight: 700,
                   textTransform: "uppercase",
                   letterSpacing: "0.06em",
-                  color: severityColor(h.severityLabel),
+                  color: severityColor(attentionLabel),
                 }}
               >
-                {h.severityLabel}
+                {attentionLabel}
               </span>
             ) : null}
           </div>

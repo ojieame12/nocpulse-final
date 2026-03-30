@@ -19,6 +19,38 @@ import type { FieldSummaryRepository } from "./FieldSummaryRepository";
 type FieldOverviewRow = DatabaseSchema["app"]["Views"]["field_overview"]["Row"];
 type FieldDetailRow =
   DatabaseSchema["app"]["Functions"]["get_field_detail"]["Returns"][number];
+type SelectedFieldOverviewRow = Pick<
+  FieldOverviewRow,
+  | "workspace_id"
+  | "id"
+  | "name"
+  | "area_ha"
+  | "legal_land_description"
+  | "latest_moisture_observed_at"
+  | "latest_root_zone_pct"
+  | "latest_surface_pct"
+  | "latest_moisture_confidence"
+  | "latest_moisture_source_key"
+>;
+
+const FIELD_OVERVIEW_SELECT =
+  "workspace_id,id,name,area_ha,legal_land_description,latest_moisture_observed_at,latest_root_zone_pct,latest_surface_pct,latest_moisture_confidence,latest_moisture_source_key";
+
+function isFieldRepoPerfDebugEnabled() {
+  return process.env.NODE_ENV !== "production" && process.env.FIELDPULSE_DEBUG_PERF === "1";
+}
+
+function startPerfTimer(enabled: boolean) {
+  return enabled ? performance.now() : 0;
+}
+
+function finishPerfTimer(startedAt: number, enabled: boolean) {
+  if (!enabled) {
+    return 0;
+  }
+
+  return Math.round((performance.now() - startedAt) * 100) / 100;
+}
 
 function isRecord(value: JsonValue): value is Record<string, JsonValue> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -53,7 +85,7 @@ function toLabelPoint(value: JsonValue): GeoPoint {
   return toGeoPoint(value.coordinates, "labelPoint");
 }
 
-function mapFieldSummary(row: FieldOverviewRow): FieldSummary {
+function mapFieldSummary(row: SelectedFieldOverviewRow): FieldSummary {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
@@ -63,7 +95,7 @@ function mapFieldSummary(row: FieldOverviewRow): FieldSummary {
   };
 }
 
-function mapFieldOverview(row: FieldOverviewRow): FieldOverview {
+function mapFieldOverview(row: SelectedFieldOverviewRow): FieldOverview {
   return {
     ...mapFieldSummary(row),
     latestMoisture:
@@ -119,6 +151,8 @@ export function createSupabaseFieldRepository(
     },
 
     async getById(workspaceId, fieldId) {
+      const debugPerfEnabled = isFieldRepoPerfDebugEnabled();
+      const startedAt = startPerfTimer(debugPerfEnabled);
       const result = await client
         .rpc("get_field_detail", {
           target_workspace_id: workspaceId,
@@ -128,6 +162,15 @@ export function createSupabaseFieldRepository(
 
       if (result.error) {
         throw result.error;
+      }
+
+      if (debugPerfEnabled) {
+        console.debug("[stability][fields] getById", {
+          workspaceId,
+          fieldId,
+          durationMs: finishPerfTimer(startedAt, debugPerfEnabled),
+          found: result.data != null,
+        });
       }
 
       return result.data ? mapFieldDetail(result.data) : null;
@@ -158,11 +201,21 @@ export function createSupabaseFieldRepository(
     },
 
     async listByWorkspace(workspaceId: WorkspaceId) {
+      const debugPerfEnabled = isFieldRepoPerfDebugEnabled();
+      const startedAt = startPerfTimer(debugPerfEnabled);
       const result = await client
         .from("field_overview")
-        .select("*")
+        .select(FIELD_OVERVIEW_SELECT)
         .eq("workspace_id", workspaceId)
         .order("name", { ascending: true });
+
+      if (debugPerfEnabled) {
+        console.debug("[stability][fields] listByWorkspace", {
+          workspaceId,
+          durationMs: finishPerfTimer(startedAt, debugPerfEnabled),
+          rowCount: result.data?.length ?? 0,
+        });
+      }
 
       return requireSupabaseData(
         result,
@@ -171,11 +224,21 @@ export function createSupabaseFieldRepository(
     },
 
     async listOverviewByWorkspace(workspaceId: WorkspaceId) {
+      const debugPerfEnabled = isFieldRepoPerfDebugEnabled();
+      const startedAt = startPerfTimer(debugPerfEnabled);
       const result = await client
         .from("field_overview")
-        .select("*")
+        .select(FIELD_OVERVIEW_SELECT)
         .eq("workspace_id", workspaceId)
         .order("name", { ascending: true });
+
+      if (debugPerfEnabled) {
+        console.debug("[stability][fields] listOverviewByWorkspace", {
+          workspaceId,
+          durationMs: finishPerfTimer(startedAt, debugPerfEnabled),
+          rowCount: result.data?.length ?? 0,
+        });
+      }
 
       return requireSupabaseData(
         result,

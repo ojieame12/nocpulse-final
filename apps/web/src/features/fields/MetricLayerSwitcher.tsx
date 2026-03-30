@@ -14,6 +14,7 @@ const METRIC_SHORT_LABELS: Record<FieldAgronomicSurfaceMetricKey, string> = {
   ndvi: "NDVI",
   ndre: "NDRE",
   ndmi: "NDMI",
+  "radar-wetness": "Radar",
 };
 
 export function MetricLayerSwitcher({

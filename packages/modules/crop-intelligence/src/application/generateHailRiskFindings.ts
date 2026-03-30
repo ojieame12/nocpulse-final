@@ -7,8 +7,11 @@ import type { TimestampIso, WorkspaceId } from "@fieldpulse/platform-db";
 import { isPointInPolygonalGeoJson, isPolygonalGeoJson } from "../domain/geojson/isPointInPolygonalGeoJson";
 import type { CropIntelligenceRun } from "../contracts/CropIntelligenceRun";
 import type { FieldIntelligenceFinding } from "../contracts/FieldIntelligenceFinding";
+import type { FieldIntelligenceZoneRepository } from "../infrastructure/FieldIntelligenceZoneRepository";
 import type { UpsertCropIntelligenceRunInput } from "../contracts/UpsertCropIntelligenceRunInput";
 import type { UpsertFieldIntelligenceFindingInput } from "../contracts/UpsertFieldIntelligenceFindingInput";
+import { buildTrackedZoneReferences } from "../domain/zones/buildTrackedZoneReferences";
+import { syncFindingZones } from "./syncFindingZones";
 
 type ListFieldHailEventsRepository = {
   listByField(
@@ -58,6 +61,7 @@ export type GenerateHailRiskFindingsUseCaseInput = {
   moistureCells: LoadFieldMoistureCellSnapshotsRepository;
   runs: UpsertCropIntelligenceRunRepository;
   findings: UpsertFieldIntelligenceFindingRepository;
+  zones: Pick<FieldIntelligenceZoneRepository, "listByTrackingKey" | "upsertZone">;
   input: GenerateHailRiskFindingsInput;
 };
 
@@ -243,9 +247,40 @@ export async function generateHailRiskFindings(
   const run = await input.runs.upsertRun(runInput);
 
   const findings = await Promise.all(
-    hailEvents.map((event) =>
-      input.findings.upsertFinding(toFindingInput(event, run.id, moistureCells)),
-    ),
+    hailEvents.map(async (event) => {
+      const findingInput = toFindingInput(event, run.id, moistureCells);
+      const finding = await input.findings.upsertFinding(findingInput);
+
+      if (finding.zoneGeoJson == null) {
+        return finding;
+      }
+
+      const syncedZones = await syncFindingZones({
+        repository: input.zones,
+        finding,
+        observedAt: event.reportedAt,
+        zones: [{
+          zoneGeoJson: finding.zoneGeoJson,
+          affectedCellKeys: finding.affectedCellKeys,
+          metadata: {
+            sourceEventKey: event.sourceEventKey,
+            hailSeverity: event.severity,
+            hailSizeMm: event.hailSizeMm,
+            coverageMode:
+              findingInput.zoneGeoJson != null ? "polygonal" : "field-wide",
+          },
+        }],
+      });
+      const trackedZones = buildTrackedZoneReferences(syncedZones);
+
+      return input.findings.upsertFinding({
+        ...findingInput,
+        evidence: {
+          ...(findingInput.evidence ?? {}),
+          trackedZones,
+        },
+      });
+    }),
   );
 
   return {

@@ -3,6 +3,16 @@ import type { WorkspaceRole } from "@fieldpulse/module-workspaces";
 import type { AuthenticatedActor } from "../contracts/AuthenticatedActor";
 
 type WorkspaceMembershipRepository = {
+  getByWorkspaceAndUser(
+    workspaceId: WorkspaceId,
+    userId: UserId,
+  ): Promise<
+    {
+      workspaceId: WorkspaceId;
+      userId: UserId;
+      role: WorkspaceRole;
+    } | null
+  >;
   listByUser(userId: UserId): Promise<
     readonly {
       workspaceId: WorkspaceId;
@@ -12,15 +22,8 @@ type WorkspaceMembershipRepository = {
   >;
 };
 
-type WorkspaceRepository = {
-  getById(workspaceId: WorkspaceId): Promise<{
-    id: WorkspaceId;
-  } | null>;
-};
-
 export type ResolveAuthenticatedActorInput = {
   workspaceMemberships: WorkspaceMembershipRepository;
-  workspaces: WorkspaceRepository;
   userId: UserId;
   preferredWorkspaceId?: WorkspaceId;
 };
@@ -28,6 +31,23 @@ export type ResolveAuthenticatedActorInput = {
 export async function resolveAuthenticatedActor(
   input: ResolveAuthenticatedActorInput,
 ): Promise<AuthenticatedActor | null> {
+  if (input.preferredWorkspaceId) {
+    const membership = await input.workspaceMemberships.getByWorkspaceAndUser(
+      input.preferredWorkspaceId,
+      input.userId,
+    );
+
+    if (!membership) {
+      return null;
+    }
+
+    return {
+      userId: input.userId,
+      workspaceId: membership.workspaceId,
+      role: membership.role,
+    };
+  }
+
   const memberships = await input.workspaceMemberships.listByUser(input.userId);
 
   if (memberships.length === 0) {
@@ -41,12 +61,6 @@ export async function resolveAuthenticatedActor(
     : memberships[0] ?? null;
 
   if (!membership) {
-    return null;
-  }
-
-  const workspace = await input.workspaces.getById(membership.workspaceId);
-
-  if (!workspace) {
     return null;
   }
 

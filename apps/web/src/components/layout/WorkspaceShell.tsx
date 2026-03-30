@@ -1,9 +1,17 @@
 "use client";
 
+import { createContext, useContext, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar } from "./TopBar";
 import { Sidebar, type SidebarFieldItem } from "./Sidebar";
 import type { ReactNode } from "react";
+
+export type AppTheme = "light" | "dark";
+
+export const ThemeContext = createContext<AppTheme>("dark");
+export function useAppTheme() {
+  return useContext(ThemeContext);
+}
 
 export interface WorkspaceShellProps {
   /** Sidebar field list */
@@ -16,8 +24,12 @@ export interface WorkspaceShellProps {
   onNavChange?: (nav: string) => void;
   /** Callback when alerts bell is clicked */
   onAlertsBell?: () => void;
+  /** Callback when add-field is clicked */
+  onAddField?: () => void;
   /** Right-side panel (optional) */
   panel?: ReactNode;
+  /** Whether the panel is hidden / collapsed */
+  panelHidden?: boolean;
   /** Main content area */
   children: ReactNode;
 }
@@ -28,29 +40,41 @@ export function WorkspaceShell({
   activeNav,
   onNavChange,
   onAlertsBell,
+  onAddField,
   panel,
+  panelHidden,
   children,
 }: WorkspaceShellProps) {
   const router = useRouter();
+  const [theme, setTheme] = useState<AppTheme>("dark");
 
   function handleFieldSelect(id: string) {
     router.push(`/fields/${id}`);
   }
 
   return (
-    <div className="app-shell">
-      <TopBar activeNav={activeNav} onNavChange={onNavChange} onAlertsBell={onAlertsBell} />
-      <div className="app-body">
-        <Sidebar
-          fields={fields}
-          activeFieldId={activeFieldId}
-          onFieldSelect={handleFieldSelect}
+    <ThemeContext.Provider value={theme}>
+      <div className="app-shell" data-theme={theme} {...(panelHidden ? { "data-panel-hidden": "true" } : {})}>
+        <TopBar
+          activeNav={activeNav}
+          onNavChange={onNavChange}
+          onAlertsBell={onAlertsBell}
+          onAddField={onAddField}
+          theme={theme}
+          onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
         />
-        <div className="map-area">
-          {children}
-          {panel}
+        <div className="app-body">
+          <Sidebar
+            fields={fields}
+            activeFieldId={activeFieldId}
+            onFieldSelect={handleFieldSelect}
+          />
+          <div className="map-area">
+            {children}
+            {panel ? <div className="map-area__panel-layer">{panel}</div> : null}
+          </div>
         </div>
       </div>
-    </div>
+    </ThemeContext.Provider>
   );
 }

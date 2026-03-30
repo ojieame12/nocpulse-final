@@ -1,0 +1,555 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Summary Tab — built from nocpulse-final.pen exact values
+   Uses tokens from tokens.css — no hardcoded values
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Root container ── */
+/* The panel__body provides padding [48, 32, 24, 32] and gap 24px.
+   The tab content sits inside that — no extra wrapper padding needed. */
+
+.st__root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--panel-body-gap);
+}
+
+/* ── 1. Title block ── */
+
+.st__title-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-top: var(--space-xl);
+}
+
+.st__field-name {
+  font-family: var(--font-heading);
+  font-size: var(--text-xl);
+  font-weight: 400;
+  color: var(--text-primary);
+  line-height: var(--leading-tight);
+  margin: 0;
+}
+
+.st__subtitle {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+  margin: 0;
+}
+
+/* ── 2. Layer index pills ── */
+
+.st__pills {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+  border-radius: var(--radius-full);
+  background: var(--color-slate-100);
+  width: fit-content;
+}
+
+.st__pills-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.st__pills-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--color-slate-300);
+  flex-shrink: 0;
+}
+
+.st__pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s var(--ease-out-expo);
+}
+
+.st__pill:hover {
+  color: var(--text-primary);
+}
+
+.st__pill--active {
+  background: var(--surface-white);
+  color: var(--text-primary);
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* ── 3. Field overview ── */
+
+.st__overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: 8px 0;
+}
+
+.st__section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.st__section-accent {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: #dcdcdc;
+  flex-shrink: 0;
+}
+
+.st__section-label {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  line-height: 1.5;
+}
+
+.st__overview-body {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  justify-content: center;
+  padding: 0 var(--space-lg);
+  height: 170px;
+  border-radius: 12px;
+  border: 1px solid rgba(234, 234, 234, 0.31);
+}
+
+.st__overview-donut {
+  flex-shrink: 0;
+}
+
+.st__donut-value {
+  font-family: var(--font-heading);
+  font-size: var(--text-2xl);
+  font-weight: 400;
+  fill: var(--color-slate-800);
+}
+
+.st__donut-label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--text-muted);
+  letter-spacing: 0.72px;
+}
+
+.st__overview-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 137px;
+  flex-shrink: 0;
+}
+
+.st__stat-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 7px 7px 7px 14px;
+  border-radius: 9px;
+  background: var(--color-slate-50);
+}
+
+.st__stat-card-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.st__stat-card-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.st__stat-card-label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.st__stat-card-value {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.st__stat-card-value--warning { color: var(--status-warning); }
+.st__stat-card-value--danger  { color: var(--status-danger); }
+
+/* ── 4/5. Data card (Conditions / Atmosphere) ── */
+
+.st__data-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  padding: var(--section-padding);
+  border-radius: var(--section-radius);
+  background: var(--section-bg);
+  border: var(--section-border);
+}
+
+.st__data-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.st__data-card-heading {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
+  text-transform: uppercase;
+}
+
+.st__data-card-meta {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.st__data-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+
+.st__metric-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-white);
+}
+
+.st__metric-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.st__metric-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.st__metric-label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.st__metric-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.st__metric-value--danger { color: var(--status-danger); }
+
+.st__metric-sub {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.st__metric-sub--danger { color: var(--status-danger); }
+
+/* ── 6. Alert cards ── */
+
+.st__alerts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  padding: var(--section-padding);
+  border-radius: var(--section-radius);
+  background: var(--section-bg);
+  border: var(--section-border);
+}
+
+.st__alerts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.st__alerts-label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.st__alerts-count {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--status-danger);
+}
+
+.st__alerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.st__alert-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-white);
+  transition: transform 200ms var(--ease-out-expo), box-shadow 200ms var(--ease-out-expo);
+}
+
+.st__alert-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.st__alert-icon { flex-shrink: 0; }
+
+.st__alert-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  flex: 1;
+}
+
+.st__alert-title {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-slate-800);
+}
+
+.st__alert-subtitle {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.st__alert-badge {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.st__alert-badge--critical { background: #fef2f2; color: var(--status-danger); }
+.st__alert-badge--warning  { background: #fef3c7; color: var(--status-warning); }
+
+/* ── 7. Outlook strip ── */
+
+.st__outlook {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--section-radius);
+  background: var(--section-bg);
+  border: var(--section-border);
+}
+
+.st__outlook-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: var(--space-xs);
+}
+
+.st__outlook-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  width: 80px;
+  min-width: 80px;
+  padding: var(--space-sm) var(--space-xs);
+  border-radius: 8px;
+  background: var(--surface-white);
+}
+
+.st__outlook-day-label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.st__outlook-day-icon { color: var(--status-warning); }
+
+.st__outlook-day-temps {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-slate-800);
+}
+
+.st__outlook-day-precip {
+  font-family: var(--font-body);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+/* ── Timestamp ── */
+
+.st__timestamp {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
+}
+
+/* ── Image comparison ── */
+
+.st__image-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.st__image-frames {
+  display: flex;
+  position: relative;
+  height: 200px;
+  border-radius: var(--panel-radius);
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+}
+
+.st__image-frame {
+  flex: 1;
+  min-height: 200px;
+  background: var(--color-slate-200);
+}
+
+.st__image-frame--right { background: var(--color-slate-100); }
+
+.st__image-divider {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--surface-white);
+  transform: translateX(-50%);
+  box-shadow: 0 0 3.5px rgba(0, 0, 0, 0.3);
+}
+
+.st__image-handle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface-white);
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.2);
+  color: var(--text-muted);
+  z-index: 1;
+}
+
+.st__image-labels {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 12px;
+  margin-top: -24px;
+  position: relative;
+  z-index: 1;
+}
+
+.st__image-label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--surface-white);
+  text-shadow: 0 1px 2.6px rgba(0, 0, 0, 0.5);
+}
+
+.st__image-caption {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface-white);
+}
+
+.st__image-caption-title {
+  font-family: var(--font-heading);
+  font-size: var(--text-md);
+  font-weight: 400;
+  color: var(--text-primary);
+  line-height: var(--leading-normal);
+}
+
+.st__image-caption-desc {
+  font-family: var(--font-body);
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
+}
+
+/* ── Quick actions ── */
+
+.st__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.st__actions-label {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.st__actions-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}

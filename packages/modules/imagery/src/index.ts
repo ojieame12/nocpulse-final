@@ -80,6 +80,10 @@ export {
   type RefreshFieldRasterObservationResult,
 } from "./application/refreshFieldRasterObservation";
 export {
+  deriveRasterCellMoisture,
+  deriveSourceBackedMoistureEstimate,
+} from "./application/deriveRasterBackedMoisture";
+export {
   syncLatestImagery,
   type SyncLatestImageryDependencies,
   type SyncLatestImageryExecutionInput,

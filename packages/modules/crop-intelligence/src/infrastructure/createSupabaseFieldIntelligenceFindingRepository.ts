@@ -54,6 +54,26 @@ function toEvidence(value: JsonValue): FieldIntelligenceEvidence {
           (item): item is string => typeof item === "string",
         )
       : undefined,
+    trackedZones: Array.isArray(record.trackedZones)
+      ? record.trackedZones.filter((item): item is NonNullable<FieldIntelligenceEvidence["trackedZones"]>[number] => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) {
+            return false;
+          }
+
+          const entry = item as Record<string, unknown>;
+
+          return (
+            typeof entry.zoneId === "string" &&
+            typeof entry.trackingKey === "string" &&
+            typeof entry.status === "string" &&
+            typeof entry.detectionCount === "number" &&
+            typeof entry.affectedCellCount === "number" &&
+            typeof entry.firstSeenAt === "string" &&
+            typeof entry.lastSeenAt === "string" &&
+            typeof entry.lastStatusChangedAt === "string"
+          );
+        })
+      : undefined,
     metadata:
       record.metadata !== undefined
         ? (record.metadata as FieldIntelligenceEvidence["metadata"])

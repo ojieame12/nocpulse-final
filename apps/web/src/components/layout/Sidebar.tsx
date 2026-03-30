@@ -8,6 +8,7 @@ export interface SidebarFieldItem {
   id: string;
   name: string;
   area: string;
+  legalLandDescription?: string | null;
   crop?: string;
   alertCount?: number;
   status?: "healthy" | "stressed" | "warning" | "pending";

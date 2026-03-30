@@ -13,7 +13,7 @@ export function buildInitialFieldOnboardingPlan(
     workspaceId: input.workspaceId,
     requestedAt,
     jobs: [{
-      key: "imagery.sync-latest",
+      key: "field.bootstrap-initial",
       payload: {
         workspaceId: input.workspaceId,
         fieldId: input.fieldId,

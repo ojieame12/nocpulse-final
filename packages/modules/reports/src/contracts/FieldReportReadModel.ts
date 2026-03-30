@@ -33,12 +33,17 @@ export type FieldReportMoistureSummary = {
 export type FieldReportSummary = {
   cropType: string | null;
   growthStage: string | null;
-  activeAlertCount: number;
+  activeAlertCount: number | null;
   activeFindingCount: number;
   trackedZoneCount: number;
   activeTrackedZoneCount: number;
   moistureObservedAt: TimestampIso | null;
   weatherObservedAt: TimestampIso | null;
+};
+
+export type FieldReportDataAvailability = {
+  activeAlerts: boolean;
+  resolvedAlerts: boolean;
 };
 
 export type FieldReportImagerySummary = {
@@ -67,6 +72,7 @@ export type FieldReportReadModel = {
     profile: FieldWeatherProfile;
     signals: FieldWeatherDerivedSignalSet | null;
   };
+  dataAvailability: FieldReportDataAvailability;
   alerts: readonly FieldAlert[];
   resolvedAlerts: readonly FieldAlert[];
   findings: readonly FieldIntelligenceFinding[];

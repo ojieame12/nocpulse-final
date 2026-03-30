@@ -1,6 +1,8 @@
 import { loadEnvFile } from "@fieldpulse/platform-config";
 import { createServerRuntime } from "@fieldpulse/platform-runtime";
 import { POST as parseGeofile } from "../../app/api/field-intake/geofile/parse/route";
+import { POST as createGeofile } from "../../app/api/field-intake/geofile/create/route";
+import { POST as createLldField } from "../../app/api/field-intake/lld/create/route";
 import { POST as lookupLld } from "../../app/api/field-intake/lld/lookup/route";
 import { GET as getActor } from "../../app/api/auth/actor/route";
 import { POST as saveBatch } from "../../app/api/field-intake/spreadsheet/batches/route";
@@ -39,6 +41,22 @@ async function main() {
     }),
   );
   const lldJson = await lldResponse.json();
+  const lldCreateResponse = await createLldField(
+    new Request("http://localhost/api/field-intake/lld/create", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-fieldpulse-user-id": actorUserId,
+        "x-fieldpulse-workspace-id": workspace.id,
+      },
+      body: JSON.stringify({
+        code: "NW-25-042-04-W4",
+        suggestedFieldName: `Route LLD Created ${runId}`,
+        cropType: "barley",
+      }),
+    }),
+  );
+  const lldCreateJson = await lldCreateResponse.json();
   const actorResponse = await getActor(
     new Request("http://localhost/api/auth/actor", {
       headers: {
@@ -87,6 +105,27 @@ async function main() {
     }),
   );
   const geofileJson = await geofileResponse.json();
+  const geofileCreateForm = new FormData();
+  geofileCreateForm.set(
+    "file",
+    new File([JSON.stringify(geojson)], "field.geojson", {
+      type: "application/geo+json",
+    }),
+  );
+  geofileCreateForm.set("suggestedFieldName", `Route Geojson Created ${runId}`);
+  geofileCreateForm.set("workspaceId", workspace.id);
+  geofileCreateForm.set("cropType", "canola");
+  const geofileCreateResponse = await createGeofile(
+    new Request("http://localhost/api/field-intake/geofile/create", {
+      method: "POST",
+      headers: {
+        "x-fieldpulse-user-id": actorUserId,
+        "x-fieldpulse-workspace-id": workspace.id,
+      },
+      body: geofileCreateForm,
+    }),
+  );
+  const geofileCreateJson = await geofileCreateResponse.json();
 
   const csv = [
     "Field Name,Quarter,Section,Township,Range,Meridian,Crop",
@@ -157,8 +196,12 @@ async function main() {
         actorWorkspaceId: actorJson.actor?.workspaceId,
         lldStatus: lldResponse.status,
         lldFieldName: lldJson.result?.draft?.name,
+        lldCreateStatus: lldCreateResponse.status,
+        lldCreateFieldId: lldCreateJson.result?.field?.id,
         geofileStatus: geofileResponse.status,
         geofileFieldName: geofileJson.result?.draft?.name,
+        geofileCreateStatus: geofileCreateResponse.status,
+        geofileCreateFieldId: geofileCreateJson.result?.field?.id,
         previewStatus: previewResponse.status,
         previewFieldCount: previewJson.result?.fieldCount,
         saveStatus: saveResponse.status,

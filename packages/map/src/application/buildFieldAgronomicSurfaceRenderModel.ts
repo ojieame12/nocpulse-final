@@ -1,5 +1,5 @@
 import { DEFAULT_MAP_EXTRUSION_MATERIAL } from "../contracts/material";
-import { resolveColorRamp, type ColorRamp } from "../contracts/colorRamp";
+import { resolveRampColor } from "../contracts/colorRamp";
 import type {
   FieldAgronomicCellRenderModel,
   CellSourceTier,
@@ -16,6 +16,8 @@ import type {
   MapRgbaColor,
 } from "../domain/render/FieldBoundaryPreviewRenderModel";
 import { buildSyntheticFieldCellGrid } from "../domain/geometry/buildSyntheticFieldCellGrid";
+import { normalizeExtrusionHeightSpread } from "./normalizeExtrusionHeightSpread";
+import { resolveFieldRelativeCellAnalytics } from "./resolveFieldRelativeCellAnalytics";
 
 type BuildFieldAgronomicSurfaceRenderModelInput = {
   fieldId: string;
@@ -37,6 +39,10 @@ type BuildFieldAgronomicSurfaceRenderModelInput = {
     sourceKey: string;
   }[];
 };
+
+function isPreseasonOpticalContext(sourceLabel: string): boolean {
+  return sourceLabel.toLowerCase().includes("preseason-optical-context");
+}
 
 // ── Shared utilities ────────────────────────────────────────
 
@@ -64,61 +70,59 @@ function boostSaturation(
   ];
 }
 
-function interpolateColor(
-  valuePct: number,
-  stops: ColorRamp,
+function mixColor(
+  [ar, ag, ab]: MapRgbColor,
+  [br, bg, bb]: MapRgbColor,
+  weight: number,
 ): MapRgbColor {
-  const clamped = clamp(valuePct, 0, 100);
-
-  for (let index = 0; index < stops.length - 1; index += 1) {
-    const [startPct, startColor] = stops[index];
-    const [endPct, endColor] = stops[index + 1];
-
-    if (clamped <= endPct) {
-      const range = endPct - startPct || 1;
-      const weight = (clamped - startPct) / range;
-
-      const raw: MapRgbColor = [
-        Math.round(startColor[0] + (endColor[0] - startColor[0]) * weight),
-        Math.round(startColor[1] + (endColor[1] - startColor[1]) * weight),
-        Math.round(startColor[2] + (endColor[2] - startColor[2]) * weight),
-      ];
-
-      // Mid-blend weights (0.3–0.7) produce the muddiest tones;
-      // boost saturation proportionally to how close we are to midpoint
-      const midness = 1 - Math.abs(weight - 0.5) * 2; // 0 at edges, 1 at midpoint
-      const boost = 1 + midness * 0.35; // up to 35% saturation lift at midpoint
-      return boostSaturation(raw, boost);
-    }
-  }
-
-  return [...stops[stops.length - 1][1]];
+  const clamped = clamp(weight, 0, 1);
+  return [
+    Math.round(ar + (br - ar) * clamped),
+    Math.round(ag + (bg - ag) * clamped),
+    Math.round(ab + (bb - ab) * clamped),
+  ];
 }
 
 function withAlpha([red, green, blue]: MapRgbColor, alpha: number): MapRgbaColor {
   return [red, green, blue, alpha];
 }
 
-// ── Height model ────────────────────────────────────────────
-
-/**
- * Extrusion height depends on metric type:
- *   - Vegetation indices: higher value = taller (healthy = prominent)
- *   - Moisture: blended root/surface, moderate range
- */
-function resolveDisplayHeightM(
-  metricKey: FieldAgronomicSurfaceMetricKey,
-  valuePct: number,
-): number {
-  if (metricKey === "root-zone-moisture-pct" || metricKey === "surface-moisture-pct") {
-    // Wide range: 0% → 4m (stubby), 50% → 34m, 100% → 64m.
-    return clamp(4 + valuePct * 0.6, 4, 64);
-  }
-
-  // Vegetation indices: healthy canopy towers above stressed cells.
-  // 0% → 4m, 50% → 36m, 100% → 68m.
-  return clamp(4 + valuePct * 0.64, 4, 68);
+/** Edge colour: darkened tint of the cell fill so edges blend naturally. */
+function darkenForEdge([r, g, b]: MapRgbColor, alpha: number): MapRgbaColor {
+  return [
+    Math.round(r * 0.45),
+    Math.round(g * 0.45),
+    Math.round(b * 0.45),
+    alpha,
+  ];
 }
+
+// ── Height model ────────────────────────────────────────────
+const AGRONOMIC_BAND_BY_METRIC: Record<
+  Exclude<FieldAgronomicSurfaceMetricKey, "root-zone-moisture-pct" | "surface-moisture-pct">,
+  { adequateLowPct: number; adequateHighPct: number; oversupplyAlertPct?: number }
+> = {
+  ndvi: {
+    adequateLowPct: 58,
+    adequateHighPct: 82,
+  },
+  ndre: {
+    adequateLowPct: 54,
+    adequateHighPct: 78,
+  },
+  ndmi: {
+    adequateLowPct: 62,
+    adequateHighPct: 78,
+    oversupplyAlertPct: 88,
+  },
+  "radar-wetness": {
+    adequateLowPct: 16,
+    adequateHighPct: 32,
+    oversupplyAlertPct: 48,
+  },
+};
+
+const BASE_AGRONOMIC_HEIGHT_M = 12;
 
 // ── Spatial variation (synthetic mode) ──────────────────────
 
@@ -194,12 +198,22 @@ function classifySeverity(
   metricKey: FieldAgronomicSurfaceMetricKey,
   valuePct: number,
 ): CellSeverityLabel {
-  if (metricKey === "root-zone-moisture-pct" || metricKey === "surface-moisture-pct") {
-    if (valuePct < 18) return "critical";
-    if (valuePct < 30) return "stressed";
+  if (metricKey === "ndmi") {
+    if (valuePct < 54) return "critical";
+    if (valuePct < 62) return "stressed";
+    if (valuePct > 92) return "critical";
+    if (valuePct > 84) return "stressed";
     return "healthy";
   }
-  // Vegetation indices: low = stressed
+
+  if (metricKey === "radar-wetness") {
+    if (valuePct < 10) return "critical";
+    if (valuePct < 16) return "stressed";
+    if (valuePct > 64) return "critical";
+    if (valuePct > 48) return "stressed";
+    return "healthy";
+  }
+
   if (valuePct < 25) return "critical";
   if (valuePct < 45) return "stressed";
   return "healthy";
@@ -247,6 +261,206 @@ function resolveSourceTier(sourceKey: string | null | undefined): CellSourceTier
   return "model-only";
 }
 
+function resolveSourceScale(sourceTier: CellSourceTier): number {
+  if (sourceTier === "synthetic") {
+    return 0.82;
+  }
+
+  if (sourceTier === "model-only") {
+    return 0.86;
+  }
+
+  if (sourceTier === "stale-sar" || sourceTier === "sentinel-stale") {
+    return 0.92;
+  }
+
+  return 1;
+}
+
+function resolveFillAlpha(
+  confidence: BuildFieldAgronomicSurfaceRenderModelInput["confidence"],
+  sourceTier: CellSourceTier,
+  preseasonOpticalContext: boolean,
+): number {
+  const base =
+    confidence === "high" ? 248 : confidence === "medium" ? 228 : 196;
+
+  const sourcePenalty =
+    sourceTier === "synthetic"
+      ? 42
+      : sourceTier === "model-only"
+        ? 52
+        : sourceTier === "stale-sar" || sourceTier === "sentinel-stale"
+          ? 24
+          : 0;
+
+  const contextPenalty = preseasonOpticalContext ? 22 : 0;
+
+  return clamp(base - sourcePenalty - contextPenalty, 112, 255);
+}
+
+function resolveLineAlpha(fillAlpha: number): number {
+  return clamp(Math.round(fillAlpha * 0.34), 42, 92);
+}
+
+function resolveAgronomicAttention(
+  metricKey: Exclude<FieldAgronomicSurfaceMetricKey, "root-zone-moisture-pct" | "surface-moisture-pct">,
+  valuePct: number,
+  metricAveragePct: number,
+): number {
+  const band = AGRONOMIC_BAND_BY_METRIC[metricKey];
+  const anomalyAttention = clamp(Math.abs(valuePct - metricAveragePct) / 10, 0, 0.45);
+  const lowAverageBlend =
+    metricKey === "ndvi" || metricKey === "ndre"
+      ? clamp((band.adequateLowPct - metricAveragePct) / band.adequateLowPct, 0, 1)
+      : 0;
+
+  let absoluteAttention = 0;
+
+  if (valuePct < band.adequateLowPct) {
+    absoluteAttention = clamp(
+      (band.adequateLowPct - valuePct) / band.adequateLowPct,
+      0,
+      1,
+    );
+  } else if (band.oversupplyAlertPct != null && valuePct > band.oversupplyAlertPct) {
+    absoluteAttention = clamp(
+      ((valuePct - band.oversupplyAlertPct) / (100 - band.oversupplyAlertPct)) * 0.45,
+      0,
+      0.45,
+    );
+  } else if (valuePct > band.adequateHighPct) {
+    absoluteAttention = clamp(
+      ((valuePct - band.adequateHighPct) / (100 - band.adequateHighPct)) * 0.2,
+      0,
+      0.2,
+    );
+  }
+
+  if (lowAverageBlend <= 0) {
+    return absoluteAttention;
+  }
+
+  return clamp(
+    absoluteAttention * (1 - lowAverageBlend) * 0.25 +
+      anomalyAttention * (0.25 + lowAverageBlend * 0.75),
+    0,
+    0.55,
+  );
+}
+
+function resolveAgronomicColor(
+  metricKey: FieldAgronomicSurfaceMetricKey,
+  valuePct: number,
+  metricAveragePct: number,
+  deltaFromAveragePct: number,
+  preseasonOpticalContext: boolean,
+): MapRgbColor {
+  const baseColor = resolveRampColor(metricKey, valuePct);
+  const lowAverageBlend =
+    metricKey === "ndvi" || metricKey === "ndre"
+      ? clamp(
+          (
+            AGRONOMIC_BAND_BY_METRIC[metricKey].adequateLowPct - metricAveragePct
+          ) / AGRONOMIC_BAND_BY_METRIC[metricKey].adequateLowPct,
+          0,
+          1,
+        )
+      : 0;
+
+  if (lowAverageBlend <= 0) {
+    if (!preseasonOpticalContext) {
+      return boostSaturation(baseColor, 1.05);
+    }
+
+    return mixColor(boostSaturation(baseColor, 0.92), [126, 118, 98], 0.18);
+  }
+
+  const deltaWeight = clamp(Math.abs(deltaFromAveragePct) / 3.5, 0, 1);
+  const positiveTarget: MapRgbColor =
+    metricKey === "ndre" ? [176, 162, 104] : [194, 170, 104];
+  const negativeTarget: MapRgbColor = [88, 68, 52];
+  const contrastTarget =
+    deltaFromAveragePct >= 0 ? positiveTarget : negativeTarget;
+  const contrastWeight =
+    deltaWeight * (0.18 + lowAverageBlend * 0.32);
+  const contrasted = mixColor(baseColor, contrastTarget, contrastWeight);
+
+  const saturated = boostSaturation(
+    contrasted,
+    preseasonOpticalContext
+      ? 0.9 + (1 - lowAverageBlend) * 0.02
+      : 1 + (1 - lowAverageBlend) * 0.05,
+  );
+
+  return preseasonOpticalContext
+    ? mixColor(saturated, [122, 112, 92], 0.16 + lowAverageBlend * 0.08)
+    : saturated;
+}
+
+function resolveDisplayHeightM(
+  metricKey: FieldAgronomicSurfaceMetricKey,
+  valuePct: number,
+  metricAveragePct: number,
+  deltaFromAveragePct: number,
+  varianceBucket: CellVarianceBucket,
+  sourceTier: CellSourceTier,
+  preseasonOpticalContext: boolean,
+): number {
+  if (
+    metricKey === "root-zone-moisture-pct" ||
+    metricKey === "surface-moisture-pct"
+  ) {
+    const anomalyBoost = clamp(Math.abs(deltaFromAveragePct) / 100, 0, 0.5) * 16;
+    const varianceBoost = varianceBucket === "high" ? 6 : varianceBucket === "medium" ? 3 : 0;
+    const sourceScale = resolveSourceScale(sourceTier);
+
+    return clamp(
+      (BASE_AGRONOMIC_HEIGHT_M + anomalyBoost + varianceBoost) * sourceScale,
+      6,
+      72,
+    );
+  }
+
+  const attention = resolveAgronomicAttention(metricKey, valuePct, metricAveragePct);
+  const anomalyBoost =
+    clamp(Math.abs(deltaFromAveragePct) / 100, 0, 0.5) *
+    (preseasonOpticalContext ? 10 : 16);
+  const varianceBoost = varianceBucket === "high" ? 6 : varianceBucket === "medium" ? 3 : 0;
+  const sourceScale =
+    resolveSourceScale(sourceTier) * (preseasonOpticalContext ? 0.82 : 1);
+
+  return clamp(
+    (
+      BASE_AGRONOMIC_HEIGHT_M +
+      attention * (preseasonOpticalContext ? 22 : 34) +
+      anomalyBoost +
+      varianceBoost
+    ) * sourceScale,
+    6,
+    72,
+  );
+}
+
+function resolveSoftMinHeightRangeM(metricKey: FieldAgronomicSurfaceMetricKey): number {
+  if (
+    metricKey === "root-zone-moisture-pct" ||
+    metricKey === "surface-moisture-pct"
+  ) {
+    return 4;
+  }
+
+  if (metricKey === "ndmi") {
+    return 4.5;
+  }
+
+  if (metricKey === "radar-wetness") {
+    return 4.5;
+  }
+
+  return 5;
+}
+
 function resolveMeasurementKey(
   metricKey: FieldAgronomicSurfaceMetricKey,
 ): string | null {
@@ -257,6 +471,8 @@ function resolveMeasurementKey(
       return "ndre";
     case "ndmi":
       return "ndmi";
+    case "radar-wetness":
+      return "sarWetness";
     default:
       return null;
   }
@@ -273,9 +489,7 @@ function resolvePersistedCellValue(
   }
 
   const rawValue =
-    metricKey === "ndmi" && !Number.isFinite(measurements[measurementKey])
-      ? measurements.sarWetness
-      : measurements[measurementKey];
+    measurements[measurementKey];
 
   if (!Number.isFinite(rawValue)) {
     return null;
@@ -296,8 +510,8 @@ export function buildFieldAgronomicSurfaceRenderModel({
   sourceLabel,
   persistedCells = [],
 }: BuildFieldAgronomicSurfaceRenderModelInput): FieldAgronomicSurfaceRenderModel {
-  const ramp = resolveColorRamp(metricKey);
   const numericConfidence = CONFIDENCE_MAP[confidence] ?? 0.5;
+  const preseasonOpticalContext = isPreseasonOpticalContext(sourceLabel);
 
   // ── Pass 1: compute cell values ──
   const persistedRawCells = persistedCells
@@ -348,24 +562,41 @@ export function buildFieldAgronomicSurfaceRenderModel({
     rawCells.length > 0
       ? rawCells.reduce((sum, c) => sum + c.cellValue, 0) / rawCells.length
       : baseValuePct;
+  const fieldRelativeAnalytics = resolveFieldRelativeCellAnalytics(
+    rawCells.map((cell) => cell.cellValue),
+  );
 
   // ── Pass 2: build render models with analytics ──
-  const cells: FieldAgronomicCellRenderModel[] = rawCells.map((cell) => {
-    const color = interpolateColor(cell.cellValue, ramp);
+  const draftCells: FieldAgronomicCellRenderModel[] = rawCells.map((cell, index) => {
     const delta = cell.cellValue - metricAveragePct;
     const absDelta = Math.abs(delta);
     const vBucket = classifyVariance(absDelta);
-
-    // V1-style relief: base + anomaly boost + variance boost.
-    const baseHeight = resolveDisplayHeightM(metricKey, cell.cellValue);
-    const anomalyBoost = (absDelta / 100) * 14;
-    const varianceBoost = vBucket === "high" ? 6 : vBucket === "medium" ? 3 : 0;
-    const sourceScale = cell.sourceTier === "synthetic" ? 0.7 : 1.0;
-    const enrichedHeight = clamp(
-      (baseHeight + anomalyBoost + varianceBoost) * sourceScale,
-      4,
-      72,
+    const fillAlpha = resolveFillAlpha(
+      confidence,
+      cell.sourceTier,
+      preseasonOpticalContext,
     );
+    const lineAlpha = resolveLineAlpha(fillAlpha);
+    const enrichedHeight = resolveDisplayHeightM(
+      metricKey,
+      cell.cellValue,
+      metricAveragePct,
+      delta,
+      vBucket,
+      cell.sourceTier,
+      preseasonOpticalContext,
+    );
+    const color = resolveAgronomicColor(
+      metricKey,
+      cell.cellValue,
+      metricAveragePct,
+      delta,
+      preseasonOpticalContext,
+    );
+    const relativeAnalytics = fieldRelativeAnalytics[index] ?? {
+      percentileInField: 50,
+      anomalyClass: "near-field" as const,
+    };
 
     return {
       id: cell.id,
@@ -373,18 +604,35 @@ export function buildFieldAgronomicSurfaceRenderModel({
       polygon: cell.polygon,
       metricValuePct: cell.cellValue,
       displayHeightM: enrichedHeight,
-      fillColor: withAlpha(color, 255),
-      lineColor: withAlpha([18, 24, 18], 48),
+      fillColor: withAlpha(color, fillAlpha),
+      lineColor: darkenForEdge(color, lineAlpha),
 
       // Analytics payload
       confidence: numericConfidence,
       sourceTier: cell.sourceTier,
       varianceBucket: vBucket,
       deltaFromFieldAvgPct: Math.round(delta * 10) / 10,
+      percentileInField: relativeAnalytics.percentileInField,
+      anomalyClass: relativeAnalytics.anomalyClass,
       zoneId: null,
       severityLabel: classifySeverity(metricKey, cell.cellValue),
     };
   });
+
+  const normalizedHeights = normalizeExtrusionHeightSpread(
+    draftCells.map((cell) => cell.displayHeightM),
+    {
+      softMinRangeM: resolveSoftMinHeightRangeM(metricKey),
+      maxBlend: 0.4,
+      minHeightM: 6,
+      maxHeightM: 72,
+    },
+  );
+
+  const cells: FieldAgronomicCellRenderModel[] = draftCells.map((cell, index) => ({
+    ...cell,
+    displayHeightM: normalizedHeights[index] ?? cell.displayHeightM,
+  }));
 
   return {
     id: `field-agronomic-surface:${metricKey}:${fieldId}`,

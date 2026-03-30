@@ -31,6 +31,10 @@ export function prepareFieldReportArtifact(
       readModel,
     }),
   );
+  const activeAlertSummary =
+    readModel.summary.activeAlertCount == null
+      ? "alert data unavailable"
+      : `${readModel.summary.activeAlertCount} active alerts`;
 
   return {
     bytes: pdfDocument.bytes,
@@ -46,7 +50,7 @@ export function prepareFieldReportArtifact(
       },
       document: pdfDocument.metadata,
       status: input.dryRun ? "dry-run" : "rendered",
-      note: `Report ${input.dryRun ? "prepared" : "rendered"} for ${readModel.field.name} with ${readModel.summary.activeAlertCount} active alerts, ${readModel.summary.activeFindingCount} active findings, and ${readModel.summary.trackedZoneCount} tracked zones. PDF bytes were generated in memory; artifact persistence is not configured yet.`,
+      note: `Report ${input.dryRun ? "prepared" : "rendered"} for ${readModel.field.name} with ${activeAlertSummary}, ${readModel.summary.activeFindingCount} active findings, and ${readModel.summary.trackedZoneCount} tracked zones. PDF bytes were generated in memory; artifact persistence is not configured yet.`,
       summary: {
         fieldId: readModel.field.id,
         fieldName: readModel.field.name,

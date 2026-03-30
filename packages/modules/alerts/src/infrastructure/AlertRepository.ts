@@ -14,7 +14,7 @@ export type AlertRepository = {
     workspaceId: WorkspaceId,
     fieldId: string,
     limit?: number,
-    status?: FieldAlert["status"],
+    status?: FieldAlert["status"] | readonly FieldAlert["status"][],
   ): Promise<readonly FieldAlert[]>;
   upsertAlert(input: UpsertFieldAlertInput): Promise<FieldAlert>;
   acknowledgeAlert(

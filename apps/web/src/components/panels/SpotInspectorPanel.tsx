@@ -1,257 +1,41 @@
 'use client';
+import { X, MapPin, Crosshair } from 'lucide-react';
+import { PanelEmptyState } from '../ui/PanelEmptyState';
+import { useAppTheme } from '../layout/WorkspaceShell';
 
-import {
-  MapPin,
-  AlertTriangle,
-  Circle,
-  Shovel,
-  Camera,
-  Crosshair,
-} from 'lucide-react';
-import { Button } from '../ui/Button';
-import { PanelHeader } from '../ui/PanelHeader';
-
-interface SpotInspectorPanelProps {
-  onClose?: () => void;
-}
+interface SpotInspectorPanelProps { onClose?: () => void; }
 
 export function SpotInspectorPanel({ onClose }: SpotInspectorPanelProps) {
+  const isDark = useAppTheme() === 'dark';
+  const txt = isDark ? 'rgba(255,255,255,0.78)' : '#1f2937';
+  const ok = isDark ? 'rgba(74,222,128,0.85)' : '#16a34a';
+
+  // No cell selected — show empty state
+  const hasSelection = false;
+
   return (
-    <div className="panel">
-      <PanelHeader title="SPOT INSPECTOR" onClose={onClose} />
-      <div className="panel__body" style={{ padding: '16px 32px' }}>
-        {/* Zone badge + Title */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <span
-            className="badge badge--positive"
-            style={{
-              alignSelf: 'flex-start',
-              borderRadius: '20px',
-              padding: '4px 10px',
-              background: '#e6f4ea',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            <MapPin size={12} />
-            Zone NW-3
-          </span>
-          <h2
-            style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: '24px',
-              fontWeight: 400,
-              margin: 0,
-            }}
-          >
-            North Quarter A
-          </h2>
-        </div>
-
-        {/* COORDINATES (styled section) */}
-        <div className="styled-section">
-          <span className="styled-section__header">COORDINATES</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '46px' }}>
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '16px',
-                fontWeight: 700,
-              }}
-            >
-              51.0452&deg;N
-            </span>
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '16px',
-                fontWeight: 700,
-              }}
-            >
-              110.6792&deg;W
-            </span>
+    <div className="fdp" style={{ position: 'absolute', top: 'var(--space-lg)', right: 'var(--space-lg)', bottom: 'var(--space-xl)' }}>
+      <div className="fdp__header"><div className="fdp__header-top"><div><h1 className="fdp__field-name">Spot Inspector</h1><p className="fdp__field-meta">Tap a point on the map to inspect</p></div>{onClose && <button type="button" onClick={onClose} style={{ background: 'var(--surface-white)', border: '1px solid var(--border-light)', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }}><X size={14} /></button>}</div></div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 16px 16px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, alignContent: 'start' }}>
+        {!hasSelection ? (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <PanelEmptyState icon={Crosshair} title="No spot selected" description="Tap any point on the map to inspect soil moisture, vegetation indices, and change history at that location." />
           </div>
-          <div className="filter-pills" style={{ width: 'fit-content' }}>
-            <button className="filter-pill">Copy</button>
-            <button className="filter-pill">Google Maps</button>
-            <button className="filter-pill">Apple Maps</button>
-          </div>
-        </div>
-
-        {/* WHAT CHANGED (styled section) */}
-        <div className="styled-section">
-          <span className="styled-section__header">WHAT CHANGED</span>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '4px 10px',
-              borderRadius: '6px',
-              background: '#fef2f2',
-            }}
-          >
-            <AlertTriangle size={14} style={{ color: 'var(--status-danger)' }} />
-            <span style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--text-primary)' }}>
-              NDVI dropped below threshold
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
-            <div style={{ textAlign: 'center' }}>
-              <span
-                style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '9px',
-                  fontWeight: 700,
-                  letterSpacing: '1px',
-                  textTransform: 'uppercase',
-                  color: 'var(--text-muted)',
-                  display: 'block',
-                }}
-              >
-                START
-              </span>
-              <div
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '16px',
-                  fontWeight: 700,
-                }}
-              >
-                0.72
+        ) : (
+          <>
+            <div className="fdp-card fdp-card--span-full" style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+              <MapPin size={20} style={{ color: ok, flexShrink: 0 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div className="fdp-big fdp-big--18" style={{ color: txt }}>52.1842°N, −110.6398°W</div>
+                <div className="fdp-sub">Cell R12-C04 · Canola · Flowering stage</div>
               </div>
-              <span style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--text-muted)' }}>
-                Feb 28
-              </span>
             </div>
-            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <span
-                style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '9px',
-                  fontWeight: 700,
-                  letterSpacing: '1px',
-                  textTransform: 'uppercase',
-                  color: 'var(--text-muted)',
-                  display: 'block',
-                }}
-              >
-                DELTA
-              </span>
-              <div
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '16px',
-                  fontWeight: 700,
-                  color: 'var(--status-danger)',
-                }}
-              >
-                -0.12
-              </div>
-              <span style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--text-muted)' }}>
-                16.7%
-              </span>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <span
-                style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '9px',
-                  fontWeight: 700,
-                  letterSpacing: '1px',
-                  textTransform: 'uppercase',
-                  color: 'var(--text-muted)',
-                  display: 'block',
-                }}
-              >
-                END
-              </span>
-              <div
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '16px',
-                  fontWeight: 700,
-                }}
-              >
-                0.60
-              </div>
-              <span style={{ fontFamily: 'var(--font-body)', fontSize: '11px', color: 'var(--text-muted)' }}>
-                Mar 21
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* WHY IT MATTERS (styled section) */}
-        <div className="styled-section" style={{ gap: '8px' }}>
-          <span className="styled-section__header">WHY IT MATTERS</span>
-          <p
-            style={{
-              fontFamily: 'var(--font-body)',
-              fontSize: '12px',
-              lineHeight: 1.5,
-              color: '#374151',
-              margin: 0,
-            }}
-          >
-            This zone shows a sustained NDVI decline over three consecutive captures, dropping below the 0.65 stress threshold. The pattern is consistent with early-stage moisture stress or possible pest pressure. Without intervention, yield loss in this zone could reach 12&ndash;18% based on historical correlations.
-          </p>
-        </div>
-
-        {/* WHAT TO DO (styled section) */}
-        <div className="styled-section">
-          <span className="styled-section__header">WHAT TO DO</span>
-          <div className="action-item">
-            <div className="action-item__icon-wrap">
-              <Circle size={14} />
-            </div>
-            <div className="action-item__content">
-              Scout the zone on foot — check for wilting, discoloration, or pest damage near row markers
-            </div>
-          </div>
-          <div className="action-item">
-            <div className="action-item__icon-wrap">
-              <Shovel size={14} />
-            </div>
-            <div className="action-item__content">
-              Pull a soil moisture sample at 15cm depth and compare to last reading.
-            </div>
-          </div>
-          <div className="action-item">
-            <div className="action-item__icon-wrap">
-              <Camera size={14} />
-            </div>
-            <div className="action-item__content">
-              Photograph affected plants and tag location for the next drone pass
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom actions */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '34px' }}>
-          <Button variant="panel-primary" icon={Crosshair}>
-            Start Inspection
-          </Button>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-body)',
-              fontSize: '13px',
-              color: 'var(--text-secondary)',
-              textAlign: 'center',
-              width: '100%',
-              padding: '0',
-            }}
-          >
-            Dismiss
-          </button>
-        </div>
+            <div className="fdp-card"><div className="fdp-lbl">ROOT MOISTURE</div><div className="fdp-big fdp-big--22" style={{ color: ok }}>38.4%</div><div className="fdp-sub">Adequate</div></div>
+            <div className="fdp-card"><div className="fdp-lbl">SURFACE</div><div className="fdp-big fdp-big--22" style={{ color: txt }}>22.1%</div><div className="fdp-sub">Below average</div></div>
+            <div className="fdp-card"><div className="fdp-lbl">NDVI</div><div className="fdp-big fdp-big--22" style={{ color: ok }}>0.72</div></div>
+            <div className="fdp-card"><div className="fdp-lbl">CONFIDENCE</div><div className="fdp-big fdp-big--18" style={{ color: txt }}>High</div></div>
+          </>
+        )}
       </div>
     </div>
   );

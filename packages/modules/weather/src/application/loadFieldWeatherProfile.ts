@@ -31,7 +31,7 @@ export type LoadFieldWeatherProfileInput = {
 export async function loadFieldWeatherProfile(
   input: LoadFieldWeatherProfileInput,
 ): Promise<FieldWeatherProfile> {
-  const [latestObservation, forecasts] = await Promise.all([
+  const [latestObservationResult, forecastsResult] = await Promise.allSettled([
     input.observationRepository.getLatestByField(
       input.workspaceId,
       input.fieldId,
@@ -44,8 +44,39 @@ export async function loadFieldWeatherProfile(
     }),
   ]);
 
+  const latestObservation =
+    latestObservationResult.status === "fulfilled" ? latestObservationResult.value : null;
+  const forecasts =
+    forecastsResult.status === "fulfilled"
+      ? forecastsResult.value
+      : ([] as readonly FieldWeatherForecast[]);
+
+  if (latestObservationResult.status === "rejected") {
+    console.warn(
+      `[weather] latest observation lookup failed for ${input.workspaceId}/${input.fieldId}: ${
+        latestObservationResult.reason instanceof Error
+          ? latestObservationResult.reason.message
+          : String(latestObservationResult.reason)
+      }`,
+    );
+  }
+
+  if (forecastsResult.status === "rejected") {
+    console.warn(
+      `[weather] forecast lookup failed for ${input.workspaceId}/${input.fieldId}: ${
+        forecastsResult.reason instanceof Error
+          ? forecastsResult.reason.message
+          : String(forecastsResult.reason)
+      }`,
+    );
+  }
+
   return {
     latestObservation,
     forecasts,
+    dataAvailability: {
+      latestObservation: latestObservationResult.status === "fulfilled",
+      forecasts: forecastsResult.status === "fulfilled",
+    },
   };
 }

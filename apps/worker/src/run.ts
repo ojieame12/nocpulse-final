@@ -60,6 +60,9 @@ async function main() {
         if (isJobLeaseLostError(error)) {
           context.logger.error("job.worker.lease-lost", {
             message: error.message,
+            dispatchId: error.dispatchId,
+            workerName: error.workerName,
+            context: error.context,
           });
           return;
         }

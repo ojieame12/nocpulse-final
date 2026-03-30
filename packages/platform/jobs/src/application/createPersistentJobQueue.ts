@@ -67,11 +67,18 @@ type OwnedRunningDispatchGuard = {
 };
 
 class JobLeaseLostError extends Error {
+  readonly context: string;
+  readonly dispatchId: string;
+  readonly workerName: string;
+
   constructor(context: string, dispatchId: string, workerName: string) {
     super(
       `[jobs] ${context}: lease lost for dispatch "${dispatchId}" by ${workerName}`,
     );
     this.name = "JobLeaseLostError";
+    this.context = context;
+    this.dispatchId = dispatchId;
+    this.workerName = workerName;
   }
 }
 
@@ -120,6 +127,10 @@ function toJsonValue(value: unknown): JsonValue {
 
 function serializeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isStabilityDebugEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" && process.env.FIELDPULSE_DEBUG_STABILITY === "1";
 }
 
 function toCount(value: number | string | null | undefined) {
@@ -1047,6 +1058,15 @@ function createLeaseHeartbeat(
         .then(() => undefined)
         .catch((error: unknown) => {
           heartbeatError = error;
+          if (isStabilityDebugEnabled()) {
+            console.warn("[stability][jobs] heartbeat-failed", {
+              dispatchId: input.dispatchId,
+              attempts: input.attempts,
+              workerName: input.lockedBy,
+              context: input.context,
+              error: serializeError(error),
+            });
+          }
         })
         .finally(() => {
           inFlight = null;
@@ -1078,6 +1098,26 @@ function createLeaseHeartbeat(
       return heartbeatError;
     },
   };
+}
+
+function logHeartbeatTermination(input: {
+  dispatch: PersistentJobDispatchRecord;
+  workerName: string;
+  heartbeatError: unknown;
+  originalError?: unknown;
+}) {
+  console.warn("[jobs] heartbeat terminated dispatch handling", {
+    dispatchId: input.dispatch.id,
+    jobKey: input.dispatch.key,
+    attempts: input.dispatch.attempts,
+    workerName: input.workerName,
+    heartbeatError: serializeError(input.heartbeatError),
+    originalError:
+      input.originalError == null ? null : serializeError(input.originalError),
+    maskedOriginalError:
+      input.originalError != null &&
+      input.originalError !== input.heartbeatError,
+  });
 }
 
 function createJobExecutionControls(
@@ -1237,6 +1277,11 @@ export function createPersistentJobQueue<TContext>(
       const heartbeatError = leaseHeartbeat.getError();
 
       if (heartbeatError) {
+        logHeartbeatTermination({
+          dispatch,
+          workerName: options.workerName,
+          heartbeatError,
+        });
         throw heartbeatError;
       }
 
@@ -1291,6 +1336,15 @@ export function createPersistentJobQueue<TContext>(
       await leaseHeartbeat.stop();
       const heartbeatError = leaseHeartbeat.getError();
       const effectiveError = heartbeatError ?? error;
+
+      if (heartbeatError) {
+        logHeartbeatTermination({
+          dispatch,
+          workerName: options.workerName,
+          heartbeatError,
+          originalError: error,
+        });
+      }
 
       if (effectiveError instanceof JobLeaseLostError) {
         throw effectiveError;
@@ -1533,6 +1587,7 @@ export function createPersistentJobQueue<TContext>(
       return drainClaimedDispatch(dispatch);
     },
     async drain(limit = 1) {
+      const drainStartTime = isStabilityDebugEnabled() ? performance.now() : 0;
       const results: JobDispatchResult[] = [];
 
       for (let index = 0; index < limit; index += 1) {
@@ -1541,6 +1596,15 @@ export function createPersistentJobQueue<TContext>(
           break;
         }
         results.push(dispatch);
+      }
+
+      if (isStabilityDebugEnabled()) {
+        console.debug("[stability][jobs] drain", {
+          workerName: options.workerName,
+          requestedLimit: limit,
+          drainedCount: results.length,
+          durationMs: Math.round((performance.now() - drainStartTime) * 100) / 100,
+        });
       }
 
       return results;

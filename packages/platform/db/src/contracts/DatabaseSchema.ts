@@ -51,6 +51,43 @@ export type DatabaseSchema = {
         }>;
         Relationships: [];
       };
+      workspace_user_settings: {
+        Row: {
+          workspace_id: string;
+          user_id: string;
+          email_alerts: boolean;
+          health_warnings: boolean;
+          spray_windows: boolean;
+          weekly_digest: boolean;
+          units: "metric" | "imperial";
+          temperature_unit: "celsius" | "fahrenheit";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          workspace_id: string;
+          user_id: string;
+          email_alerts?: boolean;
+          health_warnings?: boolean;
+          spray_windows?: boolean;
+          weekly_digest?: boolean;
+          units?: "metric" | "imperial";
+          temperature_unit?: "celsius" | "fahrenheit";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<{
+          email_alerts: boolean;
+          health_warnings: boolean;
+          spray_windows: boolean;
+          weekly_digest: boolean;
+          units: "metric" | "imperial";
+          temperature_unit: "celsius" | "fahrenheit";
+          created_at: string;
+          updated_at: string;
+        }>;
+        Relationships: [];
+      };
       fields: {
         Row: {
           id: string;
@@ -400,6 +437,42 @@ export type DatabaseSchema = {
         }>;
         Relationships: [];
       };
+      field_basis_assumptions: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          field_id: string;
+          season_year: number | null;
+          crop_symbol: string | null;
+          basis_cad_per_tonne: number | string;
+          source_key: string;
+          note_text: string | null;
+          assumed_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          field_id: string;
+          season_year?: number | null;
+          crop_symbol?: string | null;
+          basis_cad_per_tonne: number | string;
+          source_key: string;
+          note_text?: string | null;
+          assumed_at?: string;
+          created_at?: string;
+        };
+        Update: Partial<{
+          season_year: number | null;
+          crop_symbol: string | null;
+          basis_cad_per_tonne: number | string;
+          source_key: string;
+          note_text: string | null;
+          assumed_at: string;
+          created_at: string;
+        }>;
+        Relationships: [];
+      };
       field_raster_observations: {
         Row: {
           id: string;
@@ -476,6 +549,127 @@ export type DatabaseSchema = {
           centroid: JsonValue;
           boundary: JsonValue;
           measurements: JsonValue;
+          created_at: string;
+        }>;
+        Relationships: [];
+      };
+      field_scout_notes: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          field_id: string;
+          finding_id: string | null;
+          zone_id: string | null;
+          cell_key: string | null;
+          outcome: "confirmed" | "not_confirmed" | "resolved" | "monitor";
+          note_text: string;
+          observed_at: string;
+          created_by_user_id: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          field_id: string;
+          finding_id?: string | null;
+          zone_id?: string | null;
+          cell_key?: string | null;
+          outcome: "confirmed" | "not_confirmed" | "resolved" | "monitor";
+          note_text: string;
+          observed_at?: string;
+          created_by_user_id: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<{
+          finding_id: string | null;
+          zone_id: string | null;
+          cell_key: string | null;
+          outcome: "confirmed" | "not_confirmed" | "resolved" | "monitor";
+          note_text: string;
+          observed_at: string;
+          created_by_user_id: string;
+          created_at: string;
+          updated_at: string;
+        }>;
+        Relationships: [];
+      };
+      field_yield_assumptions: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          field_id: string;
+          season_year: number | null;
+          crop_symbol: string | null;
+          yield_tonnes_per_ha: number | string;
+          source_key: string;
+          note_text: string | null;
+          assumed_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          field_id: string;
+          season_year?: number | null;
+          crop_symbol?: string | null;
+          yield_tonnes_per_ha: number | string;
+          source_key: string;
+          note_text?: string | null;
+          assumed_at?: string;
+          created_at?: string;
+        };
+        Update: Partial<{
+          workspace_id: string;
+          field_id: string;
+          season_year: number | null;
+          crop_symbol: string | null;
+          yield_tonnes_per_ha: number | string;
+          source_key: string;
+          note_text: string | null;
+          assumed_at: string;
+          created_at: string;
+        }>;
+        Relationships: [];
+      };
+      grain_price_snapshots: {
+        Row: {
+          id: string;
+          crop_symbol: string;
+          close_price_cad_per_tonne: number | string;
+          basis_cad_per_tonne: number | string;
+          source_currency: string;
+          source_unit: string;
+          source_close_price: number | string;
+          fx_rate_to_cad: number | string;
+          source_key: string;
+          captured_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          crop_symbol: string;
+          close_price_cad_per_tonne: number | string;
+          basis_cad_per_tonne?: number | string;
+          source_currency?: string;
+          source_unit?: string;
+          source_close_price?: number | string;
+          fx_rate_to_cad?: number | string;
+          source_key: string;
+          captured_at?: string;
+          created_at?: string;
+        };
+        Update: Partial<{
+          crop_symbol: string;
+          close_price_cad_per_tonne: number | string;
+          basis_cad_per_tonne: number | string;
+          source_currency: string;
+          source_unit: string;
+          source_close_price: number | string;
+          fx_rate_to_cad: number | string;
+          source_key: string;
+          captured_at: string;
           created_at: string;
         }>;
         Relationships: [];

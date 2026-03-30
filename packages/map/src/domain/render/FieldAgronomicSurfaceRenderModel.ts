@@ -5,11 +5,13 @@ export type FieldAgronomicSurfaceMetricKey =
   | "ndvi"
   | "ndre"
   | "ndmi"
+  | "radar-wetness"
   | "root-zone-moisture-pct"
   | "surface-moisture-pct";
 
 export type CellVarianceBucket = "low" | "medium" | "high";
 export type CellSeverityLabel = "healthy" | "stressed" | "critical" | null;
+export type CellAnomalyClass = "below-field" | "near-field" | "above-field";
 export type CellSourceTier =
   | "fresh-sar"
   | "stale-sar"
@@ -37,6 +39,10 @@ export type FieldAgronomicCellRenderModel = {
   varianceBucket: CellVarianceBucket;
   /** Deviation from the field-level average (positive = above avg). */
   deltaFromFieldAvgPct: number;
+  /** Percentile rank within the current field surface (0–100). */
+  percentileInField: number;
+  /** Local position relative to the field distribution. */
+  anomalyClass: CellAnomalyClass;
   /** Tracked zone association, if any. */
   zoneId: string | null;
   /** Agronomic severity classification. */

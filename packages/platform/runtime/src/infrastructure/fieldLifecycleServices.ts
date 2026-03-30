@@ -1,0 +1,210 @@
+import {
+  commitSpreadsheetImportBatch,
+  createSpreadsheetImportBatch,
+} from "@fieldpulse/module-field-intake";
+import {
+  buildInitialFieldOnboardingPlan,
+  buildRefreshFieldOnboardingPlan,
+  dispatchFieldOnboardingPlan,
+  type FieldOnboardingJobRequest,
+} from "@fieldpulse/module-field-onboarding";
+import { ensureWorkspaceField } from "@fieldpulse/module-fields";
+import {
+  createSyntheticRasterFieldObservationProvider,
+  refreshFieldRasterObservation,
+} from "@fieldpulse/module-imagery";
+import {
+  rebuildFieldMoistureCellSnapshots,
+  rebuildFieldMoistureEstimate,
+} from "@fieldpulse/module-moisture";
+import { ensureWorkspace } from "@fieldpulse/module-workspaces";
+import type { ServerJobDispatcher, ServerRepositories } from "../contracts/ServerRuntime";
+import type {
+  BootstrapDevelopmentDataInput,
+  BootstrapDevelopmentDataResult,
+  CommitFieldImportBatchInput,
+  CommitFieldImportBatchResult,
+  SaveSpreadsheetImportPreviewInput,
+  SaveSpreadsheetImportPreviewResult,
+} from "../contracts/ServerServices";
+import { createDefaultMoistureCellDerivationStrategy } from "./createDefaultMoistureCellDerivationStrategy";
+
+export async function requireFieldDetail(
+  repositories: ServerRepositories,
+  workspaceId: string,
+  fieldId: string,
+) {
+  const field = await repositories.fields.getById(workspaceId, fieldId);
+
+  if (!field) {
+    throw new Error(
+      `[runtime] field ${fieldId} was not found in workspace ${workspaceId}`,
+    );
+  }
+
+  return field;
+}
+
+export async function bootstrapDevelopmentData(
+  repositories: ServerRepositories,
+  input: BootstrapDevelopmentDataInput,
+): Promise<BootstrapDevelopmentDataResult> {
+  const moistureCellDerivationStrategy =
+    createDefaultMoistureCellDerivationStrategy({
+      imageryRasterObservations: repositories.imageryRasterObservations,
+    });
+  const workspace = await ensureWorkspace({
+    repository: repositories.workspaces,
+    actorUserId: input.actorUserId,
+    workspace: input.workspace,
+  });
+
+  const field = await ensureWorkspaceField({
+    repository: repositories.fields,
+    actorUserId: input.actorUserId,
+    field: {
+      workspaceId: workspace.workspace.id,
+      ...input.field,
+    },
+  });
+
+  const moistureSnapshot = await rebuildFieldMoistureEstimate({
+    repository: repositories.moistureSnapshots,
+    estimate: {
+      workspaceId: workspace.workspace.id,
+      fieldId: field.field.id,
+      observedAt: input.moistureSnapshot.observedAt,
+      sourceKey: input.moistureSnapshot.sourceKey,
+      inputs: input.moistureSnapshot.inputs,
+    },
+  });
+  const imageryObservation = await refreshFieldRasterObservation({
+    repository: repositories.imageryRasterObservations,
+    provider: createSyntheticRasterFieldObservationProvider(),
+    workspaceId: workspace.workspace.id,
+    fieldId: field.field.id,
+    boundary: field.field.boundary,
+    observedAt: moistureSnapshot.snapshot.observedAt,
+  });
+  const moistureCells = await rebuildFieldMoistureCellSnapshots({
+    repository: repositories.moistureCellSnapshots,
+    derivationStrategy: moistureCellDerivationStrategy,
+    field: {
+      workspaceId: workspace.workspace.id,
+      fieldId: field.field.id,
+      boundary: field.field.boundary,
+    },
+    snapshot: moistureSnapshot.snapshot,
+  });
+
+  return {
+    actorUserId: input.actorUserId,
+    workspace,
+    field,
+    moistureSnapshot,
+    imageryObservation: {
+      observationId: imageryObservation.observation.id,
+      sourceKey: imageryObservation.observation.sourceKey,
+      cellCount: imageryObservation.observation.cells.length,
+      action: imageryObservation.action,
+    },
+    moistureCells: {
+      count: moistureCells.cells.length,
+      action: moistureCells.action,
+    },
+  };
+}
+
+export async function saveSpreadsheetImportPreview(
+  repositories: ServerRepositories,
+  input: SaveSpreadsheetImportPreviewInput,
+): Promise<SaveSpreadsheetImportPreviewResult> {
+  return createSpreadsheetImportBatch({
+    repository: repositories.fieldImportBatches,
+    actorUserId: input.actorUserId,
+    workspaceId: input.workspaceId,
+    preview: input.preview,
+  });
+}
+
+export async function commitFieldImportBatch(
+  repositories: ServerRepositories,
+  options: {
+    jobDispatcher?: ServerJobDispatcher;
+  },
+  input: CommitFieldImportBatchInput,
+): Promise<CommitFieldImportBatchResult> {
+  const committed = await commitSpreadsheetImportBatch({
+    repository: repositories.fieldImportBatches,
+    fieldRepository: repositories.fields,
+    actorUserId: input.actorUserId,
+    workspaceId: input.workspaceId,
+    batchId: input.batchId,
+  });
+
+  const onboardingDispatches: Array<
+    CommitFieldImportBatchResult["onboardingDispatches"][number]
+  > = [];
+
+  for (const candidate of committed.candidates) {
+    if (candidate.candidate.cropType) {
+      await repositories.fieldCropContexts.upsertContext({
+        workspaceId: candidate.field.workspaceId,
+        fieldId: candidate.field.id,
+        seasonYear: new Date(candidate.candidate.createdAt).getUTCFullYear(),
+        cropType: candidate.candidate.cropType,
+        growthStage: null,
+        growthStageSource: "imported",
+        accumulatedGdd: 0,
+        sourceKey: "field-intake:spreadsheet-commit",
+        metadata: {
+          batchId: committed.batch.id,
+          candidateId: candidate.candidate.id,
+          commitAction: candidate.action,
+          sourceType: committed.batch.sourceType,
+        },
+      });
+    }
+
+    if (!options.jobDispatcher) {
+      onboardingDispatches.push({
+        fieldId: candidate.field.id,
+        action: candidate.action,
+        receipts: [],
+      });
+      continue;
+    }
+
+    const receipts = await dispatchFieldOnboardingPlan({
+      dispatcher: {
+        enqueue(job: FieldOnboardingJobRequest) {
+          return options.jobDispatcher!.enqueue(job);
+        },
+      },
+      plan:
+        candidate.action === "created"
+          ? buildInitialFieldOnboardingPlan({
+              workspaceId: candidate.field.workspaceId,
+              fieldId: candidate.field.id,
+              dryRun: input.onboardingDryRun,
+            })
+          : buildRefreshFieldOnboardingPlan({
+              workspaceId: candidate.field.workspaceId,
+              fieldId: candidate.field.id,
+              dryRun: input.onboardingDryRun,
+            }),
+    });
+
+    onboardingDispatches.push({
+      fieldId: candidate.field.id,
+      action: candidate.action,
+      receipts,
+    });
+  }
+
+  return {
+    batch: committed.batch,
+    candidates: committed.candidates,
+    onboardingDispatches,
+  };
+}

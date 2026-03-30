@@ -1,296 +1,51 @@
 'use client';
+import { X, TrendingDown } from 'lucide-react';
+import { useAppTheme } from '../layout/WorkspaceShell';
 
-import { ArrowDown, Crosshair, Clock } from 'lucide-react';
-import { Badge, Button, PanelHeader } from '../ui';
-
-interface EvidencePanelProps {
-  onClose?: () => void;
-}
-
-/* ── NDVI trend captures ── */
-
-const captures = [
-  { date: 'Feb 28', ndvi: 0.74, color: 'var(--status-positive)' },
-  { date: 'Mar 07', ndvi: 0.72, color: 'var(--status-positive)' },
-  { date: 'Mar 14', ndvi: 0.69, color: 'var(--status-positive)' },
-  { date: 'Mar 21', ndvi: 0.65, color: 'var(--status-warning)' },
-  { date: 'Mar 28', ndvi: 0.60, color: 'var(--status-danger)' },
-];
-
-/* ── Inspection targets ── */
-
-const targets = [
-  {
-    id: 'A',
-    label: 'NW corner stress zone',
-    coords: '51.0452\u00b0N, 110.6792\u00b0W',
-    color: 'var(--status-danger)',
-  },
-  {
-    id: 'B',
-    label: 'East drainage edge',
-    coords: '51.0451\u00b0N, 113.8757\u00b0W',
-    color: 'var(--status-warning)',
-  },
-];
+interface EvidencePanelProps { onClose?: () => void; }
 
 export function EvidencePanel({ onClose }: EvidencePanelProps) {
+  const isDark = useAppTheme() === 'dark';
+  const txt = isDark ? 'rgba(255,255,255,0.78)' : '#1f2937';
+  const danger = isDark ? 'rgba(252,165,165,0.85)' : '#dc2626';
+  const ok = isDark ? 'rgba(74,222,128,0.85)' : '#16a34a';
+  const bars = [72, 71, 70, 68, 65];
+
   return (
-    <div className="panel">
-      <PanelHeader title="NDVI DROP EVIDENCE" onClose={onClose} />
-      <div className="panel__body" style={{ padding: '32px 32px 16px 32px' }}>
-        {/* ── Title ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span
-            style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: '20px',
-              fontWeight: 400,
-              color: '#1f2937',
-            }}
-          >
-            NDVI Drop Evidence
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span
-              style={{
-                fontFamily: 'var(--font-body)',
-                fontSize: '11px',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              North Quarter A &middot; Zone NW-3
-            </span>
-            <Badge variant="danger">URGENT</Badge>
-            <span
-              style={{
-                fontFamily: 'var(--font-body)',
-                fontSize: '11px',
-                color: 'var(--text-muted)',
-              }}
-            >
-              3h ago
-            </span>
+    <div className="fdp" style={{ position: 'absolute', top: 'var(--space-lg)', right: 'var(--space-lg)', bottom: 'var(--space-xl)' }}>
+      <div className="fdp__header"><div className="fdp__header-top"><div><h1 className="fdp__field-name">Evidence</h1><p className="fdp__field-meta">NDVI drop analysis · Zone NW-3</p></div>{onClose && <button type="button" onClick={onClose} style={{ background: 'var(--surface-white)', border: '1px solid var(--border-light)', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }}><X size={14} /></button>}</div></div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 16px 16px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, alignContent: 'start' }}>
+        <div className="fdp-card fdp-card--span-full" style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+          <TrendingDown size={24} style={{ color: danger, flexShrink: 0 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div className="fdp-big fdp-big--18" style={{ color: txt }}>NDVI Drop Detected</div>
+            <div className="fdp-sub">North Quarter A · Zone NW-3 · 4 cells affected</div>
           </div>
         </div>
-
-        {/* ── Current vs Previous comparison ── */}
-        <div className="evidence-metrics">
-          {/* Current */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-            <span
-              style={{
-                fontFamily: 'var(--font-body)',
-                fontSize: '9px',
-                fontWeight: 700,
-                color: 'var(--text-muted)',
-                textTransform: 'uppercase',
-                letterSpacing: '1px',
-              }}
-            >
-              CURRENT
-            </span>
-            <span
-              style={{
-                fontFamily: 'var(--font-heading)',
-                fontSize: '28px',
-                color: 'var(--text-primary)',
-              }}
-            >
-              0.60
-            </span>
+        <div className="fdp-card"><div className="fdp-lbl">CURRENT</div><div className="fdp-big fdp-big--28" style={{ color: danger }}>0.65</div><div className="fdp-sub">Latest capture</div></div>
+        <div className="fdp-card"><div className="fdp-lbl">PREVIOUS</div><div className="fdp-big fdp-big--28" style={{ color: ok }}>0.72</div><div className="fdp-sub">Prior capture</div></div>
+        <div className="fdp-card fdp-card--span-full" style={{ gap: 8 }}>
+          <div className="fdp-lbl">DELTA</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <div className="fdp-big fdp-big--22" style={{ color: danger }}>−9.7%</div>
+            <div className="fdp-sub">decline over 12 days</div>
           </div>
-
-          {/* Delta */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <ArrowDown size={14} style={{ color: 'var(--status-danger)' }} />
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  color: 'var(--status-danger)',
-                }}
-              >
-                -0.12
-              </span>
-            </div>
-          </div>
-
-          {/* Previous */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-            <span
-              style={{
-                fontFamily: 'var(--font-body)',
-                fontSize: '9px',
-                fontWeight: 700,
-                color: 'var(--text-muted)',
-                textTransform: 'uppercase',
-                letterSpacing: '1px',
-              }}
-            >
-              PREVIOUS
-            </span>
-            <span
-              style={{
-                fontFamily: 'var(--font-heading)',
-                fontSize: '28px',
-                color: 'var(--text-primary)',
-              }}
-            >
-              0.72
-            </span>
-          </div>
+          <div className="fdp-prog" style={{ height: 4, background: `${danger}18` }}><div className="fdp-prog__fill" style={{ width: '70%', background: danger }} /></div>
         </div>
-
-        {/* ── Image comparison placeholder ── */}
-        <div
-          style={{
-            display: 'flex',
-            height: '200px',
-            borderRadius: '20px',
-            overflow: 'hidden',
-            border: '1px solid var(--border-light)',
-            position: 'relative',
-          }}
-        >
-          <div style={{ flex: 1, background: '#e8e8e8', position: 'relative' }}>
-            <span
-              style={{
-                position: 'absolute',
-                bottom: '10px',
-                left: '11px',
-                fontFamily: 'var(--font-body)',
-                fontSize: '9px',
-                fontWeight: 700,
-                letterSpacing: '0.8px',
-                color: 'var(--color-white)',
-                textShadow: '0 1px 2.6px rgba(0,0,0,0.5)',
-              }}
-            >
-              True Color
-            </span>
+        <div className="fdp-card fdp-card--span-full" style={{ gap: 8 }}>
+          <div className="fdp-lbl">NDVI TREND (5 CAPTURES)</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80 }}>
+            {bars.map((h, i) => (<div key={i} style={{ flex: 1, height: `${h}%`, borderRadius: 3, background: i === bars.length - 1 ? danger : ok, opacity: i === bars.length - 1 ? 1 : 0.6 }} />))}
           </div>
-          <div style={{ flex: 1, background: '#d4d4d4', position: 'relative' }}>
-            <span
-              style={{
-                position: 'absolute',
-                bottom: '10px',
-                right: '11px',
-                fontFamily: 'var(--font-body)',
-                fontSize: '9px',
-                fontWeight: 700,
-                letterSpacing: '0.8px',
-                color: 'var(--color-white)',
-                textShadow: '0 1px 2.6px rgba(0,0,0,0.5)',
-              }}
-            >
-              NDVI
-            </span>
-          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="fdp-mono" style={{ fontSize: 8, color: 'var(--text-muted)' }}>Feb 10</span><span className="fdp-mono" style={{ fontSize: 8, color: 'var(--text-muted)' }}>Mar 26</span></div>
         </div>
-
-        {/* ── NDVI Trend (styled section) ── */}
-        <div className="styled-section">
-          <span className="styled-section__header">NDVI TREND (5 CAPTURES)</span>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-end',
-              gap: '2px',
-              height: '80px',
-              borderRadius: '6px',
-              background: '#fef2f2',
-              padding: '4px 6px',
-            }}
-          >
-            {captures.map((cap) => (
-              <div
-                key={cap.date}
-                style={{
-                  flex: 1,
-                  height: `${((cap.ndvi - 0.5) / 0.3) * 100}%`,
-                  borderRadius: '4px 4px 0 0',
-                  backgroundColor: cap.color,
-                }}
-              />
-            ))}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            {captures.map((cap) => (
-              <span
-                key={cap.date}
-                style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '8px',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                {cap.date}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Inspection Targets (styled section) ── */}
-        <div className="styled-section styled-section--gap-8">
-          <span className="styled-section__header">INSPECTION TARGETS</span>
-          {targets.map((target) => (
-            <div
-              key={target.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 10px',
-                borderRadius: '6px',
-                background: 'var(--surface-white)',
-              }}
-            >
-              <div
-                style={{
-                  width: '10px',
-                  height: '10px',
-                  borderRadius: '50%',
-                  backgroundColor: target.color,
-                  flexShrink: 0,
-                }}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span
-                  style={{
-                    fontFamily: 'var(--font-body)',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  Target {target.id} &mdash; {target.label}
-                </span>
-                <span
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '11px',
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  {target.coords}
-                </span>
-              </div>
-            </div>
+        <div className="fdp-card fdp-card--span-full" style={{ gap: 6 }}>
+          <div className="fdp-lbl">EVIDENCE DETAIL</div>
+          {[{ k: 'Detection', v: 'Automated NDVI comparison' }, { k: 'Affected cells', v: '4 (R12-C04 through R12-C07)' }, { k: 'Confidence', v: 'High — clear pass, no cloud' }, { k: 'Recommended', v: 'Scout east section within 48h' }].map(d => (
+            <div key={d.k} style={{ display: 'flex', justifyContent: 'space-between' }}><span className="fdp-sub">{d.k}</span><span className="fdp-mono" style={{ color: txt }}>{d.v}</span></div>
           ))}
         </div>
-
-        {/* ── Action buttons (side by side) ── */}
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <Button variant="panel-primary" icon={Crosshair}>
-            Start Inspection
-          </Button>
-          <Button variant="panel-secondary" icon={Clock}>
-            View History
-          </Button>
-        </div>
+        <div style={{ gridColumn: '1 / -1', textAlign: 'center', paddingTop: 8, borderTop: '1px solid var(--border-light)', fontSize: 8, color: 'var(--text-tertiary)' }}>Evidence generated from Sentinel-2 pass Mar 26, 2025</div>
       </div>
     </div>
   );

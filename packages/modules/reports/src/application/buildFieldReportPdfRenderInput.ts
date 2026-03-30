@@ -42,8 +42,21 @@ function pushBlock(blocks: PdfTextBlock[], style: PdfTextBlock["style"], text: s
   blocks.push({ style, text });
 }
 
-function pushAlertSection(blocks: PdfTextBlock[], alerts: readonly FieldAlert[]) {
+function pushAlertSection(
+  blocks: PdfTextBlock[],
+  alerts: readonly FieldAlert[],
+  activeAlertsAvailable: boolean,
+) {
   pushBlock(blocks, "heading", "Active alerts");
+
+  if (!activeAlertsAvailable) {
+    pushBlock(
+      blocks,
+      "body",
+      "Active alert data was unavailable when this report was built. Re-run the report before treating this field as all clear.",
+    );
+    return;
+  }
 
   if (alerts.length === 0) {
     pushBlock(blocks, "body", "No active alerts.");
@@ -201,7 +214,11 @@ export function buildFieldReportPdfRenderInput({
   pushBlock(
     blocks,
     "body",
-    `Active alerts ${readModel.summary.activeAlertCount}, active findings ${readModel.summary.activeFindingCount}, tracked zones ${readModel.summary.trackedZoneCount}, active tracked zones ${readModel.summary.activeTrackedZoneCount}.`,
+    `Active alerts ${
+      readModel.summary.activeAlertCount == null
+        ? "unavailable"
+        : readModel.summary.activeAlertCount
+    }, active findings ${readModel.summary.activeFindingCount}, tracked zones ${readModel.summary.trackedZoneCount}, active tracked zones ${readModel.summary.activeTrackedZoneCount}.`,
   );
   pushBlock(
     blocks,
@@ -231,7 +248,13 @@ export function buildFieldReportPdfRenderInput({
   }
 
   pushBlock(blocks, "heading", "Weather");
-  if (!weatherObservation) {
+  if (!readModel.weather.profile.dataAvailability.latestObservation) {
+    pushBlock(
+      blocks,
+      "body",
+      "Weather observation data was unavailable when this report was built.",
+    );
+  } else if (!weatherObservation) {
     pushBlock(blocks, "body", "No weather observation available.");
   } else {
     pushBlock(
@@ -257,7 +280,13 @@ export function buildFieldReportPdfRenderInput({
   }
 
   pushBlock(blocks, "subheading", "Forecast sample");
-  if (readModel.weather.profile.forecasts.length === 0) {
+  if (!readModel.weather.profile.dataAvailability.forecasts) {
+    pushBlock(
+      blocks,
+      "body",
+      "Forecast data was unavailable when this report was built.",
+    );
+  } else if (readModel.weather.profile.forecasts.length === 0) {
     pushBlock(blocks, "body", "No forecast rows available.");
   } else {
     for (const forecast of readModel.weather.profile.forecasts.slice(0, 8)) {
@@ -265,7 +294,11 @@ export function buildFieldReportPdfRenderInput({
     }
   }
 
-  pushAlertSection(blocks, readModel.alerts);
+  pushAlertSection(
+    blocks,
+    readModel.alerts,
+    readModel.dataAvailability.activeAlerts,
+  );
   pushFindingSection(blocks, readModel.findings);
   pushZoneSection(
     blocks,

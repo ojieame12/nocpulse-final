@@ -20,11 +20,17 @@ import {
   createSupabaseImageryProviderProbeRepository,
 } from "@fieldpulse/module-imagery";
 import {
+  createSupabaseFieldBasisAssumptionRepository,
+  createSupabaseFieldYieldAssumptionRepository,
+  createSupabaseGrainPriceSnapshotRepository,
+} from "@fieldpulse/module-market";
+import {
   createSupabaseFieldMoistureCellSnapshotRepository,
   createSupabaseFieldMoistureSnapshotRepository,
   createSupabaseMoistureEstimateStore,
 } from "@fieldpulse/module-moisture";
 import { createObjectStoreReportArtifactStore } from "@fieldpulse/module-reports";
+import { createSupabaseScoutNoteRepository } from "@fieldpulse/module-scouting";
 import {
   createSupabaseFieldWeatherDerivedSignalSetRepository,
   createSupabaseFieldWeatherForecastRepository,
@@ -76,6 +82,10 @@ export function createServerRuntime(
     imageryCaptures: createSupabaseImageryCaptureRepository(client),
     imageryProviderProbes: createSupabaseImageryProviderProbeRepository(client),
     imageryRasterObservations: createSupabaseFieldRasterObservationRepository(client),
+    grainPriceSnapshots: createSupabaseGrainPriceSnapshotRepository(client),
+    fieldBasisAssumptions: createSupabaseFieldBasisAssumptionRepository(client),
+    fieldYieldAssumptions: createSupabaseFieldYieldAssumptionRepository(client),
+    scoutNotes: createSupabaseScoutNoteRepository(client),
     moistureSnapshots: createSupabaseFieldMoistureSnapshotRepository(client),
     moistureCellSnapshots: createSupabaseFieldMoistureCellSnapshotRepository(client),
     moistureEstimates: createSupabaseMoistureEstimateStore(client),

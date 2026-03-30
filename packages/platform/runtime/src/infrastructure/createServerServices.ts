@@ -5,6 +5,7 @@ import {
   resolveFieldAlert,
   upsertFieldAlert,
 } from "@fieldpulse/module-alerts";
+import type { FieldAlert } from "@fieldpulse/module-alerts";
 import { resolveAuthenticatedActor } from "@fieldpulse/module-auth";
 import {
   buildFieldZoneActivityReport,
@@ -19,6 +20,7 @@ import {
   listWorkspaceIntelligenceFindings,
   prairieDefaultRulePack,
   resolveCropRuleContext,
+  type FieldIntelligenceFinding,
   upsertCropIntelligenceRun,
   upsertFieldIntelligenceFinding,
 } from "@fieldpulse/module-crop-intelligence";
@@ -42,6 +44,7 @@ import {
 } from "@fieldpulse/module-field-intake";
 import {
   buildInitialFieldOnboardingPlan,
+  buildRefreshFieldOnboardingPlan,
   dispatchFieldOnboardingPlan,
   type FieldOnboardingJobRequest,
 } from "@fieldpulse/module-field-onboarding";
@@ -80,6 +83,15 @@ import {
   type ReportArtifactStore,
 } from "@fieldpulse/module-reports";
 import {
+  upsertFieldBasisAssumption,
+  upsertFieldYieldAssumption,
+  upsertGrainPriceSnapshot,
+} from "@fieldpulse/module-market";
+import {
+  createScoutNote,
+  listFieldScoutNotes,
+} from "@fieldpulse/module-scouting";
+import {
   buildWeatherRefreshReport,
   computeFieldWeatherDerivedSignals,
   loadFieldWeatherProfile,
@@ -93,6 +105,7 @@ import {
   listAllWorkspaces,
   listUserWorkspaces,
   resolveWorkspaceSelection,
+  type ResolvedWorkspaceSelection,
 } from "@fieldpulse/module-workspaces";
 import type {
   ServerJobDispatcher,
@@ -108,27 +121,119 @@ import type {
   SaveSpreadsheetImportPreviewInput,
   SaveSpreadsheetImportPreviewResult,
   ServerServices,
+  IntelligenceAlertSyncFailure,
+  IntelligenceAlertSyncSummary,
   WorkspaceFieldDetailSelection,
   WorkspaceFieldOverviewSelection,
 } from "../contracts/ServerServices";
 import { createDefaultMoistureCellDerivationStrategy } from "./createDefaultMoistureCellDerivationStrategy";
+import {
+  loadWorkspaceFieldDetail,
+  loadWorkspaceFieldOverview,
+  resolvePreferredWorkspaceSelection,
+} from "./fieldSelectionServices";
+import {
+  bootstrapDevelopmentData,
+  commitFieldImportBatch,
+  requireFieldDetail,
+  saveSpreadsheetImportPreview,
+} from "./fieldLifecycleServices";
+import {
+  buildRecentDiseaseRiskReport,
+  buildRecentHailRefreshReport,
+  buildRecentImageryProviderProbeFallbackReport,
+  buildRecentImagerySyncReport,
+  buildRecentWeatherRefreshReport,
+} from "./reportAggregationServices";
+import {
+  buildRuntimeFieldReportReadModel,
+  renderRuntimeFieldReportPdf,
+} from "./fieldReportServices";
 
-const DISEASE_RISK_SOURCE_KEY = "disease-risk-generator";
+const REPORT_FIELD_CONCURRENCY = 12;
 
-async function requireFieldDetail(
-  repositories: ServerRepositories,
-  workspaceId: string,
-  fieldId: string,
-) {
-  const field = await repositories.fields.getById(workspaceId, fieldId);
+function toErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
 
-  if (!field) {
-    throw new Error(
-      `[runtime] field ${fieldId} was not found in workspace ${workspaceId}`,
-    );
+type WorkspaceFieldLabel = {
+  workspaceName?: string | null;
+  workspaceSlug?: string | null;
+  fieldName?: string | null;
+};
+
+type WorkspaceFieldCatalog = {
+  fields: Array<{ workspaceId: string; fieldId: string }>;
+  fieldLabelsById: Record<string, WorkspaceFieldLabel>;
+};
+
+async function syncGeneratedFindingAlerts(
+  repository: Pick<ServerRepositories["alerts"], "upsertAlert">,
+  findings: readonly FieldIntelligenceFinding[],
+): Promise<{
+  alerts: readonly FieldAlert[];
+  alertSync: IntelligenceAlertSyncSummary;
+}> {
+  const alerts: FieldAlert[] = [];
+  const failures: IntelligenceAlertSyncFailure[] = [];
+  const pendingWrites: Array<{
+    findingId: string;
+    sourceKey: string;
+    promise: Promise<FieldAlert>;
+  }> = [];
+
+  for (const finding of findings) {
+    try {
+      const alert = buildAlertFromIntelligenceFinding({ finding });
+      pendingWrites.push({
+        findingId: finding.id,
+        sourceKey: alert.sourceKey,
+        promise: upsertFieldAlert({
+          repository,
+          alert,
+        }),
+      });
+    } catch (error) {
+      failures.push({
+        findingId: finding.id,
+        sourceKey: finding.sourceKey,
+        message: toErrorMessage(error),
+      });
+    }
   }
 
-  return field;
+  const settledWrites = await Promise.allSettled(
+    pendingWrites.map((write) => write.promise),
+  );
+
+  settledWrites.forEach((result, index) => {
+    const pendingWrite = pendingWrites[index];
+
+    if (!pendingWrite) {
+      return;
+    }
+
+    if (result.status === "fulfilled") {
+      alerts.push(result.value);
+      return;
+    }
+
+    failures.push({
+      findingId: pendingWrite.findingId,
+      sourceKey: pendingWrite.sourceKey,
+      message: toErrorMessage(result.reason),
+    });
+  });
+
+  return {
+    alerts,
+    alertSync: {
+      attemptedCount: findings.length,
+      syncedCount: alerts.length,
+      failedCount: failures.length,
+      failures,
+    },
+  };
 }
 
 function toSeasonYear(requestedAt: string) {
@@ -214,658 +319,6 @@ async function refreshCanonicalFieldCropStage(
   });
 }
 
-async function loadWorkspaceFieldOverview(
-  repositories: ServerRepositories,
-  input: LoadWorkspaceFieldOverviewInput,
-): Promise<WorkspaceFieldOverviewSelection> {
-  const selection = await resolveWorkspaceSelection({
-    repository: repositories.workspaces,
-    actorUserId: input.actorUserId,
-    preferredWorkspaceId: input.preferredWorkspaceId,
-  });
-
-  const fields = selection.selectedWorkspace
-    ? await listWorkspaceFieldOverview({
-        repository: repositories.fields,
-        workspaceId: selection.selectedWorkspace.id,
-      })
-    : [];
-
-  return {
-    ...selection,
-    fields,
-    primaryField: fields[0] ?? null,
-  };
-}
-
-async function loadWorkspaceFieldDetail(
-  repositories: ServerRepositories,
-  input: LoadWorkspaceFieldDetailInput,
-): Promise<WorkspaceFieldDetailSelection> {
-  const selection = await resolveWorkspaceSelection({
-    repository: repositories.workspaces,
-    actorUserId: input.actorUserId,
-    preferredWorkspaceId: input.preferredWorkspaceId,
-  });
-
-  const fields = selection.selectedWorkspace
-    ? await listWorkspaceFieldOverview({
-        repository: repositories.fields,
-        workspaceId: selection.selectedWorkspace.id,
-      })
-    : [];
-
-  if (!selection.selectedWorkspace) {
-    return {
-      ...selection,
-      fields,
-      field: null,
-    };
-  }
-
-  const detail = await repositories.fields.getById(
-    selection.selectedWorkspace.id,
-    input.fieldId,
-  );
-
-  if (!detail) {
-    return {
-      ...selection,
-      fields,
-      field: null,
-    };
-  }
-
-  return {
-    ...selection,
-    fields,
-    field: {
-      detail,
-      overview: fields.find((field) => field.id === detail.id) ?? null,
-      readModel: await buildFieldReportReadModel({
-        repositories: {
-          fields: repositories.fields,
-          fieldImportBatches: repositories.fieldImportBatches,
-          cropContexts: repositories.fieldCropContexts,
-          imageryRasterObservations: repositories.imageryRasterObservations,
-          moistureSnapshots: repositories.moistureSnapshots,
-          moistureCells: repositories.moistureCellSnapshots,
-          weatherObservations: repositories.weatherObservations,
-          weatherForecasts: repositories.weatherForecasts,
-          weatherSignals: repositories.weatherSignalSets,
-          alerts: repositories.alerts,
-          findings: repositories.cropIntelligenceFindings,
-          zones: repositories.cropIntelligenceZones,
-        },
-        workspaceId: selection.selectedWorkspace.id,
-        fieldId: detail.id,
-        reportDate: new Date().toISOString(),
-      }),
-    },
-  };
-}
-
-async function buildRecentImageryProviderProbeFallbackReport(
-  repositories: ServerRepositories,
-  input: {
-    createdAfter?: string;
-    limit?: number;
-  } = {},
-) {
-  const records = await listRecentImageryProviderProbeHistory(
-    repositories.imageryProviderProbes,
-    input,
-  );
-
-  const relevantWorkspaceIds = Array.from(
-    new Set(records.map((record) => record.workspaceId)),
-  );
-  const workspaces = await repositories.workspaces.listAll();
-  const workspaceLabels = new Map(
-    workspaces
-      .filter((workspace) => relevantWorkspaceIds.includes(workspace.id))
-      .map((workspace) => [
-        workspace.id,
-        {
-          workspaceName: workspace.name,
-          workspaceSlug: workspace.slug,
-        },
-      ]),
-  );
-  const fieldLabelsById: Record<
-    string,
-    {
-      workspaceName?: string | null;
-      workspaceSlug?: string | null;
-      fieldName?: string | null;
-    }
-  > = {};
-
-  for (const workspaceId of relevantWorkspaceIds) {
-    const fields = await listWorkspaceFieldOverview({
-      repository: repositories.fields,
-      workspaceId,
-    });
-    const workspaceLabel = workspaceLabels.get(workspaceId);
-
-    for (const field of fields) {
-      fieldLabelsById[field.id] = {
-        workspaceName: workspaceLabel?.workspaceName ?? null,
-        workspaceSlug: workspaceLabel?.workspaceSlug ?? null,
-        fieldName: field.name,
-      };
-    }
-  }
-
-  return buildImageryProviderProbeFallbackReport({
-    createdAfter: input.createdAfter ?? null,
-    records,
-    fieldLabelsById,
-  });
-}
-
-async function buildRecentImagerySyncReport(
-  repositories: ServerRepositories,
-  input: {
-    workspaceId?: string;
-    createdAfter?: string;
-    staleAfterHours?: number;
-    limit?: number;
-  } = {},
-) {
-  const staleAfterHours = input.staleAfterHours ?? 24;
-  const staleBefore = new Date(
-    Date.now() - staleAfterHours * 60 * 60 * 1000,
-  ).toISOString();
-  const recentCaptures = await repositories.imageryCaptures.listRecent({
-    workspaceId: input.workspaceId,
-    createdAfter: input.createdAfter,
-    limit: input.limit,
-  });
-
-  const scopedWorkspaces = input.workspaceId
-    ? (await repositories.workspaces.listAll()).filter(
-        (workspace) => workspace.id === input.workspaceId,
-      )
-    : await repositories.workspaces.listAll();
-  const fields = [];
-  const fieldLabelsById: Record<
-    string,
-    {
-      workspaceName?: string | null;
-      workspaceSlug?: string | null;
-      fieldName?: string | null;
-    }
-  > = {};
-  const latestCaptures = [];
-
-  for (const workspace of scopedWorkspaces) {
-    const workspaceFields = await listWorkspaceFieldOverview({
-      repository: repositories.fields,
-      workspaceId: workspace.id,
-    });
-
-    for (const field of workspaceFields) {
-      fields.push({
-        workspaceId: workspace.id,
-        fieldId: field.id,
-      });
-      fieldLabelsById[field.id] = {
-        workspaceName: workspace.name,
-        workspaceSlug: workspace.slug,
-        fieldName: field.name,
-      };
-      const latestCapture = await repositories.imageryCaptures.getLatestByField(
-        workspace.id,
-        field.id,
-      );
-      if (latestCapture) {
-        latestCaptures.push(latestCapture);
-      }
-    }
-  }
-
-  return buildImagerySyncReport({
-    createdAfter: input.createdAfter ?? null,
-    staleBefore,
-    recentCaptures,
-    latestCaptures,
-    fields,
-    fieldLabelsById,
-  });
-}
-
-async function buildRecentWeatherRefreshReport(
-  repositories: ServerRepositories,
-  input: {
-    workspaceId?: string;
-    updatedAfter?: string;
-    staleAfterHours?: number;
-    limit?: number;
-  } = {},
-) {
-  const staleAfterHours = input.staleAfterHours ?? 12;
-
-  if (staleAfterHours < 0) {
-    throw new Error("[runtime] staleAfterHours must be non-negative");
-  }
-
-  const staleBefore = new Date(
-    Date.now() - staleAfterHours * 60 * 60 * 1000,
-  ).toISOString();
-  const workspaces = input.workspaceId
-    ? await repositories.workspaces.listAll().then((available) => {
-        const selected = available.find((workspace) => workspace.id === input.workspaceId);
-
-        if (!selected) {
-          throw new Error(
-            `[runtime] workspace ${input.workspaceId} was not found for weather reporting`,
-          );
-        }
-
-        return [selected];
-      })
-    : await repositories.workspaces.listAll();
-  const workspaceIds = new Set(workspaces.map((workspace) => workspace.id));
-  const fieldLabelsById: Record<
-    string,
-    {
-      workspaceName?: string | null;
-      workspaceSlug?: string | null;
-      fieldName?: string | null;
-    }
-  > = {};
-  const fields: Array<{ workspaceId: string; fieldId: string }> = [];
-  const latestObservations = [];
-
-  for (const workspace of workspaces) {
-    const overview = await listWorkspaceFieldOverview({
-      repository: repositories.fields,
-      workspaceId: workspace.id,
-    });
-
-    for (const field of overview) {
-      fieldLabelsById[field.id] = {
-        workspaceName: workspace.name,
-        workspaceSlug: workspace.slug,
-        fieldName: field.name,
-      };
-      fields.push({
-        workspaceId: workspace.id,
-        fieldId: field.id,
-      });
-    }
-
-    latestObservations.push(
-      ...(await repositories.weatherObservations.listLatestByWorkspace(workspace.id)),
-    );
-  }
-
-  const recentObservations = (await repositories.weatherObservations.listRecentObservations({
-    workspaceId: input.workspaceId,
-    updatedAfter: input.updatedAfter,
-    limit: input.limit,
-  })).filter((observation) => workspaceIds.has(observation.workspaceId));
-
-  return buildWeatherRefreshReport({
-    updatedAfter: input.updatedAfter ?? null,
-    staleBefore,
-    recentObservations,
-    latestObservations,
-    fields,
-    fieldLabelsById,
-  });
-}
-
-async function buildRecentHailRefreshReport(
-  repositories: ServerRepositories,
-  input: {
-    workspaceId?: string;
-    requestedAfter?: string;
-    staleAfterHours?: number;
-    limit?: number;
-  } = {},
-) {
-  const staleAfterHours = input.staleAfterHours ?? 24;
-
-  if (staleAfterHours < 0) {
-    throw new Error("[runtime] staleAfterHours must be non-negative");
-  }
-
-  const staleBefore = new Date(
-    Date.now() - staleAfterHours * 60 * 60 * 1000,
-  ).toISOString();
-  const workspaces = input.workspaceId
-    ? await repositories.workspaces.listAll().then((available) => {
-        const selected = available.find((workspace) => workspace.id === input.workspaceId);
-
-        if (!selected) {
-          throw new Error(
-            `[runtime] workspace ${input.workspaceId} was not found for hail reporting`,
-          );
-        }
-
-        return [selected];
-      })
-    : await repositories.workspaces.listAll();
-  const workspaceIds = new Set(workspaces.map((workspace) => workspace.id));
-  const fieldLabelsById: Record<
-    string,
-    {
-      workspaceName?: string | null;
-      workspaceSlug?: string | null;
-      fieldName?: string | null;
-    }
-  > = {};
-  const fields: Array<{ workspaceId: string; fieldId: string }> = [];
-  const latestRuns = [];
-
-  for (const workspace of workspaces) {
-    const overview = await listWorkspaceFieldOverview({
-      repository: repositories.fields,
-      workspaceId: workspace.id,
-    });
-
-    for (const field of overview) {
-      fieldLabelsById[field.id] = {
-        workspaceName: workspace.name,
-        workspaceSlug: workspace.slug,
-        fieldName: field.name,
-      };
-      fields.push({
-        workspaceId: workspace.id,
-        fieldId: field.id,
-      });
-    }
-
-    latestRuns.push(
-      ...(await repositories.hailRefreshRuns.listLatestByWorkspace(workspace.id)),
-    );
-  }
-
-  const recentRuns = (await repositories.hailRefreshRuns.listRecentRuns({
-    workspaceId: input.workspaceId,
-    requestedAfter: input.requestedAfter,
-    limit: input.limit,
-  })).filter((run) => workspaceIds.has(run.workspaceId));
-
-  return buildHailRefreshReport({
-    requestedAfter: input.requestedAfter ?? null,
-    staleBefore,
-    recentRuns,
-    latestRuns,
-    fields,
-    fieldLabelsById,
-  });
-}
-
-async function buildRecentDiseaseRiskReport(
-  repositories: ServerRepositories,
-  input: {
-    workspaceId?: string;
-    startedAfter?: string;
-    staleAfterHours?: number;
-    limit?: number;
-  } = {},
-) {
-  const staleAfterHours = input.staleAfterHours ?? 24;
-
-  if (staleAfterHours < 0) {
-    throw new Error("[runtime] staleAfterHours must be non-negative");
-  }
-
-  const staleBefore = new Date(
-    Date.now() - staleAfterHours * 60 * 60 * 1000,
-  ).toISOString();
-  const workspaces = input.workspaceId
-    ? await repositories.workspaces.listAll().then((available) => {
-        const selected = available.find((workspace) => workspace.id === input.workspaceId);
-
-        if (!selected) {
-          throw new Error(
-            `[runtime] workspace ${input.workspaceId} was not found for disease risk reporting`,
-          );
-        }
-
-        return [selected];
-      })
-    : await repositories.workspaces.listAll();
-  const fieldLabelsById: Record<
-    string,
-    {
-      workspaceName?: string | null;
-      workspaceSlug?: string | null;
-      fieldName?: string | null;
-    }
-  > = {};
-  const fields: Array<{ workspaceId: string; fieldId: string }> = [];
-  const latestRuns = [];
-  const recentRuns = [];
-  const activeFindings = [];
-
-  for (const workspace of workspaces) {
-    const overview = await listWorkspaceFieldOverview({
-      repository: repositories.fields,
-      workspaceId: workspace.id,
-    });
-
-    for (const field of overview) {
-      fieldLabelsById[field.id] = {
-        workspaceName: workspace.name,
-        workspaceSlug: workspace.slug,
-        fieldName: field.name,
-      };
-      fields.push({
-        workspaceId: workspace.id,
-        fieldId: field.id,
-      });
-    }
-
-    latestRuns.push(
-      ...(await repositories.cropIntelligenceRuns.listLatestByWorkspace(
-        workspace.id,
-        DISEASE_RISK_SOURCE_KEY,
-      )),
-    );
-    recentRuns.push(
-      ...(await repositories.cropIntelligenceRuns.listRecentRuns({
-        workspaceId: workspace.id,
-        startedAfter: input.startedAfter,
-        limit: input.limit,
-        sourceKey: DISEASE_RISK_SOURCE_KEY,
-      })),
-    );
-    activeFindings.push(
-      ...(await repositories.cropIntelligenceFindings.listRecentByWorkspace({
-        workspaceId: workspace.id,
-        limit: input.limit,
-        status: "active",
-        family: "disease_risk",
-        updatedAfter: input.startedAfter,
-      })),
-    );
-  }
-
-  return buildDiseaseRiskReport({
-    startedAfter: input.startedAfter ?? null,
-    staleBefore,
-    recentRuns,
-    latestRuns,
-    activeFindings,
-    fields,
-    fieldLabelsById,
-  });
-}
-
-async function bootstrapDevelopmentData(
-  repositories: ServerRepositories,
-  input: BootstrapDevelopmentDataInput,
-): Promise<BootstrapDevelopmentDataResult> {
-  const moistureCellDerivationStrategy =
-    createDefaultMoistureCellDerivationStrategy({
-      imageryRasterObservations: repositories.imageryRasterObservations,
-    });
-  const workspace = await ensureWorkspace({
-    repository: repositories.workspaces,
-    actorUserId: input.actorUserId,
-    workspace: input.workspace,
-  });
-
-  const field = await ensureWorkspaceField({
-    repository: repositories.fields,
-    actorUserId: input.actorUserId,
-    field: {
-      workspaceId: workspace.workspace.id,
-      ...input.field,
-    },
-  });
-
-  const moistureSnapshot = await rebuildFieldMoistureEstimate({
-    repository: repositories.moistureSnapshots,
-    estimate: {
-      workspaceId: workspace.workspace.id,
-      fieldId: field.field.id,
-      observedAt: input.moistureSnapshot.observedAt,
-      sourceKey: input.moistureSnapshot.sourceKey,
-      inputs: input.moistureSnapshot.inputs,
-    },
-  });
-  const imageryObservation = await refreshFieldRasterObservation({
-    repository: repositories.imageryRasterObservations,
-    provider: createSyntheticRasterFieldObservationProvider(),
-    workspaceId: workspace.workspace.id,
-    fieldId: field.field.id,
-    boundary: field.field.boundary,
-    observedAt: moistureSnapshot.snapshot.observedAt,
-  });
-  const moistureCells = await rebuildFieldMoistureCellSnapshots({
-    repository: repositories.moistureCellSnapshots,
-    derivationStrategy: moistureCellDerivationStrategy,
-    field: {
-      workspaceId: workspace.workspace.id,
-      fieldId: field.field.id,
-      boundary: field.field.boundary,
-    },
-    snapshot: moistureSnapshot.snapshot,
-  });
-
-  return {
-    actorUserId: input.actorUserId,
-    workspace,
-    field,
-    moistureSnapshot,
-    imageryObservation: {
-      observationId: imageryObservation.observation.id,
-      sourceKey: imageryObservation.observation.sourceKey,
-      cellCount: imageryObservation.observation.cells.length,
-      action: imageryObservation.action,
-    },
-    moistureCells: {
-      count: moistureCells.cells.length,
-      action: moistureCells.action,
-    },
-  };
-}
-
-async function saveSpreadsheetImportPreview(
-  repositories: ServerRepositories,
-  input: SaveSpreadsheetImportPreviewInput,
-): Promise<SaveSpreadsheetImportPreviewResult> {
-  return createSpreadsheetImportBatch({
-    repository: repositories.fieldImportBatches,
-    actorUserId: input.actorUserId,
-    workspaceId: input.workspaceId,
-    preview: input.preview,
-  });
-}
-
-async function commitFieldImportBatch(
-  repositories: ServerRepositories,
-  options: {
-    jobDispatcher?: ServerJobDispatcher;
-  },
-  input: CommitFieldImportBatchInput,
-): Promise<CommitFieldImportBatchResult> {
-  const committed = await commitSpreadsheetImportBatch({
-    repository: repositories.fieldImportBatches,
-    fieldRepository: repositories.fields,
-    actorUserId: input.actorUserId,
-    workspaceId: input.workspaceId,
-    batchId: input.batchId,
-  });
-
-  const onboardingDispatches: Array<
-    CommitFieldImportBatchResult["onboardingDispatches"][number]
-  > = [];
-
-  for (const candidate of committed.candidates) {
-    if (candidate.candidate.cropType) {
-      await upsertFieldCropContext({
-        repository: repositories.fieldCropContexts,
-        context: {
-          workspaceId: candidate.field.workspaceId,
-          fieldId: candidate.field.id,
-          seasonYear: toSeasonYear(candidate.candidate.createdAt),
-          cropType: candidate.candidate.cropType,
-          growthStage: null,
-          growthStageSource: "imported",
-          accumulatedGdd: 0,
-          sourceKey: "field-intake:spreadsheet-commit",
-          metadata: {
-            batchId: committed.batch.id,
-            candidateId: candidate.candidate.id,
-            commitAction: candidate.action,
-            sourceType: committed.batch.sourceType,
-          },
-        },
-      });
-    }
-
-    if (candidate.action !== "created") {
-      onboardingDispatches.push({
-        fieldId: candidate.field.id,
-        action: candidate.action,
-        receipts: [],
-      });
-      continue;
-    }
-
-    if (!options.jobDispatcher) {
-      onboardingDispatches.push({
-        fieldId: candidate.field.id,
-        action: candidate.action,
-        receipts: [],
-      });
-      continue;
-    }
-
-    const receipts = await dispatchFieldOnboardingPlan({
-      dispatcher: {
-        enqueue(job: FieldOnboardingJobRequest) {
-          return options.jobDispatcher!.enqueue(job);
-        },
-      },
-      plan: buildInitialFieldOnboardingPlan({
-        workspaceId: candidate.field.workspaceId,
-        fieldId: candidate.field.id,
-        dryRun: input.onboardingDryRun,
-      }),
-    });
-
-    onboardingDispatches.push({
-      fieldId: candidate.field.id,
-      action: candidate.action,
-      receipts,
-    });
-  }
-
-  return {
-    batch: committed.batch,
-    candidates: committed.candidates,
-    onboardingDispatches,
-  };
-}
-
 export function createServerServices(
   repositories: ServerRepositories,
   options: {
@@ -892,7 +345,6 @@ export function createServerServices(
       resolveActor(input) {
         return resolveAuthenticatedActor({
           workspaceMemberships: repositories.workspaceMemberships,
-          workspaces: repositories.workspaces,
           userId: input.userId,
           preferredWorkspaceId: input.preferredWorkspaceId,
         });
@@ -927,6 +379,9 @@ export function createServerServices(
       async buildInitialPlan(input) {
         return buildInitialFieldOnboardingPlan(input);
       },
+      async buildRefreshPlan(input) {
+        return buildRefreshFieldOnboardingPlan(input);
+      },
       async dispatchInitialPlan(input) {
         if (!options.jobDispatcher) {
           throw new Error(
@@ -935,6 +390,24 @@ export function createServerServices(
         }
 
         const plan = buildInitialFieldOnboardingPlan(input);
+
+        return dispatchFieldOnboardingPlan({
+          dispatcher: {
+            enqueue(job: FieldOnboardingJobRequest) {
+              return options.jobDispatcher!.enqueue(job);
+            },
+          },
+          plan,
+        });
+      },
+      async dispatchRefreshPlan(input) {
+        if (!options.jobDispatcher) {
+          throw new Error(
+            "[runtime] field onboarding dispatch requested without a job dispatcher",
+          );
+        }
+
+        const plan = buildRefreshFieldOnboardingPlan(input);
 
         return dispatchFieldOnboardingPlan({
           dispatcher: {
@@ -955,6 +428,9 @@ export function createServerServices(
           workspaceId: input.workspaceId,
           fieldId: input.fieldId,
         });
+      },
+      async listWorkspaceCropContexts(workspaceId) {
+        return repositories.fieldCropContexts.listLatestByWorkspace(workspaceId);
       },
       async upsertFieldContext(input) {
         await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
@@ -1060,6 +536,75 @@ export function createServerServices(
         });
       },
     },
+    scouting: {
+      async listFieldNotes(input) {
+        await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
+
+        return listFieldScoutNotes({
+          repository: repositories.scoutNotes,
+          workspaceId: input.workspaceId,
+          fieldId: input.fieldId,
+          limit: input.limit,
+        });
+      },
+      async createFieldNote(input) {
+        await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
+
+        return createScoutNote({
+          repository: repositories.scoutNotes,
+          input,
+        });
+      },
+    },
+    market: {
+      latestPrice(input) {
+        return repositories.grainPriceSnapshots.latest(input.cropSymbol);
+      },
+      recentPrices(input) {
+        return repositories.grainPriceSnapshots.recent(
+          input.cropSymbol,
+          input.limit ?? 8,
+        );
+      },
+      upsertPrice(input) {
+        return upsertGrainPriceSnapshot({
+          repository: repositories.grainPriceSnapshots,
+          input,
+        });
+      },
+      latestFieldBasisAssumption(input) {
+        return repositories.fieldBasisAssumptions.latest(
+          input.workspaceId,
+          input.fieldId,
+          input.seasonYear,
+          input.cropSymbol,
+        );
+      },
+      async upsertFieldBasisAssumption(input) {
+        await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
+
+        return upsertFieldBasisAssumption({
+          repository: repositories.fieldBasisAssumptions,
+          input,
+        });
+      },
+      latestFieldYieldAssumption(input) {
+        return repositories.fieldYieldAssumptions.latest(
+          input.workspaceId,
+          input.fieldId,
+          input.seasonYear,
+          input.cropSymbol,
+        );
+      },
+      async upsertFieldYieldAssumption(input) {
+        await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
+
+        return upsertFieldYieldAssumption({
+          repository: repositories.fieldYieldAssumptions,
+          input,
+        });
+      },
+    },
     workspaces: {
       listAll() {
         return listAllWorkspaces({
@@ -1162,13 +707,14 @@ export function createServerServices(
     },
     moisture: {
       async rebuildFieldEstimate(input) {
-        const field = await requireFieldDetail(
+        const fieldPromise = requireFieldDetail(
           repositories,
           input.workspaceId,
           input.fieldId,
         );
-        const [latestRasterObservation, latestWeatherObservation] =
+        const [field, latestRasterObservation, latestWeatherObservation] =
           await Promise.all([
+            fieldPromise,
             repositories.imageryRasterObservations.getLatestByField(
               input.workspaceId,
               input.fieldId,
@@ -1226,16 +772,18 @@ export function createServerServices(
         return rebuilt;
       },
       async rebuildFieldCells(input) {
-        const field = await requireFieldDetail(
+        const fieldPromise = requireFieldDetail(
           repositories,
           input.workspaceId,
           input.fieldId,
         );
-
-        const latestSnapshot = await repositories.moistureSnapshots.getLatestByField(
-          input.workspaceId,
-          input.fieldId,
-        );
+        const [field, latestSnapshot] = await Promise.all([
+          fieldPromise,
+          repositories.moistureSnapshots.getLatestByField(
+            input.workspaceId,
+            input.fieldId,
+          ),
+        ]);
 
         if (!latestSnapshot) {
           return {
@@ -1586,6 +1134,7 @@ export function createServerServices(
           moistureCells: repositories.moistureCellSnapshots,
           runs: repositories.cropIntelligenceRuns,
           findings: repositories.cropIntelligenceFindings,
+          zones: repositories.cropIntelligenceZones,
           input: {
             workspaceId: input.workspaceId,
             fieldId: input.fieldId,
@@ -1594,21 +1143,16 @@ export function createServerServices(
             limit: input.limit,
           },
         });
-        const alerts = await Promise.all(
-          result.findings.map((finding) =>
-            upsertFieldAlert({
-              repository: repositories.alerts,
-              alert: buildAlertFromIntelligenceFinding({
-                finding,
-              }),
-            }),
-          ),
+        const { alerts, alertSync } = await syncGeneratedFindingAlerts(
+          repositories.alerts,
+          result.findings,
         );
 
         return {
           ...result,
           requestedAt,
           alerts,
+          alertSync,
         };
       },
       async generateMoistureStressFindings(input) {
@@ -1638,20 +1182,15 @@ export function createServerServices(
           },
           rulePack: prairieDefaultRulePack,
         });
-        const alerts = await Promise.all(
-          result.findings.map((finding) =>
-            upsertFieldAlert({
-              repository: repositories.alerts,
-              alert: buildAlertFromIntelligenceFinding({
-                finding,
-              }),
-            }),
-          ),
+        const { alerts, alertSync } = await syncGeneratedFindingAlerts(
+          repositories.alerts,
+          result.findings,
         );
 
         return {
           ...result,
           alerts,
+          alertSync,
         };
       },
       async generateWeatherRiskFindings(input) {
@@ -1678,20 +1217,15 @@ export function createServerServices(
           },
           rulePack: prairieDefaultRulePack,
         });
-        const alerts = await Promise.all(
-          result.findings.map((finding) =>
-            upsertFieldAlert({
-              repository: repositories.alerts,
-              alert: buildAlertFromIntelligenceFinding({
-                finding,
-              }),
-            }),
-          ),
+        const { alerts, alertSync } = await syncGeneratedFindingAlerts(
+          repositories.alerts,
+          result.findings,
         );
 
         return {
           ...result,
           alerts,
+          alertSync,
         };
       },
       async generateDiseaseRiskFindings(input) {
@@ -1722,20 +1256,15 @@ export function createServerServices(
           },
           rulePack: prairieDefaultRulePack,
         });
-        const alerts = await Promise.all(
-          result.findings.map((finding) =>
-            upsertFieldAlert({
-              repository: repositories.alerts,
-              alert: buildAlertFromIntelligenceFinding({
-                finding,
-              }),
-            }),
-          ),
+        const { alerts, alertSync } = await syncGeneratedFindingAlerts(
+          repositories.alerts,
+          result.findings,
         );
 
         return {
           ...result,
           alerts,
+          alertSync,
         };
       },
       async buildRecentDiseaseRiskReport(input = {}) {
@@ -1764,25 +1293,16 @@ export function createServerServices(
     },
     reports: {
       async buildFieldReadModel(input) {
-        await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
+        const field = await requireFieldDetail(
+          repositories,
+          input.workspaceId,
+          input.fieldId,
+        );
 
-        return buildFieldReportReadModel({
-          repositories: {
-            fields: repositories.fields,
-            fieldImportBatches: repositories.fieldImportBatches,
-            cropContexts: repositories.fieldCropContexts,
-            imageryRasterObservations: repositories.imageryRasterObservations,
-            moistureSnapshots: repositories.moistureSnapshots,
-            moistureCells: repositories.moistureCellSnapshots,
-            weatherObservations: repositories.weatherObservations,
-            weatherForecasts: repositories.weatherForecasts,
-            weatherSignals: repositories.weatherSignalSets,
-            alerts: repositories.alerts,
-            findings: repositories.cropIntelligenceFindings,
-            zones: repositories.cropIntelligenceZones,
-          },
+        return buildRuntimeFieldReportReadModel(repositories, {
           workspaceId: input.workspaceId,
           fieldId: input.fieldId,
+          field,
           reportDate: input.reportDate ?? new Date().toISOString(),
           forecastLimit: input.forecastLimit,
           alertLimit: input.alertLimit,
@@ -1791,53 +1311,18 @@ export function createServerServices(
         });
       },
       async renderFieldPdf(input) {
-        const readModel = await buildFieldReportReadModel({
-          repositories: {
-            fields: repositories.fields,
-            fieldImportBatches: repositories.fieldImportBatches,
-            cropContexts: repositories.fieldCropContexts,
-            imageryRasterObservations: repositories.imageryRasterObservations,
-            moistureSnapshots: repositories.moistureSnapshots,
-            moistureCells: repositories.moistureCellSnapshots,
-            weatherObservations: repositories.weatherObservations,
-            weatherForecasts: repositories.weatherForecasts,
-            weatherSignals: repositories.weatherSignalSets,
-            alerts: repositories.alerts,
-            findings: repositories.cropIntelligenceFindings,
-            zones: repositories.cropIntelligenceZones,
+        return renderRuntimeFieldReportPdf(
+          repositories,
+          {
+            workspaceId: input.workspaceId,
+            fieldId: input.fieldId,
+            reportDate: input.reportDate ?? new Date().toISOString(),
+            dryRun: input.dryRun,
           },
-          workspaceId: input.workspaceId,
-          fieldId: input.fieldId,
-          reportDate: input.reportDate ?? new Date().toISOString(),
-        });
-
-        const prepared = prepareFieldReportArtifact({
-          readModel,
-          dryRun: input.dryRun,
-        });
-
-        if (!input.dryRun && options.reportArtifactStore) {
-          const storedArtifact = await options.reportArtifactStore.save({
-            artifact: prepared.result.artifact,
-            bytes: prepared.bytes,
-            contentType: prepared.contentType,
-            cacheControl: prepared.cacheControl,
-            metadata: {
-              document_sha256: prepared.result.document.sha256,
-              page_count: String(prepared.result.document.pageCount),
-              field_id: prepared.result.summary.fieldId,
-              report_date: prepared.result.summary.reportDate.slice(0, 10),
-            },
-          });
-
-          return {
-            ...prepared.result,
-            artifact: storedArtifact,
-            note: `Report rendered and stored for ${prepared.result.summary.fieldName} with ${prepared.result.summary.activeAlertCount} active alerts, ${prepared.result.summary.activeFindingCount} active findings, and ${prepared.result.summary.trackedZoneCount} tracked zones.`,
-          };
-        }
-
-        return prepared.result;
+          {
+            reportArtifactStore: options.reportArtifactStore,
+          },
+        );
       },
     },
     development: {

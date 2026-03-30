@@ -5,7 +5,7 @@ type ListFieldAlertsRepository = {
     workspaceId: string,
     fieldId: string,
     limit?: number,
-    status?: FieldAlert["status"],
+    status?: FieldAlert["status"] | readonly FieldAlert["status"][],
   ): Promise<readonly FieldAlert[]>;
 };
 
@@ -14,7 +14,7 @@ export type ListFieldAlertsInput = {
   workspaceId: string;
   fieldId: string;
   limit?: number;
-  status?: FieldAlert["status"];
+  status?: FieldAlert["status"] | readonly FieldAlert["status"][];
 };
 
 export async function listFieldAlerts(

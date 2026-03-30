@@ -17,10 +17,16 @@ import type {
   ImageryProviderProbeRepository,
 } from "@fieldpulse/module-imagery";
 import type {
+  FieldBasisAssumptionRepository,
+  FieldYieldAssumptionRepository,
+  GrainPriceSnapshotRepository,
+} from "@fieldpulse/module-market";
+import type {
   FieldMoistureCellSnapshotRepository,
   FieldMoistureSnapshotRepository,
   MoistureEstimateStore,
 } from "@fieldpulse/module-moisture";
+import type { ScoutNoteRepository } from "@fieldpulse/module-scouting";
 import type {
   FieldWeatherForecastRepository,
   FieldWeatherDerivedSignalSetRepository,
@@ -41,6 +47,10 @@ export type ServerRepositories = {
   imageryCaptures: ImageryCaptureRepository;
   imageryProviderProbes: ImageryProviderProbeRepository;
   imageryRasterObservations: FieldRasterObservationRepository;
+  grainPriceSnapshots: GrainPriceSnapshotRepository;
+  fieldBasisAssumptions: FieldBasisAssumptionRepository;
+  fieldYieldAssumptions: FieldYieldAssumptionRepository;
+  scoutNotes: ScoutNoteRepository;
   moistureSnapshots: FieldMoistureSnapshotRepository;
   moistureCellSnapshots: FieldMoistureCellSnapshotRepository;
   moistureEstimates: MoistureEstimateStore;

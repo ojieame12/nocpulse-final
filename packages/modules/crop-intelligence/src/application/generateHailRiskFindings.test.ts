@@ -6,8 +6,10 @@ import type { FieldMoistureCellSnapshot } from "@fieldpulse/module-moisture";
 import { generateHailRiskFindings } from "./generateHailRiskFindings";
 import type { CropIntelligenceRun } from "../contracts/CropIntelligenceRun";
 import type { FieldIntelligenceFinding } from "../contracts/FieldIntelligenceFinding";
+import type { FieldIntelligenceZone } from "../contracts/FieldIntelligenceZone";
 import type { UpsertCropIntelligenceRunInput } from "../contracts/UpsertCropIntelligenceRunInput";
 import type { UpsertFieldIntelligenceFindingInput } from "../contracts/UpsertFieldIntelligenceFindingInput";
+import type { UpsertFieldIntelligenceZoneInput } from "../contracts/UpsertFieldIntelligenceZoneInput";
 
 const WORKSPACE_ID = "workspace-1";
 const FIELD_ID = "field-1";
@@ -163,9 +165,59 @@ class InMemoryFindingRepository {
   }
 }
 
+class InMemoryZoneRepository {
+  readonly upsertInputs: UpsertFieldIntelligenceZoneInput[] = [];
+  private readonly zones = new Map<string, FieldIntelligenceZone>();
+
+  async listByTrackingKey(input: {
+    workspaceId: string;
+    fieldId: string;
+    family: FieldIntelligenceFinding["family"];
+    trackingKey: string;
+  }): Promise<readonly FieldIntelligenceZone[]> {
+    return Array.from(this.zones.values()).filter(
+      (zone) =>
+        zone.workspaceId === input.workspaceId &&
+        zone.fieldId === input.fieldId &&
+        zone.family === input.family &&
+        zone.trackingKey === input.trackingKey,
+    );
+  }
+
+  async upsertZone(
+    input: UpsertFieldIntelligenceZoneInput,
+  ): Promise<FieldIntelligenceZone> {
+    this.upsertInputs.push(input);
+    const id = input.id ?? `zone-${input.trackingKey}-${this.upsertInputs.length}`;
+    const zone: FieldIntelligenceZone = {
+      id,
+      workspaceId: input.workspaceId,
+      fieldId: input.fieldId,
+      family: input.family,
+      trackingKey: input.trackingKey,
+      latestFindingId: input.latestFindingId ?? null,
+      latestRunId: input.latestRunId ?? null,
+      status: input.status,
+      latestSeverity: input.latestSeverity ?? null,
+      zoneGeoJson: input.zoneGeoJson,
+      affectedCellKeys: input.affectedCellKeys,
+      detectionCount: input.detectionCount,
+      firstSeenAt: input.firstSeenAt,
+      lastSeenAt: input.lastSeenAt,
+      lastStatusChangedAt: input.lastStatusChangedAt,
+      metadata: input.metadata ?? {},
+      createdAt: input.firstSeenAt,
+      updatedAt: input.lastSeenAt,
+    };
+    this.zones.set(id, zone);
+    return zone;
+  }
+}
+
 test("generateHailRiskFindings creates an active hail-risk finding for polygonal severe hail coverage", async () => {
   const runs = new InMemoryRunRepository();
   const findings = new InMemoryFindingRepository();
+  const zones = new InMemoryZoneRepository();
   const moistureCells = [
     createMoistureCell({
       cellKey: "cell-a",
@@ -208,6 +260,7 @@ test("generateHailRiskFindings creates an active hail-risk finding for polygonal
     },
     runs,
     findings,
+    zones,
     input: {
       workspaceId: WORKSPACE_ID,
       fieldId: FIELD_ID,
@@ -252,9 +305,13 @@ test("generateHailRiskFindings creates an active hail-risk finding for polygonal
   assert.equal(provenance.moistureSnapshotId, "snapshot-1");
   assert.deepEqual(provenance.hailEventIds, ["hail-1"]);
   assert.equal(findings.upsertInputs[0]?.zoneGeoJson != null, true);
+  assert.equal(zones.upsertInputs.length, 1);
+  assert.equal(finding.evidence.trackedZones?.length, 1);
+  assert.equal(finding.evidence.trackedZones?.[0]?.status, "new");
 });
 
 test("generateHailRiskFindings falls back to field-wide hail scope when no coverage geometry is available", async () => {
+  const zones = new InMemoryZoneRepository();
   const result = await generateHailRiskFindings({
     hailEvents: {
       async listByField() {
@@ -279,6 +336,7 @@ test("generateHailRiskFindings falls back to field-wide hail scope when no cover
     },
     runs: new InMemoryRunRepository(),
     findings: new InMemoryFindingRepository(),
+    zones,
     input: {
       workspaceId: WORKSPACE_ID,
       fieldId: FIELD_ID,
@@ -310,4 +368,5 @@ test("generateHailRiskFindings falls back to field-wide hail scope when no cover
   assert.equal(metadata.coverageMode, "field-wide");
   assert.equal(metadata.hailSizeMm, null);
   assert.equal(metadata.hailSeverity, "advisory");
+  assert.equal(zones.upsertInputs.length, 0);
 });

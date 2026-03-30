@@ -40,6 +40,9 @@ export interface FieldSummaryProps {
   lld: string;
   crop: string;
   cropStage: string;
+  contextLabel?: string;
+  conditionsMeta?: string;
+  updatedLabel?: string;
   moisture: number;
   cloudCover: string;
   surfaceMoisture: string;
@@ -104,6 +107,9 @@ function LayerPills({ active, onChange }: { active: Layer; onChange: (l: Layer) 
 export function SummaryTab({ field }: { field: FieldSummaryProps }) {
   const [activeLayer, setActiveLayer] = useState<Layer>('NDVI');
   const moistureColor = field.moisture < 0.3 ? '#ef4444' : '#16a34a';
+  const contextLabel = field.contextLabel ?? 'Field overview';
+  const conditionsMeta = field.conditionsMeta ?? 'Field average';
+  const updatedLabel = field.updatedLabel ?? 'UPDATED MAR 27, 2026, 11:34 AM';
 
   return (
     <div className="panel__body">
@@ -122,7 +128,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
       <div>
         <div className="donut-container__label">
           <div className="donut-container__label-dot" />
-          <span className="donut-container__label-text">Field overview</span>
+          <span className="donut-container__label-text">{contextLabel}</span>
         </div>
         <div className="donut-container">
           <DonutChart
@@ -159,7 +165,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
 
       {/* CONDITIONS */}
       <div className="panel__section">
-        <SectionHeader label="CONDITIONS" meta="Field average" />
+        <SectionHeader label="CONDITIONS" meta={conditionsMeta} />
         <div className="panel__data-grid">
           <div className="panel__data-row">
             <div className="panel__data-cell">
@@ -273,8 +279,8 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
       <div className="panel__section">
         <SectionHeader label="7-DAY OUTLOOK" />
         <div className="outlook-grid">
-          {field.outlook.map((day) => (
-            <div className="outlook-card" key={day.day}>
+          {field.outlook.map((day, i) => (
+            <div className="outlook-card" key={`${day.day}-${i}`}>
               <span className="outlook-card__day">{day.day}</span>
               <Sun size={16} className="outlook-card__icon" />
               <span className="outlook-card__temps">{day.high}/{day.low}</span>
@@ -285,7 +291,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
       </div>
 
       {/* UPDATED TIMESTAMP */}
-      <span className="panel__updated">UPDATED MAR 27, 2026, 11:34 AM</span>
+      <span className="panel__updated">{updatedLabel}</span>
 
       {/* IMAGE VIEWER */}
       <div className="image-viewer">

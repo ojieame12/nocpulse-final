@@ -5,6 +5,10 @@ type CreateFallbackImageryProviderClientOptions = {
   fallback: ImageryProviderClient;
 };
 
+function isStabilityDebugEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" && process.env.FIELDPULSE_DEBUG_STABILITY === "1";
+}
+
 export function createFallbackImageryProviderClient({
   primary,
   fallback,
@@ -103,6 +107,15 @@ export function createFallbackImageryProviderClient({
         return null;
       }
 
+      if (isStabilityDebugEnabled()) {
+        console.debug("[stability][imagery] discovery-fallback", {
+          from: primary.provider,
+          to: fallback.provider,
+          reason: fallbackReason,
+          fieldId: input.fieldId,
+        });
+      }
+
       return {
         ...fallbackScene,
         metadata: {
@@ -139,6 +152,15 @@ export function createFallbackImageryProviderClient({
 
       if (!fallbackObservation) {
         return null;
+      }
+
+      if (isStabilityDebugEnabled()) {
+        console.debug("[stability][imagery] materialization-fallback", {
+          from: primary.provider,
+          to: fallback.provider,
+          reason: fallbackReason,
+          fieldId: input.fieldId,
+        });
       }
 
       return {

@@ -1,7 +1,8 @@
 "use client";
 
 import type { ComponentPropsWithoutRef } from "react";
-import { Bell } from "lucide-react";
+import { Bell, Moon, Plus, SunMedium } from "lucide-react";
+import type { AppTheme } from "./WorkspaceShell";
 
 const NAV_ITEMS = ["Crops", "Action", "Notes", "Zones", "Settings"] as const;
 
@@ -9,6 +10,9 @@ interface TopBarProps {
   activeNav?: string;
   onNavChange?: (nav: string) => void;
   onAlertsBell?: () => void;
+  onAddField?: () => void;
+  theme?: AppTheme;
+  onThemeToggle?: () => void;
 }
 
 function NocPulseLogo(props: ComponentPropsWithoutRef<"img">) {
@@ -22,7 +26,9 @@ function NocPulseLogo(props: ComponentPropsWithoutRef<"img">) {
   );
 }
 
-export function TopBar({ activeNav, onNavChange, onAlertsBell }: TopBarProps) {
+export function TopBar({ activeNav, onNavChange, onAlertsBell, onAddField, theme, onThemeToggle }: TopBarProps) {
+  const isDark = theme === "dark";
+
   return (
     <header className="app-topbar">
       <div className="app-topbar__left">
@@ -47,6 +53,23 @@ export function TopBar({ activeNav, onNavChange, onAlertsBell }: TopBarProps) {
       </nav>
 
       <div className="app-topbar__right">
+        <button
+          type="button"
+          className="app-topbar__add-field-btn"
+          onClick={onAddField}
+          aria-label="Add field"
+        >
+          <Plus size={14} strokeWidth={2.5} />
+          <span>Add Field</span>
+        </button>
+        <button
+          type="button"
+          className="app-topbar__theme-btn"
+          onClick={onThemeToggle}
+          aria-label="Toggle theme"
+        >
+          {isDark ? <SunMedium size={16} strokeWidth={2} /> : <Moon size={16} strokeWidth={2} />}
+        </button>
         <button
           type="button"
           className="app-topbar__bell-btn"

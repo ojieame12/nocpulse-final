@@ -1,12 +1,22 @@
 "use client";
 
-import type { FieldBoundaryPreviewRenderModel, CellClickEvent } from "@fieldpulse/map";
+import type {
+  FieldBoundaryPreviewRenderModel,
+  FieldAgronomicSurfaceMetricKey,
+  FieldAgronomicSurfaceRenderModel,
+  CellClickEvent,
+  CellHoverEvent,
+} from "@fieldpulse/map";
 import dynamic from "next/dynamic";
 
 type LazyFieldBoundaryMapProps = {
   model: FieldBoundaryPreviewRenderModel;
+  onCellHover?: (event: CellHoverEvent | null) => void;
   onCellClick?: (event: CellClickEvent) => void;
-  allowSyntheticOverlays?: boolean;
+  onFieldClick?: (fieldId: string) => void;
+  onSurfaceChange?: (surface: FieldAgronomicSurfaceRenderModel | null) => void;
+  /** When provided, the map renders this metric instead of the server default. */
+  activeMetric?: FieldAgronomicSurfaceMetricKey;
 };
 
 const ClientFieldBoundaryMap = dynamic(
@@ -23,14 +33,20 @@ const ClientFieldBoundaryMap = dynamic(
 
 export function LazyFieldBoundaryMap({
   model,
+  onCellHover,
   onCellClick,
-  allowSyntheticOverlays = false,
+  onFieldClick,
+  onSurfaceChange,
+  activeMetric,
 }: LazyFieldBoundaryMapProps) {
   return (
     <ClientFieldBoundaryMap
       model={model}
+      onCellHover={onCellHover}
       onCellClick={onCellClick}
-      allowSyntheticOverlays={allowSyntheticOverlays}
+      onFieldClick={onFieldClick}
+      onSurfaceChange={onSurfaceChange}
+      activeMetric={activeMetric}
     />
   );
 }

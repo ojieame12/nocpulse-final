@@ -7,6 +7,9 @@ export type FieldCropContextRepository = {
     workspaceId: WorkspaceId,
     fieldId: EntityId,
   ): Promise<FieldCropContext | null>;
+  listLatestByWorkspace(
+    workspaceId: WorkspaceId,
+  ): Promise<readonly FieldCropContext[]>;
   deleteContext(
     workspaceId: WorkspaceId,
     fieldId: EntityId,

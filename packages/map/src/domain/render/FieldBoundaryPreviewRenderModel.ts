@@ -1,5 +1,8 @@
 import type { FieldBoundaryPreviewPresentation } from "../../contracts/presentation";
-import type { FieldAgronomicSurfaceRenderModel } from "./FieldAgronomicSurfaceRenderModel";
+import type {
+  FieldAgronomicSurfaceMetricKey,
+  FieldAgronomicSurfaceRenderModel,
+} from "./FieldAgronomicSurfaceRenderModel";
 
 export type MapGeoPoint = [longitude: number, latitude: number];
 export type MapRgbColor = [red: number, green: number, blue: number];
@@ -26,13 +29,36 @@ export type FieldBoundaryFeature = {
   geometry: MapMultiPolygon;
 };
 
+export type WorkspaceFieldBoundaryFeature = {
+  type: "Feature";
+  properties: {
+    fieldId: string;
+    fieldName: string;
+    legalLandDescription?: string | null;
+  };
+  geometry: MapMultiPolygon;
+};
+
+export type FieldBoundaryZoneRenderModel = {
+  id: string;
+  family: string;
+  status: string;
+  latestSeverity: string | null;
+  geometry: MapMultiPolygon;
+};
+
 export type FieldBoundaryPreviewRenderModel = {
   fieldId: string;
   fieldName: string;
   bbox: MapBoundingBox;
   labelPoint: MapGeoPoint;
   boundaryFeature: FieldBoundaryFeature;
+  workspaceFieldFeatures?: WorkspaceFieldBoundaryFeature[];
+  zones?: FieldBoundaryZoneRenderModel[];
   agronomicSurface: FieldAgronomicSurfaceRenderModel | null;
+  alternateAgronomicSurfaces?: Partial<
+    Record<FieldAgronomicSurfaceMetricKey, FieldAgronomicSurfaceRenderModel>
+  >;
   focusedZoneId?: string | null;
   presentation: FieldBoundaryPreviewPresentation;
 };

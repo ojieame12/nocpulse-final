@@ -1,6 +1,8 @@
 import {
   createRegisteredJob,
   runJobPhases,
+  type JobDispatchResult,
+  type JobExecutionControls,
 } from "@fieldpulse/platform-jobs";
 import type {
   GenerateFieldDiseaseRiskFindingsInput,
@@ -18,10 +20,75 @@ import type {
 } from "@fieldpulse/platform-runtime";
 import type { ImageryProviderProbeRecord } from "@fieldpulse/module-imagery";
 import type { WorkerJobContext } from "./contracts/WorkerJobContext";
+import { refreshMarketQuotes } from "../marketRefreshQuotes";
 
 type LongRunningSmokeInput = {
   durationMs: number;
   stepMs: number;
+};
+
+type IntakeFieldOnboardingJobInput = {
+  workspaceId: string;
+  fieldId: string;
+  requestedAt?: string;
+  providers?: SyncLatestFieldImageryInput["providers"];
+  dryRun?: boolean;
+};
+
+type IntakeFieldOnboardingJobResult = {
+  workspaceId: string;
+  fieldId: string;
+  requestedAt: string;
+  mode: "bootstrap-initial" | "refresh-intake";
+  probeRecords: readonly ImageryProviderProbeRecord[];
+  imagery: Awaited<
+    ReturnType<WorkerJobContext["runtime"]["services"]["imagery"]["syncLatestFieldImagery"]>
+  >;
+  weather:
+    | Awaited<
+        ReturnType<WorkerJobContext["runtime"]["services"]["weather"]["refreshFieldWeather"]>
+      >
+    | null;
+  hail: RefreshFieldHailJobResult | null;
+  moistureEstimate:
+    | Awaited<
+        ReturnType<WorkerJobContext["runtime"]["services"]["moisture"]["rebuildFieldEstimate"]>
+      >
+    | null;
+  moistureCells: RebuildFieldCellsResult | null;
+  moistureStress:
+    | Awaited<
+        ReturnType<
+          WorkerJobContext["runtime"]["services"]["intelligence"]["generateMoistureStressFindings"]
+        >
+      >
+    | null;
+  weatherRisk:
+    | Awaited<
+        ReturnType<
+          WorkerJobContext["runtime"]["services"]["intelligence"]["generateWeatherRiskFindings"]
+        >
+      >
+    | null;
+  diseaseRisk:
+    | Awaited<
+        ReturnType<
+          WorkerJobContext["runtime"]["services"]["intelligence"]["generateDiseaseRiskFindings"]
+        >
+      >
+    | null;
+};
+
+type IntakeFieldOnboardingJobState = {
+  probeRecords: readonly ImageryProviderProbeRecord[];
+  imagery: IntakeFieldOnboardingJobResult["imagery"] | null;
+  weather: IntakeFieldOnboardingJobResult["weather"];
+  hail: IntakeFieldOnboardingJobResult["hail"];
+  moistureEstimate: IntakeFieldOnboardingJobResult["moistureEstimate"];
+  moistureCells: IntakeFieldOnboardingJobResult["moistureCells"];
+  moistureStress: IntakeFieldOnboardingJobResult["moistureStress"];
+  weatherRisk: IntakeFieldOnboardingJobResult["weatherRisk"];
+  diseaseRisk: IntakeFieldOnboardingJobResult["diseaseRisk"];
 };
 
 type ScheduleWorkspaceImageryProviderProbesInput = {
@@ -124,6 +191,12 @@ type ScheduleWorkspaceDiseaseRiskResult = {
   queuedDispatchIds: readonly string[];
 };
 
+type RefreshMarketPricesInput = {
+  requestedAt?: string;
+  cropSymbols?: readonly string[];
+  dryRun?: boolean;
+};
+
 type RefreshFieldHailJobResult = {
   hail: Awaited<
     ReturnType<WorkerJobContext["runtime"]["services"]["hail"]["refreshFieldEvents"]>
@@ -143,7 +216,377 @@ function sleep(durationMs: number) {
   });
 }
 
+export const WORKSPACE_FIELD_SCHEDULE_CONCURRENCY = 6;
+
+function resolveQueuedDispatchId(dispatch: JobDispatchResult): string | null {
+  if (
+    dispatch.result
+    && typeof dispatch.result === "object"
+    && dispatch.result
+    && "id" in dispatch.result
+    && typeof dispatch.result.id === "string"
+  ) {
+    return dispatch.result.id;
+  }
+
+  return null;
+}
+
+// Keep workspace schedulers from serially blocking on dispatch I/O while avoiding a full fan-out.
+async function enqueueWorkspaceFieldJobs(input: {
+  execution: JobExecutionControls;
+  fields: readonly { id: string }[];
+  phaseKey: string;
+  phaseLabel: string;
+  progressMessage: (completedCount: number, totalCount: number) => string;
+  enqueue: (field: { id: string }, index: number) => Promise<JobDispatchResult>;
+}): Promise<readonly string[]> {
+  const queuedDispatchIds = new Array<string | null>(input.fields.length).fill(null);
+  const workerCount = Math.min(WORKSPACE_FIELD_SCHEDULE_CONCURRENCY, input.fields.length);
+  let nextIndex = 0;
+  let completedCount = 0;
+  let failure: unknown = null;
+
+  async function runWorker() {
+    while (true) {
+      if (failure) {
+        return;
+      }
+
+      const index = nextIndex;
+      nextIndex += 1;
+
+      if (index >= input.fields.length) {
+        return;
+      }
+
+      try {
+        await input.execution.throwIfCancellationRequested();
+        const dispatch = await input.enqueue(input.fields[index], index);
+        const dispatchId = resolveQueuedDispatchId(dispatch);
+
+        if (dispatchId) {
+          queuedDispatchIds[index] = dispatchId;
+        }
+
+        completedCount += 1;
+        const completed = completedCount;
+
+        await input.execution.reportProgress({
+          progressPct: Math.min(
+            95,
+            Math.max(10, Math.round((completed / input.fields.length) * 95)),
+          ),
+          progressMessage: input.progressMessage(completed, input.fields.length),
+          phaseKey: input.phaseKey,
+          phaseLabel: input.phaseLabel,
+        });
+      } catch (error) {
+        failure ??= error;
+        return;
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: workerCount }, () => runWorker()),
+  );
+
+  if (failure) {
+    throw failure;
+  }
+
+  return queuedDispatchIds.filter((dispatchId): dispatchId is string => dispatchId !== null);
+}
+
+async function runIntakeFieldOnboardingJob(input: {
+  context: WorkerJobContext;
+  payload: IntakeFieldOnboardingJobInput;
+  execution: JobExecutionControls;
+  mode: "bootstrap-initial" | "refresh-intake";
+  includeProbe: boolean;
+}): Promise<IntakeFieldOnboardingJobResult> {
+  const requestedAt = input.payload.requestedAt ?? new Date().toISOString();
+
+  const state = await runJobPhases(input.execution, {
+    initialState: {
+      probeRecords: [] as readonly ImageryProviderProbeRecord[],
+      imagery: null as IntakeFieldOnboardingJobResult["imagery"] | null,
+      weather: null as IntakeFieldOnboardingJobResult["weather"],
+      hail: null as IntakeFieldOnboardingJobResult["hail"],
+      moistureEstimate: null as IntakeFieldOnboardingJobResult["moistureEstimate"],
+      moistureCells: null as IntakeFieldOnboardingJobResult["moistureCells"],
+      moistureStress: null as IntakeFieldOnboardingJobResult["moistureStress"],
+      weatherRisk: null as IntakeFieldOnboardingJobResult["weatherRisk"],
+      diseaseRisk: null as IntakeFieldOnboardingJobResult["diseaseRisk"],
+    } satisfies IntakeFieldOnboardingJobState,
+    phases: [
+      {
+        key: "validate-request",
+        progressPct: 5,
+        progressMessage: `validating ${input.mode} request`,
+        run(currentState: IntakeFieldOnboardingJobState) {
+          return currentState;
+        },
+      },
+      ...(input.includeProbe && !input.payload.dryRun
+        ? [{
+            key: "record-provider-probe",
+            progressPct: 15,
+            progressMessage: "recording imagery provider probe",
+            async run(currentState: IntakeFieldOnboardingJobState) {
+              return {
+                ...currentState,
+                probeRecords:
+                  await input.context.runtime.services.imagery.recordProviderProbeForField({
+                    workspaceId: input.payload.workspaceId,
+                    fieldId: input.payload.fieldId,
+                    requestedAt,
+                  }),
+              };
+            },
+          }]
+        : []),
+      {
+        key: "sync-imagery",
+        progressPct: 30,
+        progressMessage: "syncing latest field imagery",
+        async run(currentState: IntakeFieldOnboardingJobState) {
+          return {
+            ...currentState,
+            imagery: await input.context.runtime.services.imagery.syncLatestFieldImagery({
+              workspaceId: input.payload.workspaceId,
+              fieldId: input.payload.fieldId,
+              requestedAt,
+              providers: input.payload.providers,
+              dryRun: input.payload.dryRun,
+            }),
+          };
+        },
+      },
+      ...(input.payload.dryRun
+        ? []
+        : [
+            {
+              key: "refresh-weather",
+              progressPct: 45,
+              progressMessage: "refreshing field weather",
+              async run(currentState: IntakeFieldOnboardingJobState) {
+                return {
+                  ...currentState,
+                  weather:
+                    await input.context.runtime.services.weather.refreshFieldWeather({
+                      workspaceId: input.payload.workspaceId,
+                      fieldId: input.payload.fieldId,
+                      requestedAt,
+                    }),
+                };
+              },
+            },
+            {
+              key: "refresh-hail",
+              progressPct: 58,
+              progressMessage: "refreshing hail and hail-risk findings",
+              async run(currentState: IntakeFieldOnboardingJobState) {
+                const hail = await input.context.runtime.services.hail.refreshFieldEvents({
+                  workspaceId: input.payload.workspaceId,
+                  fieldId: input.payload.fieldId,
+                  requestedAt,
+                });
+
+                const intelligence =
+                  hail.events.length > 0
+                    ? await input.context.runtime.services.intelligence.generateHailRiskFindings({
+                        workspaceId: input.payload.workspaceId,
+                        fieldId: input.payload.fieldId,
+                        requestedAt,
+                        reportedAfter: hail.events.reduce(
+                          (earliest, event) =>
+                            event.reportedAt < earliest ? event.reportedAt : earliest,
+                          hail.events[0].reportedAt,
+                        ),
+                        limit: hail.events.length,
+                      })
+                    : null;
+
+                return {
+                  ...currentState,
+                  hail: {
+                    hail,
+                    intelligence,
+                  },
+                };
+              },
+            },
+            {
+              key: "rebuild-moisture-estimate",
+              progressPct: 72,
+              progressMessage: "rebuilding field moisture estimate",
+              async run(currentState: IntakeFieldOnboardingJobState) {
+                return {
+                  ...currentState,
+                  moistureEstimate:
+                    await input.context.runtime.services.moisture.rebuildFieldEstimate({
+                      workspaceId: input.payload.workspaceId,
+                      fieldId: input.payload.fieldId,
+                      observedAt: requestedAt,
+                    }),
+                };
+              },
+            },
+            {
+              key: "rebuild-moisture-cells",
+              progressPct: 80,
+              progressMessage: "rebuilding field moisture cells",
+              async run(currentState: IntakeFieldOnboardingJobState) {
+                return {
+                  ...currentState,
+                  moistureCells:
+                    await input.context.runtime.services.moisture.rebuildFieldCells({
+                      workspaceId: input.payload.workspaceId,
+                      fieldId: input.payload.fieldId,
+                    }),
+                };
+              },
+            },
+            {
+              key: "generate-moisture-stress",
+              progressPct: 88,
+              progressMessage: "generating moisture stress findings",
+              async run(currentState: IntakeFieldOnboardingJobState) {
+                return {
+                  ...currentState,
+                  moistureStress:
+                    await input.context.runtime.services.intelligence.generateMoistureStressFindings(
+                      {
+                        workspaceId: input.payload.workspaceId,
+                        fieldId: input.payload.fieldId,
+                        requestedAt,
+                      },
+                    ),
+                };
+              },
+            },
+            {
+              key: "generate-weather-risk",
+              progressPct: 94,
+              progressMessage: "generating weather risk findings",
+              async run(currentState: IntakeFieldOnboardingJobState) {
+                return {
+                  ...currentState,
+                  weatherRisk:
+                    await input.context.runtime.services.intelligence.generateWeatherRiskFindings(
+                      {
+                        workspaceId: input.payload.workspaceId,
+                        fieldId: input.payload.fieldId,
+                        requestedAt,
+                      },
+                    ),
+                };
+              },
+            },
+            {
+              key: "generate-disease-risk",
+              progressPct: 98,
+              progressMessage: "generating disease risk findings",
+              async run(currentState: IntakeFieldOnboardingJobState) {
+                return {
+                  ...currentState,
+                  diseaseRisk:
+                    await input.context.runtime.services.intelligence.generateDiseaseRiskFindings(
+                      {
+                        workspaceId: input.payload.workspaceId,
+                        fieldId: input.payload.fieldId,
+                        requestedAt,
+                      },
+                    ),
+                };
+              },
+            },
+          ]),
+      {
+        key: "finalize-result",
+        progressPct: 100,
+        progressMessage: `finalizing ${input.mode} result`,
+        run(currentState: IntakeFieldOnboardingJobState) {
+          return currentState;
+        },
+      },
+    ],
+  });
+
+  if (!state.imagery) {
+    throw new Error(`[worker] ${input.mode} completed without an imagery result`);
+  }
+
+  return {
+    workspaceId: input.payload.workspaceId,
+    fieldId: input.payload.fieldId,
+    requestedAt,
+    mode: input.mode,
+    probeRecords: state.probeRecords,
+    imagery: state.imagery,
+    weather: state.weather,
+    hail: state.hail,
+    moistureEstimate: state.moistureEstimate,
+    moistureCells: state.moistureCells,
+    moistureStress: state.moistureStress,
+    weatherRisk: state.weatherRisk,
+    diseaseRisk: state.diseaseRisk,
+  };
+}
+
 export const jobs = [
+  createRegisteredJob<
+    WorkerJobContext,
+    IntakeFieldOnboardingJobInput,
+    IntakeFieldOnboardingJobResult
+  >({
+    key: "field.bootstrap-initial",
+    description:
+      "Run the ordered initial bootstrap for a newly created intake field.",
+    async samplePayload(context: WorkerJobContext) {
+      const target = await context.resolveDefaultFieldTarget();
+      return {
+        ...target,
+        dryRun: true,
+      };
+    },
+    async run(context, payload, execution) {
+      return runIntakeFieldOnboardingJob({
+        context,
+        payload,
+        execution,
+        mode: "bootstrap-initial",
+        includeProbe: true,
+      });
+    },
+  }),
+  createRegisteredJob<
+    WorkerJobContext,
+    IntakeFieldOnboardingJobInput,
+    IntakeFieldOnboardingJobResult
+  >({
+    key: "field.refresh-intake",
+    description:
+      "Run the ordered intake refresh for a reused field matched during add-field intake.",
+    async samplePayload(context: WorkerJobContext) {
+      const target = await context.resolveDefaultFieldTarget();
+      return {
+        ...target,
+        dryRun: true,
+      };
+    },
+    async run(context, payload, execution) {
+      return runIntakeFieldOnboardingJob({
+        context,
+        payload,
+        execution,
+        mode: "refresh-intake",
+        includeProbe: false,
+      });
+    },
+  }),
   createRegisteredJob<
     WorkerJobContext,
     ProbeFieldImageryProvidersInput,
@@ -270,37 +713,25 @@ export const jobs = [
         };
       }
 
-      for (const [index, field] of fields.entries()) {
-        await execution.throwIfCancellationRequested();
-        const dispatch = await context.enqueueJob({
-          key: "imagery.record-provider-probe",
-          payload: {
-            workspaceId: payload.workspaceId,
-            fieldId: field.id,
-            requestedAt,
-          },
-        });
-
-        if (
-          dispatch.result
-          && typeof dispatch.result === "object"
-          && dispatch.result
-          && "id" in dispatch.result
-          && typeof dispatch.result.id === "string"
-        ) {
-          queuedDispatchIds.push(dispatch.result.id);
-        }
-
-        await execution.reportProgress({
-          progressPct: Math.min(
-            95,
-            Math.max(10, Math.round(((index + 1) / fields.length) * 95)),
-          ),
-          progressMessage: `queued provider probe ${index + 1} of ${fields.length}`,
+      queuedDispatchIds.push(
+        ...await enqueueWorkspaceFieldJobs({
+          execution,
+          fields,
           phaseKey: "enqueue-field-probes",
           phaseLabel: "enqueue field probes",
-        });
-      }
+          progressMessage: (completedCount, totalCount) =>
+            `queued provider probe ${completedCount} of ${totalCount}`,
+          enqueue: (field) =>
+            context.enqueueJob({
+              key: "imagery.record-provider-probe",
+              payload: {
+                workspaceId: payload.workspaceId,
+                fieldId: field.id,
+                requestedAt,
+              },
+            }),
+        }),
+      );
 
       await execution.reportProgress({
         progressPct: 100,
@@ -377,39 +808,27 @@ export const jobs = [
         };
       }
 
-      for (const [index, field] of fields.entries()) {
-        await execution.throwIfCancellationRequested();
-        const dispatch = await context.enqueueJob({
-          key: "imagery.sync-latest",
-          payload: {
-            workspaceId: payload.workspaceId,
-            fieldId: field.id,
-            requestedAt,
-            providers: payload.providers,
-            dryRun: payload.dryRun,
-          },
-        });
-
-        if (
-          dispatch.result &&
-          typeof dispatch.result === "object" &&
-          dispatch.result &&
-          "id" in dispatch.result &&
-          typeof dispatch.result.id === "string"
-        ) {
-          queuedDispatchIds.push(dispatch.result.id);
-        }
-
-        await execution.reportProgress({
-          progressPct: Math.min(
-            95,
-            Math.max(10, Math.round(((index + 1) / fields.length) * 95)),
-          ),
-          progressMessage: `queued imagery sync ${index + 1} of ${fields.length}`,
+      queuedDispatchIds.push(
+        ...await enqueueWorkspaceFieldJobs({
+          execution,
+          fields,
           phaseKey: "enqueue-field-syncs",
           phaseLabel: "enqueue field syncs",
-        });
-      }
+          progressMessage: (completedCount, totalCount) =>
+            `queued imagery sync ${completedCount} of ${totalCount}`,
+          enqueue: (field) =>
+            context.enqueueJob({
+              key: "imagery.sync-latest",
+              payload: {
+                workspaceId: payload.workspaceId,
+                fieldId: field.id,
+                requestedAt,
+                providers: payload.providers,
+                dryRun: payload.dryRun,
+              },
+            }),
+        }),
+      );
 
       await execution.reportProgress({
         progressPct: 100,
@@ -479,6 +898,65 @@ export const jobs = [
 
       if (!state.result) {
         throw new Error("[worker] imagery job completed without a result");
+      }
+
+      return state.result;
+    },
+  }),
+  createRegisteredJob<WorkerJobContext, RefreshMarketPricesInput, unknown>({
+    key: "market.refresh-prices",
+    description:
+      "Fetch and persist the latest supported market quotes for configured crop symbols.",
+    async samplePayload() {
+      return {
+        cropSymbols: ["CANOLA", "WHEAT", "CORN", "RYE", "SOYBEAN"],
+        dryRun: true,
+      };
+    },
+    async run(context: WorkerJobContext, payload, execution) {
+      const requestedAt = payload.requestedAt ?? new Date().toISOString();
+      const state = await runJobPhases(execution, {
+        initialState: {
+          result: null as Awaited<ReturnType<typeof refreshMarketQuotes>> | null,
+        },
+        phases: [
+          {
+            key: "validate-request",
+            progressPct: 10,
+            progressMessage: "validating market refresh request",
+            run(currentState) {
+              return currentState;
+            },
+          },
+          {
+            key: "fetch-and-upsert-prices",
+            progressPct: 75,
+            progressMessage: "refreshing market prices",
+            async run(currentState) {
+              return {
+                ...currentState,
+                result: await refreshMarketQuotes({
+                  runtime: context.runtime,
+                  requestedAt,
+                  cropSymbols: payload.cropSymbols,
+                  dryRun: payload.dryRun,
+                }),
+              };
+            },
+          },
+          {
+            key: "finalize-result",
+            progressPct: 95,
+            progressMessage: "finalizing market refresh result",
+            run(currentState) {
+              return currentState;
+            },
+          },
+        ],
+      });
+
+      if (!state.result) {
+        throw new Error("[worker] market refresh job completed without a result");
       }
 
       return state.result;
@@ -1060,37 +1538,25 @@ export const jobs = [
         };
       }
 
-      for (const [index, field] of fields.entries()) {
-        await execution.throwIfCancellationRequested();
-        const dispatch = await context.enqueueJob({
-          key: "intelligence.generate-disease-risk",
-          payload: {
-            workspaceId: payload.workspaceId,
-            fieldId: field.id,
-            requestedAt,
-          },
-        });
-
-        if (
-          dispatch.result
-          && typeof dispatch.result === "object"
-          && dispatch.result
-          && "id" in dispatch.result
-          && typeof dispatch.result.id === "string"
-        ) {
-          queuedDispatchIds.push(dispatch.result.id);
-        }
-
-        await execution.reportProgress({
-          progressPct: Math.min(
-            95,
-            Math.max(10, Math.round(((index + 1) / fields.length) * 95)),
-          ),
-          progressMessage: `queued disease risk generation ${index + 1} of ${fields.length}`,
+      queuedDispatchIds.push(
+        ...await enqueueWorkspaceFieldJobs({
+          execution,
+          fields,
           phaseKey: "enqueue-field-disease-risk",
           phaseLabel: "enqueue field disease risk generation",
-        });
-      }
+          progressMessage: (completedCount, totalCount) =>
+            `queued disease risk generation ${completedCount} of ${totalCount}`,
+          enqueue: (field) =>
+            context.enqueueJob({
+              key: "intelligence.generate-disease-risk",
+              payload: {
+                workspaceId: payload.workspaceId,
+                fieldId: field.id,
+                requestedAt,
+              },
+            }),
+        }),
+      );
 
       await execution.reportProgress({
         progressPct: 100,
@@ -1167,37 +1633,25 @@ export const jobs = [
         };
       }
 
-      for (const [index, field] of fields.entries()) {
-        await execution.throwIfCancellationRequested();
-        const dispatch = await context.enqueueJob({
-          key: "hail.refresh-field",
-          payload: {
-            workspaceId: payload.workspaceId,
-            fieldId: field.id,
-            requestedAt,
-          },
-        });
-
-        if (
-          dispatch.result &&
-          typeof dispatch.result === "object" &&
-          dispatch.result &&
-          "id" in dispatch.result &&
-          typeof dispatch.result.id === "string"
-        ) {
-          queuedDispatchIds.push(dispatch.result.id);
-        }
-
-        await execution.reportProgress({
-          progressPct: Math.min(
-            95,
-            Math.max(10, Math.round(((index + 1) / fields.length) * 95)),
-          ),
-          progressMessage: `queued hail refresh ${index + 1} of ${fields.length}`,
+      queuedDispatchIds.push(
+        ...await enqueueWorkspaceFieldJobs({
+          execution,
+          fields,
           phaseKey: "enqueue-field-refreshes",
           phaseLabel: "enqueue field refreshes",
-        });
-      }
+          progressMessage: (completedCount, totalCount) =>
+            `queued hail refresh ${completedCount} of ${totalCount}`,
+          enqueue: (field) =>
+            context.enqueueJob({
+              key: "hail.refresh-field",
+              payload: {
+                workspaceId: payload.workspaceId,
+                fieldId: field.id,
+                requestedAt,
+              },
+            }),
+        }),
+      );
 
       await execution.reportProgress({
         progressPct: 100,
@@ -1275,38 +1729,26 @@ export const jobs = [
         };
       }
 
-      for (const [index, field] of fields.entries()) {
-        await execution.throwIfCancellationRequested();
-        const dispatch = await context.enqueueJob({
-          key: "weather.refresh-field",
-          payload: {
-            workspaceId: payload.workspaceId,
-            fieldId: field.id,
-            requestedAt,
-            forecastHours: payload.forecastHours,
-          },
-        });
-
-        if (
-          dispatch.result
-          && typeof dispatch.result === "object"
-          && dispatch.result
-          && "id" in dispatch.result
-          && typeof dispatch.result.id === "string"
-        ) {
-          queuedDispatchIds.push(dispatch.result.id);
-        }
-
-        await execution.reportProgress({
-          progressPct: Math.min(
-            95,
-            Math.max(10, Math.round(((index + 1) / fields.length) * 95)),
-          ),
-          progressMessage: `queued weather refresh ${index + 1} of ${fields.length}`,
+      queuedDispatchIds.push(
+        ...await enqueueWorkspaceFieldJobs({
+          execution,
+          fields,
           phaseKey: "enqueue-field-refreshes",
           phaseLabel: "enqueue field weather refreshes",
-        });
-      }
+          progressMessage: (completedCount, totalCount) =>
+            `queued weather refresh ${completedCount} of ${totalCount}`,
+          enqueue: (field) =>
+            context.enqueueJob({
+              key: "weather.refresh-field",
+              payload: {
+                workspaceId: payload.workspaceId,
+                fieldId: field.id,
+                requestedAt,
+                forecastHours: payload.forecastHours,
+              },
+            }),
+        }),
+      );
 
       await execution.reportProgress({
         progressPct: 100,
@@ -1383,36 +1825,24 @@ export const jobs = [
         };
       }
 
-      for (const [index, field] of fields.entries()) {
-        await execution.throwIfCancellationRequested();
-        const dispatch = await context.enqueueJob({
-          key: "moisture.rebuild-field-cells",
-          payload: {
-            workspaceId: payload.workspaceId,
-            fieldId: field.id,
-          },
-        });
-
-        if (
-          dispatch.result
-          && typeof dispatch.result === "object"
-          && dispatch.result
-          && "id" in dispatch.result
-          && typeof dispatch.result.id === "string"
-        ) {
-          queuedDispatchIds.push(dispatch.result.id);
-        }
-
-        await execution.reportProgress({
-          progressPct: Math.min(
-            95,
-            Math.max(10, Math.round(((index + 1) / fields.length) * 95)),
-          ),
-          progressMessage: `queued moisture cell backfill ${index + 1} of ${fields.length}`,
+      queuedDispatchIds.push(
+        ...await enqueueWorkspaceFieldJobs({
+          execution,
+          fields,
           phaseKey: "enqueue-field-backfills",
           phaseLabel: "enqueue field moisture cell backfills",
-        });
-      }
+          progressMessage: (completedCount, totalCount) =>
+            `queued moisture cell backfill ${completedCount} of ${totalCount}`,
+          enqueue: (field) =>
+            context.enqueueJob({
+              key: "moisture.rebuild-field-cells",
+              payload: {
+                workspaceId: payload.workspaceId,
+                fieldId: field.id,
+              },
+            }),
+        }),
+      );
 
       await execution.reportProgress({
         progressPct: 100,

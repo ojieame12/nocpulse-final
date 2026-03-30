@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
+import "../styles/field-detail-panel.css";
 
 export const metadata: Metadata = {
   title: "FieldPulse v3",

@@ -66,12 +66,24 @@ import type {
   SyncLatestImageryResult,
 } from "@fieldpulse/module-imagery";
 import type {
+  FieldBasisAssumption,
+  FieldYieldAssumption,
+  GrainPriceSnapshot,
+  UpsertFieldBasisAssumptionInput,
+  UpsertFieldYieldAssumptionInput,
+  UpsertGrainPriceSnapshotInput,
+} from "@fieldpulse/module-market";
+import type {
   FieldMoistureCellSnapshot,
   FieldMoistureSnapshot,
   RebuildFieldMoistureEstimateInput,
   RebuildFieldMoistureEstimateResult,
   UpsertFieldMoistureSnapshotInput,
 } from "@fieldpulse/module-moisture";
+import type {
+  CreateScoutNoteInput,
+  ScoutNote,
+} from "@fieldpulse/module-scouting";
 import type {
   ComputeFieldWeatherDerivedSignalsInput,
   FieldWeatherDerivedSignalSet,
@@ -197,6 +209,31 @@ export type BuildRecentImagerySyncReportInput = {
   limit?: number;
 };
 
+export type LoadLatestMarketPriceInput = {
+  cropSymbol: string;
+};
+
+export type LoadRecentMarketPricesInput = {
+  cropSymbol: string;
+  limit?: number;
+};
+
+export type UpsertLatestMarketPriceInput = UpsertGrainPriceSnapshotInput;
+export type LoadLatestFieldBasisAssumptionInput = {
+  workspaceId: WorkspaceId;
+  fieldId: string;
+  seasonYear?: number | null;
+  cropSymbol?: string | null;
+};
+export type UpsertLatestFieldBasisAssumptionInput = UpsertFieldBasisAssumptionInput;
+export type LoadLatestFieldYieldAssumptionInput = {
+  workspaceId: WorkspaceId;
+  fieldId: string;
+  seasonYear?: number | null;
+  cropSymbol?: string | null;
+};
+export type UpsertLatestFieldYieldAssumptionInput = UpsertFieldYieldAssumptionInput;
+
 export type RebuildFieldEstimateInput = Omit<
   RebuildFieldMoistureEstimateInput,
   "observedAt" | "sourceKey" | "inputs"
@@ -243,6 +280,14 @@ export type LoadFieldWeatherInput = {
   validAfter?: string;
   forecastLimit?: number;
 };
+
+export type LoadFieldScoutNotesInput = {
+  workspaceId: WorkspaceId;
+  fieldId: string;
+  limit?: number;
+};
+
+export type CreateFieldScoutNoteServiceInput = CreateScoutNoteInput;
 
 export type LoadFieldCropContextInput = {
   workspaceId: WorkspaceId;
@@ -355,9 +400,23 @@ export type GenerateFieldHailRiskFindingsInput = {
   limit?: number;
 };
 
+export type IntelligenceAlertSyncFailure = {
+  findingId: string;
+  sourceKey: string;
+  message: string;
+};
+
+export type IntelligenceAlertSyncSummary = {
+  attemptedCount: number;
+  syncedCount: number;
+  failedCount: number;
+  failures: readonly IntelligenceAlertSyncFailure[];
+};
+
 export type GenerateFieldHailRiskFindingsResult = GenerateHailRiskFindingsResult & {
   requestedAt: string;
   alerts: readonly FieldAlert[];
+  alertSync: IntelligenceAlertSyncSummary;
 };
 
 export type GenerateFieldMoistureStressFindingsInput = {
@@ -371,6 +430,7 @@ export type GenerateFieldMoistureStressFindingsInput = {
 export type GenerateFieldMoistureStressFindingsResult =
   GenerateMoistureStressFindingsResult & {
     alerts: readonly FieldAlert[];
+    alertSync: IntelligenceAlertSyncSummary;
   };
 
 export type GenerateFieldWeatherRiskFindingsInput = {
@@ -384,6 +444,7 @@ export type GenerateFieldWeatherRiskFindingsInput = {
 export type GenerateFieldWeatherRiskFindingsResult =
   GenerateWeatherRiskFindingsResult & {
     alerts: readonly FieldAlert[];
+    alertSync: IntelligenceAlertSyncSummary;
   };
 
 export type GenerateFieldDiseaseRiskFindingsInput = {
@@ -397,6 +458,7 @@ export type GenerateFieldDiseaseRiskFindingsInput = {
 export type GenerateFieldDiseaseRiskFindingsResult =
   GenerateDiseaseRiskFindingsResult & {
     alerts: readonly FieldAlert[];
+    alertSync: IntelligenceAlertSyncSummary;
   };
 
 export type BuildRecentDiseaseRiskReportInput = {
@@ -466,7 +528,13 @@ export type ServerServices = {
     buildInitialPlan(
       input: BuildInitialFieldOnboardingPlanInput,
     ): Promise<FieldOnboardingPlan>;
+    buildRefreshPlan(
+      input: BuildInitialFieldOnboardingPlanInput,
+    ): Promise<FieldOnboardingPlan>;
     dispatchInitialPlan(
+      input: BuildInitialFieldOnboardingPlanInput,
+    ): Promise<readonly FieldOnboardingDispatchReceipt[]>;
+    dispatchRefreshPlan(
       input: BuildInitialFieldOnboardingPlanInput,
     ): Promise<readonly FieldOnboardingDispatchReceipt[]>;
   };
@@ -474,6 +542,9 @@ export type ServerServices = {
     loadFieldContext(
       input: LoadFieldCropContextInput,
     ): Promise<FieldCropContext | null>;
+    listWorkspaceCropContexts(
+      workspaceId: WorkspaceId,
+    ): Promise<readonly FieldCropContext[]>;
     upsertFieldContext(
       input: UpsertFieldCropContextInput,
     ): Promise<FieldCropContext>;
@@ -491,6 +562,37 @@ export type ServerServices = {
     clearGrowthStageOverride(
       input: ClearFieldGrowthStageOverrideInput,
     ): Promise<FieldCropContext | null>;
+  };
+  scouting: {
+    listFieldNotes(
+      input: LoadFieldScoutNotesInput,
+    ): Promise<readonly ScoutNote[]>;
+    createFieldNote(
+      input: CreateFieldScoutNoteServiceInput,
+    ): Promise<ScoutNote>;
+  };
+  market: {
+    latestPrice(
+      input: LoadLatestMarketPriceInput,
+    ): Promise<GrainPriceSnapshot | null>;
+    recentPrices(
+      input: LoadRecentMarketPricesInput,
+    ): Promise<readonly GrainPriceSnapshot[]>;
+    upsertPrice(
+      input: UpsertLatestMarketPriceInput,
+    ): Promise<GrainPriceSnapshot>;
+    latestFieldBasisAssumption(
+      input: LoadLatestFieldBasisAssumptionInput,
+    ): Promise<FieldBasisAssumption | null>;
+    upsertFieldBasisAssumption(
+      input: UpsertLatestFieldBasisAssumptionInput,
+    ): Promise<FieldBasisAssumption>;
+    latestFieldYieldAssumption(
+      input: LoadLatestFieldYieldAssumptionInput,
+    ): Promise<FieldYieldAssumption | null>;
+    upsertFieldYieldAssumption(
+      input: UpsertLatestFieldYieldAssumptionInput,
+    ): Promise<FieldYieldAssumption>;
   };
   workspaces: {
     listAll(): Promise<readonly Workspace[]>;

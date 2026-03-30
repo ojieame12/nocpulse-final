@@ -9,6 +9,10 @@ import {
   TriangleAlert,
   CircleCheck,
   FileDown,
+  Snowflake,
+  CloudDrizzle,
+  CloudHail,
+  Gauge,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -16,10 +20,13 @@ import {
 
 export type ReadingIconKey =
   | 'temperature'
-  | 'soil-temp'
+  | 'soil-moisture'
   | 'root-moisture'
   | 'wind'
   | 'ndvi'
+  | 'ndre'
+  | 'ndmi'
+  | 'radar-wetness'
   | 'stress-area';
 
 export interface ReportReadingCell {
@@ -37,9 +44,29 @@ export interface ReportCropParam {
   fillPercent: number;
 }
 
+export type ReportChartValueFormat =
+  | 'percent'
+  | 'index'
+  | 'temperature'
+  | 'millimetres';
+
+export interface ReportChartPoint {
+  label: string;
+  value: number | null;
+}
+
+export interface ReportChartSeries {
+  label: string;
+  color: string;
+  format: ReportChartValueFormat;
+  points: ReportChartPoint[];
+}
+
 export interface ReportChartSection {
   title: string;
   subtitle: string;
+  series: ReportChartSeries[];
+  emptyText?: string;
 }
 
 export interface ReportForecastDay {
@@ -49,10 +76,12 @@ export interface ReportForecastDay {
 }
 
 export interface ReportAlertItem {
-  iconKey: 'moisture' | 'temperature' | 'leaf' | 'wind' | 'generic';
+  iconKey: 'moisture' | 'temperature' | 'leaf' | 'wind' | 'hail' | 'generic';
   text: string;
   severity: 'High' | 'Med' | 'Low';
   trackedZoneIds: readonly string[];
+  /** Optional secondary detail line (e.g. hail size, event window). */
+  detail?: string | null;
 }
 
 export interface ReportSourceChip {
@@ -88,6 +117,8 @@ export interface FieldReportProps {
   charts: ReportChartSection[];
   forecast: ReportForecastDay[];
   alerts: ReportAlertItem[];
+  alertsEmptyStateTitle?: string;
+  alertsEmptyStateDescription?: string;
   findings: ReportFindingItem[];
   zones: ReportZoneItem[];
   provenanceText: string;
@@ -98,11 +129,25 @@ export interface FieldReportProps {
 
 const READING_ICONS: Record<ReadingIconKey, { Icon: LucideIcon; color: string }> = {
   'temperature': { Icon: Thermometer, color: '#ef4444' },
-  'soil-temp': { Icon: Sun, color: '#f59e0b' },
+  'soil-moisture': { Icon: Droplets, color: '#0ea5e9' },
   'root-moisture': { Icon: Droplets, color: '#3b82f6' },
   'wind': { Icon: Wind, color: '#6b7280' },
   'ndvi': { Icon: Leaf, color: '#16a34a' },
+  'ndre': { Icon: Leaf, color: '#14b8a6' },
+  'ndmi': { Icon: Droplets, color: '#0ea5e9' },
+  'radar-wetness': { Icon: Droplets, color: '#06b6d4' },
   'stress-area': { Icon: TriangleAlert, color: '#f59e0b' },
+};
+
+const CROP_PARAM_ICONS: Record<string, { Icon: LucideIcon; color: string }> = {
+  "root moisture":     { Icon: Droplets,     color: "#3b82f6" },
+  "surface moisture":  { Icon: Droplets,     color: "#0ea5e9" },
+  "frost min":         { Icon: Snowflake,    color: "#818cf8" },
+  "water balance 72h": { Icon: CloudDrizzle, color: "#06b6d4" },
+  "water balance":     { Icon: CloudDrizzle, color: "#06b6d4" },
+  "ndvi":              { Icon: Leaf,         color: "#16a34a" },
+  "temperature":       { Icon: Thermometer,  color: "#ef4444" },
+  "wind":              { Icon: Wind,         color: "#6b7280" },
 };
 
 const ALERT_ICONS: Record<ReportAlertItem['iconKey'], LucideIcon> = {
@@ -110,6 +155,7 @@ const ALERT_ICONS: Record<ReportAlertItem['iconKey'], LucideIcon> = {
   temperature: Thermometer,
   leaf: Leaf,
   wind: Wind,
+  hail: CloudHail,
   generic: TriangleAlert,
 };
 
@@ -118,6 +164,7 @@ const ALERT_ICON_COLORS: Record<ReportAlertItem['iconKey'], string> = {
   temperature: '#f59e0b',
   leaf: '#16a34a',
   wind: '#6b7280',
+  hail: '#818cf8',
   generic: '#f59e0b',
 };
 
@@ -144,11 +191,12 @@ function ReportHeader({ field }: { field: FieldReportProps }) {
 }
 
 function ReadingsSection({ readings }: { readings: ReportReadingCell[] }) {
+  const rowCount = Math.ceil(readings.length / 2);
   return (
     <div className="panel__section">
       <span className="panel__section-label">CURRENT READINGS</span>
       <div className="panel__data-grid">
-        {[0, 1, 2].map((rowIdx) => (
+        {Array.from({ length: rowCount }, (_, rowIdx) => (
           <div key={rowIdx} className="panel__data-row">
             {readings.slice(rowIdx * 2, rowIdx * 2 + 2).map((r, i) => {
               const iconInfo = READING_ICONS[r.iconKey];
@@ -187,10 +235,15 @@ function CropAssessmentSection({
         <span className="panel__section-label">CROP PARAMETER ASSESSMENT</span>
         <span className="rpt__crop-stage">{stage}</span>
       </div>
-      {params.map((p, i) => (
+      {params.map((p, i) => {
+        const paramIcon = CROP_PARAM_ICONS[p.label.toLowerCase()] ?? { Icon: Gauge, color: "var(--text-muted)" };
+        return (
         <div key={i} className="progress-row">
           <div className="progress-row__top">
-            <span className="progress-row__label">{p.label}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <paramIcon.Icon size={13} color={paramIcon.color} strokeWidth={2} />
+              <span className="progress-row__label">{p.label}</span>
+            </div>
             <div className="progress-row__right">
               <span className="progress-row__value">{p.value}</span>
               <CircleCheck size={14} color="#008f4e" />
@@ -207,12 +260,88 @@ function CropAssessmentSection({
             <span className="progress-row__range-val">{p.rangeHigh}</span>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-function ChartPlaceholder({ chart }: { chart: ReportChartSection }) {
+function formatChartValue(
+  value: number | null | undefined,
+  format: ReportChartValueFormat,
+) {
+  if (value == null || !Number.isFinite(value)) {
+    return '—';
+  }
+
+  switch (format) {
+    case 'percent':
+      return `${value.toFixed(1)}%`;
+    case 'index':
+      return value.toFixed(2);
+    case 'temperature':
+      return `${value.toFixed(1)}°C`;
+    case 'millimetres':
+      return `${value.toFixed(1)} mm`;
+  }
+}
+
+function findLatestChartValue(series: ReportChartSeries) {
+  for (let index = series.points.length - 1; index >= 0; index -= 1) {
+    const value = series.points[index]?.value;
+    if (value != null && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function buildChartPolyline(
+  points: ReportChartPoint[],
+  min: number,
+  max: number,
+  width: number,
+  height: number,
+) {
+  const valueRange = max - min || 1;
+  const step = points.length > 1 ? width / (points.length - 1) : width;
+
+  return points
+    .map((point, index) => {
+      const numericValue = point.value;
+      if (numericValue == null || !Number.isFinite(numericValue)) {
+        return null;
+      }
+
+      const x = points.length > 1 ? index * step : width / 2;
+      const y = height - 8 - ((numericValue - min) / valueRange) * (height - 16);
+      return `${x},${y}`;
+    })
+    .filter((entry): entry is string => entry != null)
+    .join(' ');
+}
+
+function ReportChart({
+  chart,
+}: {
+  chart: ReportChartSection;
+}) {
+  const numericValues = chart.series.flatMap((series) =>
+    series.points
+      .map((point) => point.value)
+      .filter((value): value is number => value != null && Number.isFinite(value)),
+  );
+  const hasData = numericValues.length > 0;
+  const chartWidth = 240;
+  const chartHeight = 168;
+  const chartMin = hasData ? Math.min(...numericValues) : 0;
+  const chartMax = hasData ? Math.max(...numericValues) : 1;
+  const labelSource =
+    chart.series.find((series) => series.points.length > 0)?.points ?? [];
+  const firstLabel = labelSource[0]?.label ?? 'Start';
+  const lastLabel = labelSource.at(-1)?.label ?? 'Latest';
+
   return (
     <div className="panel__section">
       <div className="panel__section-header">
@@ -220,13 +349,165 @@ function ChartPlaceholder({ chart }: { chart: ReportChartSection }) {
         <span className="panel__section-meta">{chart.subtitle}</span>
       </div>
       <div className="rpt__chart-card">
-        <div className="rpt__chart-placeholder" />
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginBottom: 12,
+          }}
+        >
+          {chart.series.map((series) => (
+            <div
+              key={series.label}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                minWidth: 0,
+              }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 999,
+                  background: series.color,
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: 'var(--color-slate-700)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {series.label}
+              </span>
+              <span
+                className="fdp-mono"
+                style={{
+                  fontSize: 11,
+                  color: 'var(--color-slate-900)',
+                  fontWeight: 700,
+                }}
+              >
+                {formatChartValue(findLatestChartValue(series), series.format)}
+              </span>
+            </div>
+          ))}
+        </div>
+        {hasData ? (
+          <>
+            <svg
+              width="100%"
+              height={chartHeight}
+              viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+              preserveAspectRatio="none"
+              style={{ display: 'block' }}
+            >
+              {[0.2, 0.5, 0.8].map((fraction) => {
+                const y = chartHeight - fraction * (chartHeight - 16) - 8;
+                return (
+                  <line
+                    key={fraction}
+                    x1={0}
+                    y1={y}
+                    x2={chartWidth}
+                    y2={y}
+                    stroke="rgba(148,163,184,0.18)"
+                    strokeWidth={1}
+                  />
+                );
+              })}
+              {chart.series.map((series, index) => {
+                const polyline = buildChartPolyline(
+                  series.points,
+                  chartMin,
+                  chartMax,
+                  chartWidth,
+                  chartHeight,
+                );
+                if (!polyline) {
+                  return null;
+                }
+
+                return (
+                  <g key={series.label}>
+                    {index === 0 ? (
+                      <polygon
+                        points={`0,${chartHeight} ${polyline} ${chartWidth},${chartHeight}`}
+                        fill={series.color}
+                        opacity={0.08}
+                      />
+                    ) : null}
+                    <polyline
+                      points={polyline}
+                      fill="none"
+                      stroke={series.color}
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      opacity={0.88}
+                    />
+                  </g>
+                );
+              })}
+            </svg>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginTop: 10,
+              }}
+            >
+              <span className="panel__section-meta">{firstLabel}</span>
+              <span className="panel__section-meta">{lastLabel}</span>
+            </div>
+          </>
+        ) : (
+          <div className="rpt__chart-placeholder">
+            <span
+              style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: 11,
+                color: 'var(--color-slate-500)',
+              }}
+            >
+              {chart.emptyText ?? 'No chart history available yet.'}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function ForecastSection({ days }: { days: ReportForecastDay[] }) {
+  if (days.length === 0) {
+    return (
+      <div className="panel__section">
+        <span className="panel__section-label">7-DAY FORECAST</span>
+        <div className="rpt__chart-placeholder">
+          <span
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 11,
+              color: 'var(--color-slate-500)',
+            }}
+          >
+            No forecast days have been stored for this field yet.
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="panel__section">
       <span className="panel__section-label">7-DAY FORECAST</span>
@@ -246,13 +527,38 @@ function ForecastSection({ days }: { days: ReportForecastDay[] }) {
 
 function AlertSummarySection({
   alerts,
+  emptyStateTitle,
+  emptyStateDescription,
   focusedZoneId,
   onZoneSelect,
 }: {
   alerts: ReportAlertItem[];
+  emptyStateTitle?: string;
+  emptyStateDescription?: string;
   focusedZoneId?: string | null;
   onZoneSelect?: (zoneId: string | null) => void;
 }) {
+  if (alerts.length === 0) {
+    return (
+      <div className="panel__section">
+        <span className="panel__section-label">ALERT SUMMARY</span>
+        <div className="rpt__chart-placeholder">
+          <span
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 11,
+              color: 'var(--color-slate-500)',
+            }}
+          >
+            {emptyStateDescription ??
+              (emptyStateTitle ??
+                'No active alerts are currently linked to this field.')}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="panel__section">
       <span className="panel__section-label">ALERT SUMMARY</span>
@@ -279,7 +585,12 @@ function AlertSummarySection({
             <span className="alert-card__icon" style={{ color: iconColor }}>
               <AlertIcon size={14} />
             </span>
-            <span className="rpt__alert-text">{a.text}</span>
+            <span className="rpt__alert-text-group">
+              <span className="rpt__alert-text">{a.text}</span>
+              {a.detail ? (
+                <span className="rpt__alert-detail">{a.detail}</span>
+              ) : null}
+            </span>
             <span
               className={`alert-card__badge alert-card__badge--${
                 a.severity === 'High' ? 'danger' : 'warning'
@@ -304,7 +615,22 @@ function FindingSummarySection({
   onZoneSelect?: (zoneId: string | null) => void;
 }) {
   if (findings.length === 0) {
-    return null;
+    return (
+      <div className="panel__section">
+        <span className="panel__section-label">ACTIVE FINDINGS</span>
+        <div className="rpt__chart-placeholder">
+          <span
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 11,
+              color: 'var(--color-slate-500)',
+            }}
+          >
+            No active findings currently reference this field.
+          </span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -353,7 +679,22 @@ function ZoneSummarySection({
   onZoneSelect?: (zoneId: string | null) => void;
 }) {
   if (zones.length === 0) {
-    return null;
+    return (
+      <div className="panel__section">
+        <span className="panel__section-label">TRACKED ZONES</span>
+        <div className="rpt__chart-placeholder">
+          <span
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 11,
+              color: 'var(--color-slate-500)',
+            }}
+          >
+            No tracked zones are active for this field right now.
+          </span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -440,7 +781,7 @@ export function ReportTab({
 
       {/* Chart Sections */}
       {field.charts.map((c, i) => (
-        <ChartPlaceholder key={i} chart={c} />
+        <ReportChart key={i} chart={c} />
       ))}
 
       {/* 7-Day Forecast */}
@@ -449,6 +790,8 @@ export function ReportTab({
       {/* Alert Summary */}
       <AlertSummarySection
         alerts={field.alerts}
+        emptyStateTitle={field.alertsEmptyStateTitle}
+        emptyStateDescription={field.alertsEmptyStateDescription}
         focusedZoneId={focusedZoneId}
         onZoneSelect={onZoneSelect}
       />

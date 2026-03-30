@@ -1,4 +1,5 @@
-import { FieldOverviewScreen } from "../../../features/fields/FieldOverviewScreen";
+import { redirect } from "next/navigation";
+import { getPreviewFieldRoute } from "../../preview/previewRoutes";
 
 type FieldOverviewPageProps = {
   params: Promise<{
@@ -12,6 +13,5 @@ export default async function FieldOverviewPage({
   params,
 }: FieldOverviewPageProps) {
   const { fieldId } = await params;
-
-  return <FieldOverviewScreen fieldId={fieldId} />;
+  redirect(getPreviewFieldRoute(fieldId));
 }

@@ -81,7 +81,11 @@ export function createSupabaseAlertRepository(
         .order("started_at", { ascending: false })
         .order("updated_at", { ascending: false });
 
-      if (status) {
+      if (Array.isArray(status)) {
+        if (status.length > 0) {
+          query = query.in("status", [...status]);
+        }
+      } else if (typeof status === "string") {
         query = query.eq("status", status);
       }
 

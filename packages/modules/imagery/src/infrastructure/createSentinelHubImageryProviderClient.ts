@@ -52,16 +52,20 @@ const EPSG_4326_CRS = "http://www.opengis.net/def/crs/EPSG/0/4326";
 const TEN_METERS_IN_DEGREES = 0.00009;
 const MATERIALIZATION_CONCURRENCY = 6;
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+
+function isStabilityDebugEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" && process.env.FIELDPULSE_DEBUG_STABILITY === "1";
+}
 const SENTINEL_2_CELL_MEASUREMENT_EVALSCRIPT = `//VERSION=3
 function setup() {
   return {
     input: [{
-      bands: ["B02", "B03", "B04", "B08", "B11", "dataMask"]
+      bands: ["B02", "B03", "B04", "B05", "B08", "B8A", "B11", "dataMask"]
     }],
     output: [
       {
         id: "data",
-        bands: ["ndvi", "ndmi", "shadow"],
+        bands: ["ndvi", "ndre", "ndmi", "shadow"],
         sampleType: "FLOAT32"
       },
       {
@@ -79,14 +83,16 @@ function clamp(value, minimum, maximum) {
 
 function evaluatePixel(sample) {
   const ndviDenominator = sample.B08 + sample.B04;
+  const ndreDenominator = sample.B8A + sample.B05;
   const ndmiDenominator = sample.B08 + sample.B11;
   const ndvi = ndviDenominator === 0 ? 0 : (sample.B08 - sample.B04) / ndviDenominator;
+  const ndre = ndreDenominator === 0 ? 0 : (sample.B8A - sample.B05) / ndreDenominator;
   const ndmi = ndmiDenominator === 0 ? 0 : (sample.B08 - sample.B11) / ndmiDenominator;
   const brightness = (sample.B02 + sample.B03 + sample.B04) / 3;
   const shadow = clamp((0.35 - brightness) / 0.35, 0, 1);
 
   return {
-    data: [ndvi, ndmi, shadow],
+    data: [ndvi, ndre, ndmi, shadow],
     dataMask: [sample.dataMask]
   };
 }`;
@@ -314,6 +320,14 @@ async function postJsonWithRetry(
     }
 
     attempt += 1;
+    if (isStabilityDebugEnabled()) {
+      console.debug("[stability][imagery] retrying-request", {
+        url,
+        attempt,
+        retries,
+        status: response.status,
+      });
+    }
     await sleep(250 * attempt);
   }
 }
@@ -330,6 +344,14 @@ async function mapWithConcurrency<T, TResult>(
   const results = new Array<TResult>(items.length);
   let nextIndex = 0;
   const workerCount = Math.min(concurrency, items.length);
+
+  if (isStabilityDebugEnabled()) {
+    console.debug("[stability][imagery] concurrency-batch", {
+      itemCount: items.length,
+      concurrency,
+      workerCount,
+    });
+  }
 
   await Promise.all(
     Array.from({ length: workerCount }, async () => {
@@ -417,15 +439,17 @@ async function fetchSentinel2CellMeasurements({
   }
 
   const ndvi = readBandMean(payload, "ndvi");
+  const ndre = readBandMean(payload, "ndre");
   const ndmi = readBandMean(payload, "ndmi");
   const shadow = readBandMean(payload, "shadow");
 
-  if (ndvi === null && ndmi === null && shadow === null) {
+  if (ndvi === null && ndre === null && ndmi === null && shadow === null) {
     return null;
   }
 
   return {
     ...(ndvi === null ? {} : { ndvi: clamp(Number(ndvi.toFixed(4)), -1, 1) }),
+    ...(ndre === null ? {} : { ndre: clamp(Number(ndre.toFixed(4)), -1, 1) }),
     ...(ndmi === null ? {} : { ndmi: clamp(Number(ndmi.toFixed(4)), -1, 1) }),
     ...(shadow === null
       ? {}
@@ -800,6 +824,7 @@ export function createSentinelHubImageryProviderClient({
       }
     },
     async discoverLatestScene(input: DiscoverLatestImagerySceneInput) {
+      const startedAt = isStabilityDebugEnabled() ? performance.now() : 0;
       const accessToken = await fetchAccessToken(tokenUrl, clientId, clientSecret);
       const response = await fetch(`${baseUrl}/api/v1/catalog/1.0.0/search`, {
         method: "POST",
@@ -852,7 +877,7 @@ export function createSentinelHubImageryProviderClient({
         note: `Sentinel Hub scene discovered for ${provider}.`,
       } satisfies ImageryScene;
 
-      return {
+      const result = {
         scene,
         metadata: {
           discoveryMode: "provider",
@@ -871,8 +896,19 @@ export function createSentinelHubImageryProviderClient({
         },
         note: scene.note,
       };
+
+      if (isStabilityDebugEnabled()) {
+        console.debug("[stability][imagery] discovered-scene", {
+          provider,
+          fieldId: input.fieldId,
+          durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+        });
+      }
+
+      return result;
     },
     async materializeFieldObservation(input: MaterializeImagerySceneInput) {
+      const startedAt = isStabilityDebugEnabled() ? performance.now() : 0;
       const baseGrid = await rasterGridProvider.observeFieldRaster({
         workspaceId: input.workspaceId,
         fieldId: input.fieldId,
@@ -904,7 +940,7 @@ export function createSentinelHubImageryProviderClient({
         return null;
       }
 
-      return {
+      const result = {
         observation,
         metadata: {
           materializationMode: "provider",
@@ -914,6 +950,17 @@ export function createSentinelHubImageryProviderClient({
         },
         note: "Sentinel Hub statistics materialized field cell measurements.",
       };
+
+      if (isStabilityDebugEnabled()) {
+        console.debug("[stability][imagery] materialized-observation", {
+          provider,
+          fieldId: input.fieldId,
+          cellCount: observation.cells.length,
+          durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+        });
+      }
+
+      return result;
     },
   };
 }

@@ -35,6 +35,9 @@ importers:
       '@fieldpulse/module-moisture':
         specifier: workspace:*
         version: link:../../packages/modules/moisture
+      '@fieldpulse/module-reports':
+        specifier: workspace:*
+        version: link:../../packages/modules/reports
       '@fieldpulse/module-workspaces':
         specifier: workspace:*
         version: link:../../packages/modules/workspaces
@@ -81,6 +84,9 @@ importers:
       '@fieldpulse/module-imagery':
         specifier: workspace:*
         version: link:../../packages/modules/imagery
+      '@fieldpulse/module-market':
+        specifier: workspace:*
+        version: link:../../packages/modules/market
       '@fieldpulse/module-moisture':
         specifier: workspace:*
         version: link:../../packages/modules/moisture
@@ -227,7 +233,11 @@ importers:
         specifier: workspace:*
         version: link:../../platform/db
 
-  packages/modules/market: {}
+  packages/modules/market:
+    dependencies:
+      '@fieldpulse/platform-db':
+        specifier: workspace:*
+        version: link:../../platform/db
 
   packages/modules/moisture:
     dependencies:
@@ -264,6 +274,12 @@ importers:
       '@fieldpulse/platform-storage':
         specifier: workspace:*
         version: link:../../platform/storage
+
+  packages/modules/scouting:
+    dependencies:
+      '@fieldpulse/platform-db':
+        specifier: workspace:*
+        version: link:../../platform/db
 
   packages/modules/weather:
     dependencies:
@@ -328,12 +344,18 @@ importers:
       '@fieldpulse/module-imagery':
         specifier: workspace:*
         version: link:../../modules/imagery
+      '@fieldpulse/module-market':
+        specifier: workspace:*
+        version: link:../../modules/market
       '@fieldpulse/module-moisture':
         specifier: workspace:*
         version: link:../../modules/moisture
       '@fieldpulse/module-reports':
         specifier: workspace:*
         version: link:../../modules/reports
+      '@fieldpulse/module-scouting':
+        specifier: workspace:*
+        version: link:../../modules/scouting
       '@fieldpulse/module-weather':
         specifier: workspace:*
         version: link:../../modules/weather

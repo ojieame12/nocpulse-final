@@ -1,18 +1,23 @@
-import type {
-  SyncLatestImageryInput,
-  SyncLatestImageryResult,
-} from "@fieldpulse/module-imagery";
+import type { ImageryProvider } from "@fieldpulse/module-imagery";
 
-export type BuildInitialFieldOnboardingPlanInput = Omit<
-  SyncLatestImageryInput,
-  "requestedAt"
-> & {
+export type FieldOnboardingJobPayload = {
+  workspaceId: string;
+  fieldId: string;
   requestedAt?: string;
+  providers?: readonly ImageryProvider[];
+  dryRun?: boolean;
 };
 
+export type BuildInitialFieldOnboardingPlanInput = FieldOnboardingJobPayload;
+export type BuildRefreshFieldOnboardingPlanInput = FieldOnboardingJobPayload;
+
+export type FieldOnboardingJobKey =
+  | "field.bootstrap-initial"
+  | "field.refresh-intake";
+
 export type FieldOnboardingJobRequest = {
-  key: "imagery.sync-latest";
-  payload: SyncLatestImageryInput;
+  key: FieldOnboardingJobKey;
+  payload: FieldOnboardingJobPayload;
 };
 
 export type FieldOnboardingPlan = {
@@ -24,8 +29,8 @@ export type FieldOnboardingPlan = {
 
 export type FieldOnboardingDispatchReceipt = {
   key: FieldOnboardingJobRequest["key"];
-  payload: SyncLatestImageryInput;
-  result: SyncLatestImageryResult | unknown;
+  payload: FieldOnboardingJobPayload;
+  result: unknown;
 };
 
 export type FieldOnboardingDispatcher = {

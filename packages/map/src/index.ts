@@ -20,13 +20,24 @@ export {
 } from "./contracts/presentation";
 export { type CellExtrusionRenderModel } from "./domain/render/CellExtrusionRenderModel";
 export {
+  formatCellPercentile,
+  describeCellAnomalyClass,
+} from "./contracts/cellAnalytics";
+export {
+  type CellAttentionLevel,
+  resolveCellAttentionLevel,
+  describeCellAttentionLevel,
+} from "./contracts/cellAttention";
+export {
   type FieldAgronomicSurfaceMetricKey,
   type FieldAgronomicCellRenderModel,
   type FieldAgronomicSurfaceRenderModel,
+  type CellAnomalyClass,
 } from "./domain/render/FieldAgronomicSurfaceRenderModel";
 export {
   type FieldBoundaryPreviewRenderModel,
   type FieldBoundaryFeature,
+  type FieldBoundaryZoneRenderModel,
   type MapBoundingBox,
   type MapGeoPoint,
   type MapRgbColor,
@@ -37,11 +48,21 @@ export {
   type ColorRamp,
   type ColorRampStop,
   resolveColorRamp,
+  resolveRampColor,
   NDVI_RAMP,
   NDRE_RAMP,
   NDMI_RAMP,
+  RADAR_WETNESS_RAMP,
   MOISTURE_RAMP,
 } from "./contracts/colorRamp";
+export {
+  type MetricModeContract,
+  type MetricThresholdLabel,
+  resolveMetricModeContract,
+  formatMetricDisplayValue,
+  describeMetricSource,
+  describeCellSourceTier,
+} from "./contracts/metricModeContract";
 export { buildFieldBoundaryPreviewRenderModel } from "./application/buildFieldBoundaryPreviewRenderModel";
 export { buildFieldAgronomicSurfaceRenderModel } from "./application/buildFieldAgronomicSurfaceRenderModel";
 export { buildFieldMoistureSurfaceRenderModel } from "./application/buildFieldMoistureSurfaceRenderModel";

@@ -563,10 +563,6 @@ export function createPlanetImageryProviderClient({
                   type: "AssetFilter",
                   config: ["ortho_analytic_4b_sr", "ortho_analytic_4b"],
                 },
-                {
-                  type: "PermissionFilter",
-                  config: ["assets:download"],
-                },
               ],
             },
           }),

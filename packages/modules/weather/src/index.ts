@@ -18,7 +18,10 @@ export {
   type FieldWeatherForecastEntryInput,
   type ReplaceFieldWeatherForecastSetInput,
 } from "./contracts/ReplaceFieldWeatherForecastSetInput";
-export { type FieldWeatherProfile } from "./contracts/FieldWeatherProfile";
+export {
+  type FieldWeatherProfile,
+  type FieldWeatherProfileDataAvailability,
+} from "./contracts/FieldWeatherProfile";
 export {
   type ComputeFieldWeatherDerivedSignalsInput,
 } from "./contracts/ComputeFieldWeatherDerivedSignalsInput";

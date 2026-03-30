@@ -10,7 +10,7 @@ export type RenderFieldReportResult = {
     fieldId: string;
     fieldName: string;
     reportDate: string;
-    activeAlertCount: number;
+    activeAlertCount: number | null;
     activeFindingCount: number;
     trackedZoneCount: number;
   };

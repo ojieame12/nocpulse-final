@@ -1,5 +1,5 @@
 import { DEFAULT_MAP_EXTRUSION_MATERIAL } from "../contracts/material";
-import { resolveColorRamp, type ColorRamp } from "../contracts/colorRamp";
+import { resolveRampColor } from "../contracts/colorRamp";
 import type {
   FieldAgronomicCellRenderModel,
   FieldAgronomicSurfaceRenderModel,
@@ -15,6 +15,8 @@ import type {
   MapRgbaColor,
 } from "../domain/render/FieldBoundaryPreviewRenderModel";
 import { buildSyntheticFieldCellGrid } from "../domain/geometry/buildSyntheticFieldCellGrid";
+import { normalizeExtrusionHeightSpread } from "./normalizeExtrusionHeightSpread";
+import { resolveFieldRelativeCellAnalytics } from "./resolveFieldRelativeCellAnalytics";
 
 type BuildFieldMoistureSurfaceRenderModelInput = {
   fieldId: string;
@@ -41,63 +43,58 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-/**
- * Boost saturation of an RGB color.
- *
- * Pushes each channel away from the luminance midpoint,
- * preventing the muddy mid-tones that linear RGB interpolation
- * creates between complementary hues (red→green = brown).
- */
-function boostSaturation(
-  [r, g, b]: MapRgbColor,
-  factor: number,
-): MapRgbColor {
-  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-  return [
-    clamp(Math.round(lum + (r - lum) * factor), 0, 255),
-    clamp(Math.round(lum + (g - lum) * factor), 0, 255),
-    clamp(Math.round(lum + (b - lum) * factor), 0, 255),
-  ];
-}
-
-function interpolateColor(
-  valuePct: number,
-  stops: ColorRamp,
-): MapRgbColor {
-  const clamped = clamp(valuePct, 0, 100);
-
-  for (let index = 0; index < stops.length - 1; index += 1) {
-    const [startPct, startColor] = stops[index];
-    const [endPct, endColor] = stops[index + 1];
-
-    if (clamped <= endPct) {
-      const range = endPct - startPct || 1;
-      const weight = (clamped - startPct) / range;
-
-      const raw: MapRgbColor = [
-        Math.round(startColor[0] + (endColor[0] - startColor[0]) * weight),
-        Math.round(startColor[1] + (endColor[1] - startColor[1]) * weight),
-        Math.round(startColor[2] + (endColor[2] - startColor[2]) * weight),
-      ];
-
-      const midness = 1 - Math.abs(weight - 0.5) * 2;
-      const boost = 1 + midness * 0.35;
-      return boostSaturation(raw, boost);
-    }
-  }
-
-  return [...stops[stops.length - 1][1]];
-}
-
 function withAlpha([red, green, blue]: MapRgbColor, alpha: number): MapRgbaColor {
   return [red, green, blue, alpha];
 }
 
-function resolveDisplayHeightM(rootZonePct: number, surfacePct: number): number {
-  const blended = rootZonePct * 0.7 + surfacePct * 0.3;
-  // Wide range so metric value is the dominant visual factor.
-  // 0% → 4m (stubby), 50% → 34m, 100% → 64m.
-  return clamp(4 + blended * 0.6, 4, 64);
+/** Edge colour: darkened tint of the cell fill so edges blend naturally. */
+function darkenForEdge([r, g, b]: MapRgbColor, alpha: number): MapRgbaColor {
+  return [
+    Math.round(r * 0.45),
+    Math.round(g * 0.45),
+    Math.round(b * 0.45),
+    alpha,
+  ];
+}
+
+const ADEQUATE_MOISTURE_LOW_PCT = 38;
+const ADEQUATE_MOISTURE_HIGH_PCT = 62;
+const SATURATION_ALERT_PCT = 84;
+const BASE_MOISTURE_HEIGHT_M = 12;
+
+function resolveMoistureStressAttention(
+  rootZonePct: number,
+  surfacePct: number,
+): number {
+  const blended = rootZonePct * 0.78 + surfacePct * 0.22;
+
+  if (blended < ADEQUATE_MOISTURE_LOW_PCT) {
+    return clamp(
+      (ADEQUATE_MOISTURE_LOW_PCT - blended) / ADEQUATE_MOISTURE_LOW_PCT,
+      0,
+      1,
+    );
+  }
+
+  if (blended > SATURATION_ALERT_PCT) {
+    return clamp(
+      ((blended - SATURATION_ALERT_PCT) / (100 - SATURATION_ALERT_PCT)) * 0.7,
+      0,
+      0.7,
+    );
+  }
+
+  if (blended > ADEQUATE_MOISTURE_HIGH_PCT) {
+    return clamp(
+      ((blended - ADEQUATE_MOISTURE_HIGH_PCT) /
+        (SATURATION_ALERT_PCT - ADEQUATE_MOISTURE_HIGH_PCT)) *
+        0.35,
+      0,
+      0.35,
+    );
+  }
+
+  return 0;
 }
 
 function resolveCellMoistureValue(
@@ -129,7 +126,7 @@ function classifyVariance(absDelta: number): CellVarianceBucket {
 
 function classifySeverity(valuePct: number): CellSeverityLabel {
   if (valuePct < 18) return "critical";
-  if (valuePct < 30) return "stressed";
+  if (valuePct < 35 || valuePct > 85) return "stressed";
   return "healthy";
 }
 
@@ -141,11 +138,12 @@ function resolveSourceTier(sourceKey: string | null | undefined): CellSourceTier
   }
 
   if (
-    normalizedKey.includes("synthetic-grid-v1") ||
-    normalizedKey.includes("synthetic-raster-grid-v1") ||
+    normalizedKey.includes("synthetic-grid") ||
+    normalizedKey.includes("synthetic-raster-grid") ||
     normalizedKey.includes("imagery-observation-synthetic-v1") ||
     normalizedKey.includes("imagery-synthetic-raster-observation-v1") ||
-    normalizedKey.includes("planet-raster-grid-v1")
+    normalizedKey.includes("planet-raster-grid-v1") ||
+    normalizedKey.includes("synthetic-preview")
   ) {
     return "synthetic";
   }
@@ -188,6 +186,45 @@ function resolveSourceTier(sourceKey: string | null | undefined): CellSourceTier
   return "model-only";
 }
 
+function resolveSourceScale(sourceTier: CellSourceTier): number {
+  if (sourceTier === "synthetic") {
+    return 0.82;
+  }
+
+  if (sourceTier === "model-only") {
+    return 0.86;
+  }
+
+  if (sourceTier === "stale-sar" || sourceTier === "sentinel-stale") {
+    return 0.92;
+  }
+
+  return 1;
+}
+
+function resolveFillAlpha(
+  confidence: BuildFieldMoistureSurfaceRenderModelInput["confidence"],
+  sourceTier: CellSourceTier,
+): number {
+  const base =
+    confidence === "high" ? 248 : confidence === "medium" ? 228 : 196;
+
+  const sourcePenalty =
+    sourceTier === "synthetic"
+      ? 42
+      : sourceTier === "model-only"
+        ? 52
+        : sourceTier === "stale-sar" || sourceTier === "sentinel-stale"
+          ? 24
+          : 0;
+
+  return clamp(base - sourcePenalty, 128, 255);
+}
+
+function resolveLineAlpha(fillAlpha: number): number {
+  return clamp(Math.round(fillAlpha * 0.34), 42, 92);
+}
+
 function resolveMaterial(
   confidence: BuildFieldMoistureSurfaceRenderModelInput["confidence"],
 ) {
@@ -222,7 +259,6 @@ export function buildFieldMoistureSurfaceRenderModel({
   sourceLabel,
   persistedCells = [],
 }: BuildFieldMoistureSurfaceRenderModelInput): FieldAgronomicSurfaceRenderModel {
-  const ramp = resolveColorRamp("root-zone-moisture-pct");
   const numericConfidence = CONFIDENCE_MAP[confidence] ?? 0.5;
 
   // ── Pass 1: compute raw cell values ──
@@ -231,7 +267,7 @@ export function buildFieldMoistureSurfaceRenderModel({
     centroid: MapGeoPoint;
     polygon: MapGeoPoint[];
     metricValuePct: number;
-    displayHeightM: number;
+    surfacePct: number;
     sourceTier: CellSourceTier;
   };
 
@@ -244,7 +280,7 @@ export function buildFieldMoistureSurfaceRenderModel({
             ([longitude, latitude]) => [longitude, latitude] as MapGeoPoint,
           ),
           metricValuePct: cell.rootZonePct,
-          displayHeightM: resolveDisplayHeightM(cell.rootZonePct, cell.surfacePct),
+          surfacePct: cell.surfacePct,
           sourceTier: resolveSourceTier(cell.sourceKey),
         }))
       : buildSyntheticFieldCellGrid({
@@ -269,7 +305,7 @@ export function buildFieldMoistureSurfaceRenderModel({
             centroid: cell.centroid,
             polygon: cell.polygon,
             metricValuePct: cellRootZonePct,
-            displayHeightM: resolveDisplayHeightM(cellRootZonePct, cellSurfacePct),
+            surfacePct: cellSurfacePct,
             sourceTier: "synthetic",
           };
         });
@@ -278,25 +314,38 @@ export function buildFieldMoistureSurfaceRenderModel({
     rawCells.length > 0
       ? rawCells.reduce((sum, c) => sum + c.metricValuePct, 0) / rawCells.length
       : rootZonePct;
+  const fieldRelativeAnalytics = resolveFieldRelativeCellAnalytics(
+    rawCells.map((cell) => cell.metricValuePct),
+  );
 
   // ── Pass 2: build render models with analytics ──
-  const cells: FieldAgronomicCellRenderModel[] = rawCells.map((cell) => {
-    const color = interpolateColor(cell.metricValuePct, ramp);
+  const draftCells: FieldAgronomicCellRenderModel[] = rawCells.map((cell, index) => {
+    const color = resolveRampColor("root-zone-moisture-pct", cell.metricValuePct);
     const delta = cell.metricValuePct - metricAveragePct;
     const absDelta = Math.abs(delta);
     const vBucket = classifyVariance(absDelta);
-
-    // V1-style relief: base height + anomaly boost + variance boost.
-    // Cells that deviate from the field avg or sit in high-variance zones
-    // stand taller, making spatial patterns easier to read.
-    const anomalyBoost = (absDelta / 100) * 14;
-    const varianceBoost = vBucket === "high" ? 6 : vBucket === "medium" ? 3 : 0;
-    const sourceScale = cell.sourceTier === "synthetic" ? 0.7 : 1.0;
-    const enrichedHeight = clamp(
-      (cell.displayHeightM + anomalyBoost + varianceBoost) * sourceScale,
-      4,
-      72,
+    const stressAttention = resolveMoistureStressAttention(
+      cell.metricValuePct,
+      cell.surfacePct,
     );
+    const anomalyAttention = clamp(absDelta / 18, 0, 1);
+    const varianceBoost = vBucket === "high" ? 6 : vBucket === "medium" ? 3 : 0;
+    const sourceScale = resolveSourceScale(cell.sourceTier);
+    const attentionHeight = BASE_MOISTURE_HEIGHT_M +
+      stressAttention * 28 +
+      anomalyAttention * 12 +
+      varianceBoost;
+    const enrichedHeight = clamp(
+      attentionHeight * sourceScale,
+      8,
+      64,
+    );
+    const fillAlpha = resolveFillAlpha(confidence, cell.sourceTier);
+    const lineAlpha = resolveLineAlpha(fillAlpha);
+    const relativeAnalytics = fieldRelativeAnalytics[index] ?? {
+      percentileInField: 50,
+      anomalyClass: "near-field" as const,
+    };
 
     return {
       id: cell.id,
@@ -304,18 +353,35 @@ export function buildFieldMoistureSurfaceRenderModel({
       polygon: cell.polygon,
       metricValuePct: cell.metricValuePct,
       displayHeightM: enrichedHeight,
-      fillColor: withAlpha(color, 255),
-      lineColor: withAlpha([18, 24, 18], 48),
+      fillColor: withAlpha(color, fillAlpha),
+      lineColor: darkenForEdge(color, lineAlpha),
 
       // Analytics payload
       confidence: numericConfidence,
       sourceTier: cell.sourceTier,
       varianceBucket: vBucket,
       deltaFromFieldAvgPct: Math.round(delta * 10) / 10,
+      percentileInField: relativeAnalytics.percentileInField,
+      anomalyClass: relativeAnalytics.anomalyClass,
       zoneId: null,
       severityLabel: classifySeverity(cell.metricValuePct),
     };
   });
+
+  const normalizedHeights = normalizeExtrusionHeightSpread(
+    draftCells.map((cell) => cell.displayHeightM),
+    {
+      softMinRangeM: 4,
+      maxBlend: 0.35,
+      minHeightM: 8,
+      maxHeightM: 64,
+    },
+  );
+
+  const cells: FieldAgronomicCellRenderModel[] = draftCells.map((cell, index) => ({
+    ...cell,
+    displayHeightM: normalizedHeights[index] ?? cell.displayHeightM,
+  }));
 
   return {
     id: `field-moisture-surface:${fieldId}`,

@@ -14,7 +14,11 @@ import maplibregl, {
   type Map as MapLibreMap,
   type StyleSpecification,
 } from "maplibre-gl";
-import type { FieldBoundaryPreviewRenderModel, MapGeoPoint } from "../../domain/render/FieldBoundaryPreviewRenderModel";
+import type {
+  FieldBoundaryPreviewRenderModel,
+  FieldBoundaryZoneRenderModel,
+  MapGeoPoint,
+} from "../../domain/render/FieldBoundaryPreviewRenderModel";
 import type { FieldAgronomicCellRenderModel } from "../../domain/render/FieldAgronomicSurfaceRenderModel";
 import type { CellHoverEvent, CellClickEvent } from "../../domain/interaction/CellInteractionEvent";
 import type { MapRuntimeContract } from "./MapRuntimeContract";
@@ -58,7 +62,7 @@ const SELECTED_LIFT_M = 6;
 const HOVER_DIM_TARGET_ALPHA = 130;
 
 /** How fast hover dim fades in/out (0–1 per ms). */
-const HOVER_DIM_RATE = 1 / 120; // 120ms to full dim
+const HOVER_DIM_RATE = 1 / 70; // 70ms to full dim — snappy response
 
 /** Entrance animation duration (ms). Extrusions grow + colors fade in. */
 const ENTRANCE_DURATION_MS = 700;
@@ -124,6 +128,32 @@ function computeCellsBbox(cells: FieldAgronomicCellRenderModel[]): [number, numb
   return [west, south, east, north];
 }
 
+function computeZoneBbox(
+  zone: Pick<FieldBoundaryZoneRenderModel, "geometry">,
+): [number, number, number, number] | null {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+
+  for (const polygon of zone.geometry.coordinates) {
+    for (const ring of polygon) {
+      for (const [lng, lat] of ring) {
+        if (lng < west) west = lng;
+        if (lng > east) east = lng;
+        if (lat < south) south = lat;
+        if (lat > north) north = lat;
+      }
+    }
+  }
+
+  if (!Number.isFinite(west) || !Number.isFinite(south) || !Number.isFinite(east) || !Number.isFinite(north)) {
+    return null;
+  }
+
+  return [west, south, east, north];
+}
+
 /** Build a convex hull outline from zone cells' polygons for the zone outline layer. */
 function buildZoneOutlineRing(cells: FieldAgronomicCellRenderModel[]): MapGeoPoint[] {
   // Collect all vertices from the zone's cells
@@ -169,6 +199,36 @@ function buildZoneOutlineRing(cells: FieldAgronomicCellRenderModel[]): MapGeoPoi
   return hull;
 }
 
+function resolveZoneFillColor(
+  zone: Pick<FieldBoundaryZoneRenderModel, "id" | "status">,
+  focusedZoneId: string | null,
+): [number, number, number, number] {
+  if (zone.id === focusedZoneId) {
+    return [245, 214, 98, 38];
+  }
+
+  if (zone.status === "resolved") {
+    return [148, 163, 184, 8];
+  }
+
+  return [191, 219, 254, 12];
+}
+
+function resolveZoneLineColor(
+  zone: Pick<FieldBoundaryZoneRenderModel, "id" | "status">,
+  focusedZoneId: string | null,
+): [number, number, number, number] {
+  if (zone.id === focusedZoneId) {
+    return [245, 214, 98, 214];
+  }
+
+  if (zone.status === "resolved") {
+    return [148, 163, 184, 56];
+  }
+
+  return [191, 219, 254, 92];
+}
+
 // ── Layer factory ──────────────────────────────────────────
 
 function createLayers(
@@ -177,6 +237,8 @@ function createLayers(
   callbacks: {
     onCellHover: (info: PickingInfo) => void;
     onCellClick: (info: PickingInfo) => void;
+    onFieldHover: (info: PickingInfo) => void;
+    onFieldClick: (info: PickingInfo) => void;
   },
 ) {
   const palette = model.presentation.palette;
@@ -185,6 +247,21 @@ function createLayers(
   const anyHovered = hoveredCellId !== null || hoverDimProgress > 0.005;
   const focusedZoneId = model.focusedZoneId ?? null;
   const anyZoneFocused = focusedZoneId !== null;
+  const zoneFeatures =
+    model.zones?.map((zone) => ({
+      type: "Feature" as const,
+      properties: {
+        zoneId: zone.id,
+        family: zone.family,
+        status: zone.status,
+        latestSeverity: zone.latestSeverity,
+      },
+      geometry: zone.geometry,
+    })) ?? [];
+  const contextFieldFeatures =
+    model.workspaceFieldFeatures?.filter(
+      (feature) => feature.properties.fieldId !== model.fieldId,
+    ) ?? [];
 
   // Entrance: overshoot then settle → extrusions bounce up slightly past target
   const rawEntrance = entranceProgress;
@@ -200,6 +277,48 @@ function createLayers(
   const dimAlpha = lerp(255, HOVER_DIM_TARGET_ALPHA, hoverDimProgress);
 
   return [
+    // ── 0. Workspace field context outlines (clickable) ──
+    ...(contextFieldFeatures.length > 0
+      ? [
+          new GeoJsonLayer({
+            id: `workspace-field-context-fill:${model.fieldId}`,
+            data: contextFieldFeatures,
+            filled: true,
+            stroked: false,
+            pickable: true,
+            getFillColor: [14, 22, 18, 22] as [number, number, number, number],
+            autoHighlight: true,
+            highlightColor: [255, 255, 255, 28] as [number, number, number, number],
+            onHover: callbacks.onFieldHover,
+            onClick: callbacks.onFieldClick,
+          }),
+          new GeoJsonLayer({
+            id: `workspace-field-context-hit:${model.fieldId}`,
+            data: contextFieldFeatures,
+            filled: false,
+            stroked: true,
+            pickable: true,
+            lineWidthUnits: "pixels",
+            lineWidthMinPixels: 10,
+            lineWidthMaxPixels: 12,
+            getLineColor: [255, 255, 255, 1] as [number, number, number, number],
+            onHover: callbacks.onFieldHover,
+            onClick: callbacks.onFieldClick,
+          }),
+          new GeoJsonLayer({
+            id: `workspace-field-context-outline:${model.fieldId}`,
+            data: contextFieldFeatures,
+            filled: false,
+            stroked: true,
+            pickable: false,
+            lineWidthUnits: "pixels",
+            lineWidthMinPixels: 2,
+            lineWidthMaxPixels: 4,
+            getLineColor: [203, 213, 225, 108] as [number, number, number, number],
+          }),
+        ]
+      : []),
+
     // ── 1. Field boundary fill (ground plane) ──
     new GeoJsonLayer({
       id: `field-boundary-fill:${model.fieldId}`,
@@ -213,7 +332,7 @@ function createLayers(
       getLineColor: palette.lineColor,
     }),
 
-    // ── 2a. Ambient occlusion ground contact (V1-style) ──
+    // ── 3a. Ambient occlusion ground contact (V1-style) ──
     // Non-offset dark fill directly beneath cells — simulates AO
     // where extrusions meet the ground plane.
     ...(surface
@@ -237,7 +356,7 @@ function createLayers(
         ]
       : []),
 
-    // ── 2b. Directional drop shadow (offset opposite the sun) ──
+    // ── 3b. Directional drop shadow (offset opposite the sun) ──
     ...(surface
       ? (() => {
           const lightDir = model.presentation.lightingPreset.directionalDirection;
@@ -266,7 +385,7 @@ function createLayers(
         })()
       : []),
 
-    // ── 3. Main cell extrusion layer (interactive) ──
+    // ── 4. Main cell extrusion layer (interactive) ──
     ...(surface
       ? [
           new PolygonLayer({
@@ -353,11 +472,12 @@ function createLayers(
             onHover: callbacks.onCellHover,
             onClick: callbacks.onCellClick,
 
-            // ── Smooth transitions (eliminates snap/flicker on hover) ──
+            // ── Smooth transitions — kept short to prevent ghost extrusions
+            //    when hopping between cells quickly ──
             transitions: {
-              getElevation: { duration: 200, easing: easeOutCubic },
-              getFillColor: { duration: 150 },
-              getLineColor: { duration: 150 },
+              getElevation: { duration: 80, easing: easeOutCubic },
+              getFillColor: { duration: 60 },
+              getLineColor: { duration: 60 },
             },
 
             // ── Update triggers ──
@@ -370,7 +490,7 @@ function createLayers(
         ]
       : []),
 
-    // ── 4. Selected cell outline ring ──
+    // ── 5. Selected cell outline ring ──
     ...(surface && selectedCellId
       ? (() => {
           const selectedCell = surface.cells.find((c) => c.id === selectedCellId);
@@ -392,8 +512,54 @@ function createLayers(
         })()
       : []),
 
-    // ── 5. Zone aggregate outline (convex hull around focused zone cells) ──
-    ...(surface && anyZoneFocused
+    // ── 6. Tracked zone footprints (real persisted zone geometry) ──
+    ...(zoneFeatures.length > 0
+      ? [
+          new GeoJsonLayer({
+            id: `field-zone-footprints:${model.fieldId}`,
+            data: zoneFeatures,
+            filled: true,
+            stroked: true,
+            pickable: false,
+            lineWidthUnits: "pixels",
+            lineWidthMinPixels: 2,
+            getFillColor: (feature: {
+              properties?: {
+                zoneId?: string;
+                status?: string;
+              };
+            }) =>
+              resolveZoneFillColor(
+                {
+                  id: feature.properties?.zoneId ?? "",
+                  status: feature.properties?.status ?? "new",
+                },
+                focusedZoneId,
+              ),
+            getLineColor: (feature: {
+              properties?: {
+                zoneId?: string;
+                status?: string;
+              };
+            }) =>
+              resolveZoneLineColor(
+                {
+                  id: feature.properties?.zoneId ?? "",
+                  status: feature.properties?.status ?? "new",
+                },
+                focusedZoneId,
+              ),
+            getLineWidth: (feature: {
+              properties?: {
+                zoneId?: string;
+              };
+            }) => (feature.properties?.zoneId === focusedZoneId ? 3 : 2),
+          }),
+        ]
+      : []),
+
+    // ── 7. Focused zone outline fallback (for cell-linked zones without persisted geometry) ──
+    ...(surface && anyZoneFocused && !zoneFeatures.some((feature) => feature.properties.zoneId === focusedZoneId)
       ? (() => {
           const zoneCells = surface.cells.filter((c) => c.zoneId === focusedZoneId);
           if (zoneCells.length < 2) return [];
@@ -431,7 +597,33 @@ function createLayers(
         })()
       : []),
 
-    // ── 6. Rim highlight (top-edge catch light) ──
+    // ── 8a. Soft-edge glow (wide, faint fill-tinted outline blends cell seams) ──
+    ...(surface
+      ? [
+          new PathLayer({
+            id: `${surface.id}:soft-edge`,
+            data: surface.cells,
+            pickable: false,
+            widthUnits: "pixels",
+            widthMinPixels: 3,
+            widthMaxPixels: 6,
+            getPath: (cell: FieldAgronomicCellRenderModel) => cell.polygon,
+            getColor: (cell: FieldAgronomicCellRenderModel) => {
+              const [r, g, b] = cell.fillColor;
+              const a = Math.round(22 * alphaMultiplier);
+              return [
+                Math.round(r * 0.35),
+                Math.round(g * 0.35),
+                Math.round(b * 0.35),
+                a,
+              ] as [number, number, number, number];
+            },
+            getWidth: 5,
+          }),
+        ]
+      : []),
+
+    // ── 8b. Rim highlight (top-edge catch light — softened) ──
     ...(surface
       ? [
           new PathLayer({
@@ -442,13 +634,13 @@ function createLayers(
             widthMinPixels: 1,
             widthMaxPixels: 2,
             getPath: (cell: FieldAgronomicCellRenderModel) => cell.polygon,
-            getColor: [255, 255, 245, Math.round(42 * alphaMultiplier)] as [number, number, number, number],
+            getColor: [255, 255, 245, Math.round(32 * alphaMultiplier)] as [number, number, number, number],
             getWidth: 1.5,
           }),
         ]
       : []),
 
-    // ── 6. Field label dot ──
+    // ── 9. Field label dot ──
     new ScatterplotLayer({
       id: `field-boundary-label:${model.fieldId}`,
       data: [{ position: model.labelPoint }],
@@ -509,12 +701,16 @@ export type CreateFieldBoundaryPreviewRuntimeOptions = {
   style?: StyleSpecification;
   onCellHover?: (event: CellHoverEvent | null) => void;
   onCellClick?: (event: CellClickEvent) => void;
+  onFieldHover?: (fieldId: string | null) => void;
+  onFieldClick?: (fieldId: string) => void;
 };
 
 export function createFieldBoundaryPreviewRuntime({
   style = DEFAULT_STYLE,
   onCellHover,
   onCellClick,
+  onFieldHover,
+  onFieldClick,
 }: CreateFieldBoundaryPreviewRuntimeOptions = {}): MapRuntimeContract<FieldBoundaryPreviewRenderModel> {
   let map: MapLibreMap | null = null;
   let overlay: MapboxOverlay | null = null;
@@ -538,8 +734,9 @@ export function createFieldBoundaryPreviewRuntime({
 
   /** Hover-out debounce timer — prevents flicker when moving between cells. */
   let hoverOutTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Generous delay — only restore when cursor truly leaves the field. */
-  const HOVER_OUT_DELAY_MS = 300;
+  /** Short delay — clear quickly when cursor leaves a cell but long enough
+   *  to avoid flicker when moving between adjacent cells. */
+  const HOVER_OUT_DELAY_MS = 120;
 
   function assertMounted() {
     if (!map || !overlay) {
@@ -560,14 +757,19 @@ export function createFieldBoundaryPreviewRuntime({
 
       const target = interaction.hoveredCellId !== null ? 1 : 0;
       const step = dt * HOVER_DIM_RATE;
+      const prev = interaction.hoverDimProgress;
 
-      if (target > interaction.hoverDimProgress) {
-        interaction.hoverDimProgress = Math.min(interaction.hoverDimProgress + step, 1);
+      if (target > prev) {
+        interaction.hoverDimProgress = Math.min(prev + step, 1);
       } else {
-        interaction.hoverDimProgress = Math.max(interaction.hoverDimProgress - step, 0);
+        interaction.hoverDimProgress = Math.max(prev - step, 0);
       }
 
-      rebuildLayers();
+      // Only rebuild when the change is visually meaningful (> ~1 alpha unit)
+      const delta = Math.abs(interaction.hoverDimProgress - prev);
+      if (delta > 0.004) {
+        rebuildLayers();
+      }
 
       // Keep looping until we've settled at the target
       const settled = Math.abs(interaction.hoverDimProgress - target) < 0.005;
@@ -620,6 +822,8 @@ export function createFieldBoundaryPreviewRuntime({
         confidence: cell.confidence,
         sourceTier: cell.sourceTier,
         deltaFromFieldAvgPct: cell.deltaFromFieldAvgPct,
+        percentileInField: cell.percentileInField,
+        anomalyClass: cell.anomalyClass,
         varianceBucket: cell.varianceBucket,
         severityLabel: cell.severityLabel,
         zoneId: cell.zoneId,
@@ -660,6 +864,8 @@ export function createFieldBoundaryPreviewRuntime({
         confidence: cell.confidence,
         sourceTier: cell.sourceTier,
         deltaFromFieldAvgPct: cell.deltaFromFieldAvgPct,
+        percentileInField: cell.percentileInField,
+        anomalyClass: cell.anomalyClass,
         varianceBucket: cell.varianceBucket,
         severityLabel: cell.severityLabel,
         zoneId: cell.zoneId,
@@ -667,9 +873,38 @@ export function createFieldBoundaryPreviewRuntime({
     }
   }
 
+  function handleFieldClick(info: PickingInfo) {
+    const feature = info.object as
+      | {
+          properties?: {
+            fieldId?: string;
+          };
+        }
+      | undefined;
+    const fieldId = feature?.properties?.fieldId;
+
+    if (typeof fieldId === "string" && fieldId.length > 0) {
+      onFieldClick?.(fieldId);
+    }
+  }
+
+  function handleFieldHover(info: PickingInfo) {
+    const feature = info.object as
+      | {
+          properties?: {
+            fieldId?: string;
+          };
+        }
+      | undefined;
+    const fieldId = feature?.properties?.fieldId;
+    onFieldHover?.(typeof fieldId === "string" && fieldId.length > 0 ? fieldId : null);
+  }
+
   const layerCallbacks = {
     onCellHover: handleCellHover,
     onCellClick: handleCellClick,
+    onFieldHover: handleFieldHover,
+    onFieldClick: handleFieldClick,
   };
 
   // ── Layer rebuild (no camera change) ──
@@ -715,11 +950,18 @@ export function createFieldBoundaryPreviewRuntime({
     let targetBbox = model.bbox;
     let targetPadding = model.presentation.camera.paddingPx;
 
-    if (zoneFocusChanged && nextFocusedZoneId && model.agronomicSurface) {
-      const zoneCells = model.agronomicSurface.cells.filter(
-        (c) => c.zoneId === nextFocusedZoneId,
-      );
-      const zoneBbox = computeCellsBbox(zoneCells);
+    if (zoneFocusChanged && nextFocusedZoneId) {
+      const persistedZone = model.zones?.find((zone) => zone.id === nextFocusedZoneId) ?? null;
+      const persistedZoneBbox = persistedZone ? computeZoneBbox(persistedZone) : null;
+      const cellZoneBbox = model.agronomicSurface
+        ? computeCellsBbox(
+            model.agronomicSurface.cells.filter(
+              (c) => c.zoneId === nextFocusedZoneId,
+            ),
+          )
+        : null;
+      const zoneBbox = persistedZoneBbox ?? cellZoneBbox;
+
       if (zoneBbox) {
         targetBbox = zoneBbox;
         targetPadding = Math.max(targetPadding, 80);

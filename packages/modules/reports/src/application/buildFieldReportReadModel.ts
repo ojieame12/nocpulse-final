@@ -5,7 +5,7 @@ import {
   type FieldIntelligenceZoneRepository,
 } from "@fieldpulse/module-crop-intelligence";
 import type { FieldCropContextRepository } from "@fieldpulse/module-field-crop-context";
-import type { FieldRepository } from "@fieldpulse/module-fields";
+import type { FieldDetail, FieldRepository } from "@fieldpulse/module-fields";
 import type { FieldImportBatchRepository } from "@fieldpulse/module-field-intake";
 import type {
   FieldRasterObservation,
@@ -25,6 +25,7 @@ import {
 } from "@fieldpulse/module-weather";
 import type { TimestampIso, WorkspaceId } from "@fieldpulse/platform-db";
 import type {
+  FieldReportDataAvailability,
   FieldReportMoistureSummary,
   FieldReportReadModel,
 } from "../contracts/FieldReportReadModel";
@@ -48,6 +49,7 @@ export type BuildFieldReportReadModelInput = {
   repositories: BuildFieldReportReadModelRepositories;
   workspaceId: WorkspaceId;
   fieldId: string;
+  field?: FieldDetail;
   reportDate: TimestampIso;
   forecastLimit?: number;
   alertLimit?: number;
@@ -86,6 +88,8 @@ function buildMoistureSummary(input: {
 }): FieldReportMoistureSummary {
   const rootZoneValues = input.latestCells.map((cell) => cell.rootZonePct);
   const surfaceValues = input.latestCells.map((cell) => cell.surfacePct);
+  const snapshotRootZonePct = input.latestSnapshot?.rootZonePct ?? null;
+  const snapshotSurfacePct = input.latestSnapshot?.surfacePct ?? null;
 
   return {
     latestSnapshot: input.latestSnapshot,
@@ -94,12 +98,12 @@ function buildMoistureSummary(input: {
     lowConfidenceCellCount: input.latestCells.filter(
       (cell) => cell.confidence === "low",
     ).length,
-    rootZoneMinPct: minValue(rootZoneValues),
-    rootZoneMaxPct: maxValue(rootZoneValues),
-    rootZoneAvgPct: average(rootZoneValues),
-    surfaceMinPct: minValue(surfaceValues),
-    surfaceMaxPct: maxValue(surfaceValues),
-    surfaceAvgPct: average(surfaceValues),
+    rootZoneMinPct: minValue(rootZoneValues) ?? snapshotRootZonePct,
+    rootZoneMaxPct: maxValue(rootZoneValues) ?? snapshotRootZonePct,
+    rootZoneAvgPct: average(rootZoneValues) ?? snapshotRootZonePct,
+    surfaceMinPct: minValue(surfaceValues) ?? snapshotSurfacePct,
+    surfaceMaxPct: maxValue(surfaceValues) ?? snapshotSurfacePct,
+    surfaceAvgPct: average(surfaceValues) ?? snapshotSurfacePct,
   };
 }
 
@@ -125,13 +129,182 @@ function resolveLegalLandDescription(
   return values.join(", ");
 }
 
+const REPORT_ALERT_STATUSES = ["active", "resolved"] as const;
+
+function splitFieldAlertsByStatus(
+  alerts: readonly FieldAlert[],
+  limit: number,
+): {
+  activeAlerts: readonly FieldAlert[];
+  resolvedAlerts: readonly FieldAlert[];
+} {
+  return {
+    activeAlerts: alerts.filter((alert) => alert.status === "active").slice(0, limit),
+    resolvedAlerts: alerts.filter((alert) => alert.status === "resolved").slice(0, limit),
+  };
+}
+
+function isReportPerfDebugEnabled() {
+  return process.env.NODE_ENV !== "production" && process.env.FIELDPULSE_DEBUG_PERF === "1";
+}
+
+function startPerfTimer(enabled: boolean) {
+  return enabled ? performance.now() : 0;
+}
+
+function finishPerfTimer(startedAt: number, enabled: boolean) {
+  if (!enabled) {
+    return 0;
+  }
+
+  return Math.round((performance.now() - startedAt) * 100) / 100;
+}
+
+async function timeAsync<T>(
+  enabled: boolean,
+  label: string,
+  operation: () => Promise<T>,
+): Promise<{ label: string; durationMs: number; value: T }> {
+  const startedAt = startPerfTimer(enabled);
+  const value = await operation();
+  return {
+    label,
+    durationMs: finishPerfTimer(startedAt, enabled),
+    value,
+  };
+}
+
+async function timeAsyncOrFallback<T>(
+  enabled: boolean,
+  label: string,
+  operation: () => Promise<T>,
+  fallbackValue: T,
+  onError: (error: unknown) => void,
+): Promise<{ label: string; durationMs: number; value: T; available: boolean }> {
+  const startedAt = startPerfTimer(enabled);
+
+  try {
+    const value = await operation();
+    return {
+      label,
+      durationMs: finishPerfTimer(startedAt, enabled),
+      value,
+      available: true,
+    };
+  } catch (error: unknown) {
+    onError(error);
+    return {
+      label,
+      durationMs: finishPerfTimer(startedAt, enabled),
+      value: fallbackValue,
+      available: false,
+    };
+  }
+}
+
 export async function buildFieldReportReadModel(
   input: BuildFieldReportReadModelInput,
 ): Promise<FieldReportReadModel> {
-  const field = await input.repositories.fields.getById(
-    input.workspaceId,
-    input.fieldId,
-  );
+  const debugPerfEnabled = isReportPerfDebugEnabled();
+  const requestStartedAt = startPerfTimer(debugPerfEnabled);
+  const alertLimit = input.alertLimit ?? 20;
+  const fieldPromise =
+    input.field != null
+      ? Promise.resolve(input.field)
+      : input.repositories.fields.getById(
+          input.workspaceId,
+          input.fieldId,
+        );
+
+  const [
+    field,
+    latestCommittedCandidateResult,
+    cropContextResult,
+    latestRasterObservationResult,
+    latestSnapshotResult,
+    latestCellsResult,
+    weatherProfileResult,
+    weatherSignalsResult,
+    fieldAlertsResult,
+    findingsResult,
+    zonesResult,
+  ] = await Promise.all([
+    fieldPromise,
+    timeAsync(debugPerfEnabled, "latestCommittedCandidate", () =>
+      input.repositories.fieldImportBatches.getLatestCommittedCandidateByField(
+        input.workspaceId,
+        input.fieldId,
+      )),
+    timeAsync(debugPerfEnabled, "cropContext", () =>
+      input.repositories.cropContexts.getLatestByField(
+        input.workspaceId,
+        input.fieldId,
+      )),
+    timeAsync(debugPerfEnabled, "latestRasterObservation", () =>
+      input.repositories.imageryRasterObservations.getLatestByField(
+        input.workspaceId,
+        input.fieldId,
+        input.reportDate,
+      )),
+    timeAsync(debugPerfEnabled, "latestSnapshot", () =>
+      input.repositories.moistureSnapshots.getLatestByField(
+        input.workspaceId,
+        input.fieldId,
+      )),
+    timeAsync(debugPerfEnabled, "latestCells", () =>
+      input.repositories.moistureCells.getLatestByField(
+        input.workspaceId,
+        input.fieldId,
+      )),
+    timeAsync(debugPerfEnabled, "weatherProfile", () =>
+      loadFieldWeatherProfile({
+        observationRepository: input.repositories.weatherObservations,
+        forecastRepository: input.repositories.weatherForecasts,
+        workspaceId: input.workspaceId,
+        fieldId: input.fieldId,
+        validAfter: input.reportDate,
+        forecastLimit: input.forecastLimit ?? 24,
+      })),
+    timeAsync(debugPerfEnabled, "weatherSignals", () =>
+      input.repositories.weatherSignals.getLatestByField(
+        input.workspaceId,
+        input.fieldId,
+      )),
+    timeAsyncOrFallback(
+      debugPerfEnabled,
+      "fieldAlerts",
+      () =>
+        input.repositories.alerts.listByField(
+          input.workspaceId,
+          input.fieldId,
+          Math.max(alertLimit * REPORT_ALERT_STATUSES.length * 2, 40),
+          REPORT_ALERT_STATUSES,
+        ),
+      [] as FieldAlert[],
+      (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          "[reports] alerts.listByField(active|resolved) failed; marking alert data unavailable:",
+          message,
+        );
+      },
+    ),
+    timeAsync(debugPerfEnabled, "findings", () =>
+      input.repositories.findings.listByField(
+        input.workspaceId,
+        input.fieldId,
+        input.findingLimit ?? 20,
+        "active",
+      )),
+    timeAsync(debugPerfEnabled, "zones", () =>
+      buildFieldZoneActivityReport({
+        repository: input.repositories.zones,
+        workspaceId: input.workspaceId,
+        fieldId: input.fieldId,
+        limit: input.zoneLimit ?? 50,
+        generatedAt: input.generatedAt,
+      })),
+  ]);
 
   if (!field) {
     throw new Error(
@@ -139,84 +312,23 @@ export async function buildFieldReportReadModel(
     );
   }
 
-  const [
-    latestCommittedCandidate,
-    cropContext,
-    latestRasterObservation,
-    latestSnapshot,
-    latestCells,
-    weatherProfile,
-    weatherSignals,
-    activeAlerts,
-    resolvedAlerts,
-    findings,
-    zones,
-  ] = await Promise.all([
-    input.repositories.fieldImportBatches.getLatestCommittedCandidateByField(
-      input.workspaceId,
-      input.fieldId,
-    ),
-    input.repositories.cropContexts.getLatestByField(
-      input.workspaceId,
-      input.fieldId,
-    ),
-    input.repositories.imageryRasterObservations.getLatestByField(
-      input.workspaceId,
-      input.fieldId,
-      input.reportDate,
-    ),
-    input.repositories.moistureSnapshots.getLatestByField(
-      input.workspaceId,
-      input.fieldId,
-    ),
-    input.repositories.moistureCells.getLatestByField(
-      input.workspaceId,
-      input.fieldId,
-    ),
-    loadFieldWeatherProfile({
-      observationRepository: input.repositories.weatherObservations,
-      forecastRepository: input.repositories.weatherForecasts,
-      workspaceId: input.workspaceId,
-      fieldId: input.fieldId,
-      validAfter: input.reportDate,
-      forecastLimit: input.forecastLimit ?? 24,
-    }),
-    input.repositories.weatherSignals.getLatestByField(
-      input.workspaceId,
-      input.fieldId,
-    ),
-    input.repositories.alerts.listByField(
-      input.workspaceId,
-      input.fieldId,
-      input.alertLimit ?? 20,
-      "active",
-    ).catch((err) => {
-      console.warn("[reports] alerts.listByField(active) failed, returning empty:", err?.message);
-      return [] as FieldAlert[];
-    }),
-    input.repositories.alerts.listByField(
-      input.workspaceId,
-      input.fieldId,
-      input.alertLimit ?? 20,
-      "resolved",
-    ).catch((err) => {
-      console.warn("[reports] alerts.listByField(resolved) failed, returning empty:", err?.message);
-      return [] as FieldAlert[];
-    }),
-    input.repositories.findings.listByField(
-      input.workspaceId,
-      input.fieldId,
-      input.findingLimit ?? 20,
-      "active",
-    ),
-    buildFieldZoneActivityReport({
-      repository: input.repositories.zones,
-      workspaceId: input.workspaceId,
-      fieldId: input.fieldId,
-      limit: input.zoneLimit ?? 50,
-      generatedAt: input.generatedAt,
-    }),
-  ]);
+  const latestCommittedCandidate = latestCommittedCandidateResult.value;
+  const cropContext = cropContextResult.value;
+  const latestRasterObservation = latestRasterObservationResult.value;
+  const latestSnapshot = latestSnapshotResult.value;
+  const latestCells = latestCellsResult.value;
+  const weatherProfile = weatherProfileResult.value;
+  const weatherSignals = weatherSignalsResult.value;
+  const { activeAlerts, resolvedAlerts } = splitFieldAlertsByStatus(
+    fieldAlertsResult.value,
+    alertLimit,
+  );
+  const dataAvailability: FieldReportDataAvailability = {
+    activeAlerts: fieldAlertsResult.available,
+    resolvedAlerts: fieldAlertsResult.available,
+  };
+  const findings = findingsResult.value;
+  const zones = zonesResult.value;
 
   const moisture = buildMoistureSummary({
     latestSnapshot,
@@ -226,7 +338,7 @@ export async function buildFieldReportReadModel(
     latestRasterObservation,
   });
 
-  return {
+  const readModel = {
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     reportDate: input.reportDate,
     field,
@@ -250,6 +362,7 @@ export async function buildFieldReportReadModel(
       profile: weatherProfile,
       signals: weatherSignals,
     },
+    dataAvailability,
     alerts: activeAlerts,
     resolvedAlerts,
     findings,
@@ -257,7 +370,9 @@ export async function buildFieldReportReadModel(
     summary: {
       cropType: cropContext?.cropType ?? null,
       growthStage: cropContext?.growthStage ?? null,
-      activeAlertCount: activeAlerts.filter((alert) => alert.status === "active").length,
+      activeAlertCount: dataAvailability.activeAlerts
+        ? activeAlerts.filter((alert) => alert.status === "active").length
+        : null,
       activeFindingCount: findings.filter((finding) => finding.status === "active")
         .length,
       trackedZoneCount: zones.totalZoneCount,
@@ -270,4 +385,29 @@ export async function buildFieldReportReadModel(
         null,
     },
   };
+
+  if (debugPerfEnabled) {
+    console.debug("[stability][field-report-read-model] build", {
+      fieldId: input.fieldId,
+      workspaceId: input.workspaceId,
+      durationMs: finishPerfTimer(requestStartedAt, debugPerfEnabled),
+      stages: [
+        latestCommittedCandidateResult,
+        cropContextResult,
+        latestRasterObservationResult,
+        latestSnapshotResult,
+        latestCellsResult,
+        weatherProfileResult,
+        weatherSignalsResult,
+        fieldAlertsResult,
+        findingsResult,
+        zonesResult,
+      ].map((entry) => ({
+        label: entry.label,
+        durationMs: entry.durationMs,
+      })),
+    });
+  }
+
+  return readModel;
 }

@@ -3,6 +3,7 @@ import type {
   CellVarianceBucket,
   CellSeverityLabel,
   CellSourceTier,
+  CellAnomalyClass,
 } from "../render/FieldAgronomicSurfaceRenderModel";
 
 /**
@@ -22,6 +23,8 @@ export type CellHoverEvent = {
   confidence: number;
   sourceTier: CellSourceTier;
   deltaFromFieldAvgPct: number;
+  percentileInField: number;
+  anomalyClass: CellAnomalyClass;
   varianceBucket: CellVarianceBucket;
   severityLabel: CellSeverityLabel;
   zoneId: string | null;
@@ -45,6 +48,8 @@ export type CellClickEvent = {
   confidence: number;
   sourceTier: CellSourceTier;
   deltaFromFieldAvgPct: number;
+  percentileInField: number;
+  anomalyClass: CellAnomalyClass;
   varianceBucket: CellVarianceBucket;
   severityLabel: CellSeverityLabel;
   zoneId: string | null;

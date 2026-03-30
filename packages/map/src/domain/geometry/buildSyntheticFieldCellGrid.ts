@@ -95,12 +95,9 @@ export function buildSyntheticFieldCellGrid({
   const fullCellArea = cellWidth * cellHeight;
   const cells: SyntheticFieldCell[] = [];
 
-  // Get the outer ring of the first polygon for clipping.
-  // For MultiPolygon boundaries, use the first polygon's outer ring.
-  const outerRing: readonly MapGeoPoint[] =
-    boundary.coordinates.length > 0 && boundary.coordinates[0].length > 0
-      ? boundary.coordinates[0][0]
-      : [];
+  const outerRings = boundary.coordinates
+    .map((polygon) => polygon[0] ?? [])
+    .filter((ring) => ring.length >= 3);
 
   for (let row = 0; row < rowCount; row += 1) {
     for (let column = 0; column < columnCount; column += 1) {
@@ -116,38 +113,52 @@ export function buildSyntheticFieldCellGrid({
         [cellWest, cellNorth],
       ];
 
-      // ── Clip rectangle to field boundary ──
-      let clipped: MapGeoPoint[];
-      if (outerRing.length >= 3) {
-        clipped = clipPolygonToRing(rawRect, outerRing);
-        if (clipped.length < 3) continue;
+      // ── Clip rectangle to every polygon in the field ──
+      const clippedFragments =
+        outerRings.length > 0
+          ? outerRings
+              .map((outerRing, polygonIndex) => {
+                const clipped = clipPolygonToRing(rawRect, outerRing);
+                if (clipped.length < 3) return null;
 
-        // Check coverage ratio — discard cells with too little overlap.
-        const clippedArea = polygonArea(clipped);
-        if (clippedArea / fullCellArea < minCoverageRatio) continue;
-      } else {
-        // No outer ring available — fall back to centroid check.
+                const clippedArea = polygonArea(clipped);
+                if (clippedArea / fullCellArea < minCoverageRatio) return null;
+
+                return { polygonIndex, clipped };
+              })
+              .filter(
+                (
+                  fragment,
+                ): fragment is {
+                  polygonIndex: number;
+                  clipped: MapGeoPoint[];
+                } => fragment != null,
+              )
+          : [];
+
+      if (clippedFragments.length === 0) {
         const centroid: MapGeoPoint = [
           (cellWest + cellEast) / 2,
           (cellSouth + cellNorth) / 2,
         ];
         if (!isPointInMultiPolygon(centroid, boundary)) continue;
-        clipped = rawRect;
+        clippedFragments.push({ polygonIndex: 0, clipped: rawRect });
       }
 
-      // ── Inset polygon to create gaps between cells ──
-      const inset = insetRatio > 0 ? insetPolygon(clipped, insetRatio) : clipped;
-      const centroid = polygonCentroid(inset);
+      for (const { polygonIndex, clipped } of clippedFragments) {
+        const inset = insetRatio > 0 ? insetPolygon(clipped, insetRatio) : clipped;
+        const centroid = polygonCentroid(inset);
 
-      cells.push({
-        id: `${fieldId}:cell:${row}:${column}`,
-        row,
-        column,
-        centroid,
-        normalizedX: (column + 0.5) / columnCount,
-        normalizedY: (row + 0.5) / rowCount,
-        polygon: closeRing(inset),
-      });
+        cells.push({
+          id: `${fieldId}:cell:${polygonIndex}:${row}:${column}`,
+          row,
+          column,
+          centroid,
+          normalizedX: (column + 0.5) / columnCount,
+          normalizedY: (row + 0.5) / rowCount,
+          polygon: closeRing(inset),
+        });
+      }
     }
   }
 
