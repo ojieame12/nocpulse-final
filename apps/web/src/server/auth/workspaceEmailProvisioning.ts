@@ -12,6 +12,14 @@ type WorkspaceEmailProvisionRow =
 type WorkspaceMembershipInsert =
   DatabaseSchema["app"]["Tables"]["workspace_memberships"]["Insert"];
 
+type WorkspaceMembershipRow =
+  DatabaseSchema["app"]["Tables"]["workspace_memberships"]["Row"];
+
+type BootstrapWorkspaceApproval = {
+  workspaceId: string;
+  bootstrapOwnerUserId: string | null;
+};
+
 export function normalizeWorkspaceProvisionEmail(email: string) {
   return email.trim().toLowerCase();
 }
@@ -28,6 +36,79 @@ export function buildWorkspaceProvisionMembershipRows(
     invited_by: provision.created_by,
     created_at: claimedAt,
   }));
+}
+
+export function resolveBootstrapWorkspaceOwnerRemovals(input: {
+  approvals: readonly BootstrapWorkspaceApproval[];
+  memberships: readonly Pick<
+    WorkspaceMembershipRow,
+    "workspace_id" | "user_id" | "role"
+  >[];
+  claimedUserId: string;
+}) {
+  const approvals = input.approvals.filter(
+    (approval) =>
+      approval.workspaceId &&
+      approval.bootstrapOwnerUserId &&
+      approval.bootstrapOwnerUserId !== input.claimedUserId,
+  );
+
+  if (approvals.length === 0) {
+    return [];
+  }
+
+  const membershipsByWorkspace = new Map<
+    string,
+    Pick<WorkspaceMembershipRow, "workspace_id" | "user_id" | "role">[]
+  >();
+
+  for (const membership of input.memberships) {
+    const workspaceMemberships =
+      membershipsByWorkspace.get(membership.workspace_id) ?? [];
+    workspaceMemberships.push(membership);
+    membershipsByWorkspace.set(membership.workspace_id, workspaceMemberships);
+  }
+
+  const removals = new Map<string, { workspaceId: string; userId: string }>();
+
+  for (const approval of approvals) {
+    const workspaceMemberships =
+      membershipsByWorkspace.get(approval.workspaceId) ?? [];
+    const claimedMembership = workspaceMemberships.find(
+      (membership) => membership.user_id === input.claimedUserId,
+    );
+
+    if (claimedMembership?.role !== "owner") {
+      continue;
+    }
+
+    const bootstrapMembership = workspaceMemberships.find(
+      (membership) => membership.user_id === approval.bootstrapOwnerUserId,
+    );
+
+    if (
+      !bootstrapMembership ||
+      bootstrapMembership.role !== "owner" ||
+      bootstrapMembership.user_id === input.claimedUserId
+    ) {
+      continue;
+    }
+
+    const ownerCount = workspaceMemberships.filter(
+      (membership) => membership.role === "owner",
+    ).length;
+
+    if (ownerCount < 2) {
+      continue;
+    }
+
+    removals.set(`${approval.workspaceId}:${bootstrapMembership.user_id}`, {
+      workspaceId: approval.workspaceId,
+      userId: bootstrapMembership.user_id,
+    });
+  }
+
+  return [...removals.values()];
 }
 
 export async function listWorkspaceEmailProvisionsByEmail(
@@ -153,5 +234,59 @@ export async function claimWorkspaceEmailProvisions(input: {
   return {
     claimedCount: unclaimedProvisions.length,
     claimedWorkspaceIds,
+  };
+}
+
+export async function releaseBootstrapWorkspaceOwnerMemberships(input: {
+  client: DatabaseClient;
+  approvals: readonly BootstrapWorkspaceApproval[];
+  claimedUserId: string;
+}) {
+  const approvals = input.approvals.filter(
+    (approval) =>
+      approval.workspaceId &&
+      approval.bootstrapOwnerUserId &&
+      approval.bootstrapOwnerUserId !== input.claimedUserId,
+  );
+
+  if (approvals.length === 0) {
+    return {
+      removedCount: 0,
+      removedWorkspaceIds: [],
+    };
+  }
+
+  const workspaceIds = [...new Set(approvals.map((approval) => approval.workspaceId))];
+  const membershipsResult = await input.client
+    .from("workspace_memberships")
+    .select("workspace_id, user_id, role")
+    .in("workspace_id", workspaceIds);
+
+  const memberships = requireSupabaseData(
+    membershipsResult,
+    "workspaceEmailProvisions.releaseBootstrap.memberships",
+  );
+  const removals = resolveBootstrapWorkspaceOwnerRemovals({
+    approvals,
+    memberships,
+    claimedUserId: input.claimedUserId,
+  });
+
+  for (const removal of removals) {
+    const deleteResult = await input.client
+      .from("workspace_memberships")
+      .delete()
+      .eq("workspace_id", removal.workspaceId)
+      .eq("user_id", removal.userId);
+
+    requireSupabaseSuccess(
+      deleteResult,
+      "workspaceEmailProvisions.releaseBootstrap.delete",
+    );
+  }
+
+  return {
+    removedCount: removals.length,
+    removedWorkspaceIds: removals.map((removal) => removal.workspaceId),
   };
 }

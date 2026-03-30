@@ -10,6 +10,7 @@ import {
 } from "../../../server/auth/workspaceAccessProvisioning";
 import {
   listWorkspaceEmailProvisionsByEmail,
+  releaseBootstrapWorkspaceOwnerMemberships,
   upsertWorkspaceEmailProvision,
 } from "../../../server/auth/workspaceEmailProvisioning";
 import {
@@ -479,9 +480,22 @@ export async function POST(request: Request) {
         });
       }
 
+      await releaseBootstrapWorkspaceOwnerMemberships({
+        client: databaseClient,
+        approvals: [
+          {
+            workspaceId: createdWorkspace.id,
+            bootstrapOwnerUserId: payload.grantedByUserId,
+          },
+        ],
+        claimedUserId: existingUser.id,
+      });
+
       detailMessage = alreadyMember
         ? "They already had workspace access. The request is now marked handled."
-        : "They already have a NocPulse account and can open the app immediately.";
+        : payload.role === "owner"
+          ? "They already have a NocPulse account and now own this dedicated workspace."
+          : "They already have a NocPulse account and can open the app immediately.";
     } else {
       const existingProvision = (await listWorkspaceEmailProvisionsByEmail(
         databaseClient,

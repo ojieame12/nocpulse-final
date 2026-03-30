@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildWorkspaceProvisionMembershipRows } from "./workspaceEmailProvisioning";
+import {
+  buildWorkspaceProvisionMembershipRows,
+  resolveBootstrapWorkspaceOwnerRemovals,
+} from "./workspaceEmailProvisioning";
 
 test("buildWorkspaceProvisionMembershipRows converts email provisions into memberships", () => {
   const rows = buildWorkspaceProvisionMembershipRows(
@@ -44,4 +47,61 @@ test("buildWorkspaceProvisionMembershipRows converts email provisions into membe
       created_at: "2026-03-30T11:00:00.000Z",
     },
   ]);
+});
+
+test("resolveBootstrapWorkspaceOwnerRemovals removes the bootstrap owner after an owner claim", () => {
+  const removals = resolveBootstrapWorkspaceOwnerRemovals({
+    approvals: [
+      {
+        workspaceId: "workspace-1",
+        bootstrapOwnerUserId: "reviewer-1",
+      },
+    ],
+    memberships: [
+      {
+        workspace_id: "workspace-1",
+        user_id: "reviewer-1",
+        role: "owner",
+      },
+      {
+        workspace_id: "workspace-1",
+        user_id: "requester-1",
+        role: "owner",
+      },
+    ],
+    claimedUserId: "requester-1",
+  });
+
+  assert.deepEqual(removals, [
+    {
+      workspaceId: "workspace-1",
+      userId: "reviewer-1",
+    },
+  ]);
+});
+
+test("resolveBootstrapWorkspaceOwnerRemovals keeps the bootstrap owner if the requester is not an owner", () => {
+  const removals = resolveBootstrapWorkspaceOwnerRemovals({
+    approvals: [
+      {
+        workspaceId: "workspace-1",
+        bootstrapOwnerUserId: "reviewer-1",
+      },
+    ],
+    memberships: [
+      {
+        workspace_id: "workspace-1",
+        user_id: "reviewer-1",
+        role: "owner",
+      },
+      {
+        workspace_id: "workspace-1",
+        user_id: "requester-1",
+        role: "member",
+      },
+    ],
+    claimedUserId: "requester-1",
+  });
+
+  assert.deepEqual(removals, []);
 });
