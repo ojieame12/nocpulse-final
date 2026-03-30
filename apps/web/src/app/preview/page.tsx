@@ -15,6 +15,7 @@ export default async function PreviewPage({ searchParams }: PreviewPageProps) {
   const requestedFieldId = resolvedSearchParams.fieldId?.trim() || undefined;
   const viewModel = await buildPreviewViewModel(requestedFieldId);
 
+  // Infrastructure-level failures still get a minimal shell
   if (viewModel.status === 'no-runtime') {
     return <PreviewEmptyShell status="no-runtime" />;
   }
@@ -23,11 +24,7 @@ export default async function PreviewPage({ searchParams }: PreviewPageProps) {
     return <PreviewEmptyShell status="unauthenticated" />;
   }
 
-  if (viewModel.status === 'no-fields') {
-    return <PreviewEmptyShell status="no-fields" />;
-  }
-
-  // viewModel.status === 'ready' — pass all data to the client shell
+  // "ready" — includes empty workspaces (shell renders with empty states)
   const vm = viewModel as Extract<typeof viewModel, { status: 'ready' }>;
   const initial: FieldViewModel = {
     workspaceId: vm.workspaceId,
