@@ -125,8 +125,23 @@ function formatOptionalValue(value: string | null) {
 
 export function renderRequestAccessNotificationEmail(
   submission: RequestAccessSubmission,
+  reviewAccessUrl?: string,
 ) {
   const subject = `New NocPulse access request: ${submission.name}`;
+
+  const ctaHtml = reviewAccessUrl
+    ? `<tr>
+        <td style="padding:24px 28px;border-top:1px solid #ebebeb;text-align:center;">
+          <a href="${escapeHtml(reviewAccessUrl)}" style="display:inline-block;padding:14px 32px;background:#008f4e;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:10px;letter-spacing:0.3px;">Review Request</a>
+          <div style="margin-top:12px;font-size:12px;color:#8a8f98;">Open the request review page to grant <strong>${escapeHtml(submission.email)}</strong> workspace access.</div>
+        </td>
+      </tr>`
+    : "";
+
+  const ctaText = reviewAccessUrl
+    ? `\n\nReview request: ${reviewAccessUrl}`
+    : "";
+
   const html = `<!DOCTYPE html>
 <html lang="en">
   <body style="margin:0;padding:24px;background:#f8faf8;color:#1f2937;font-family:Arial,sans-serif;">
@@ -163,6 +178,7 @@ export function renderRequestAccessNotificationEmail(
           </table>
         </td>
       </tr>
+      ${ctaHtml}
     </table>
   </body>
 </html>`;
@@ -174,6 +190,7 @@ export function renderRequestAccessNotificationEmail(
     `Farm / Operation: ${submission.farmName}`,
     `Approximate Acreage: ${submission.acreage ?? "Not provided"}`,
     `Message: ${submission.message ?? "Not provided"}`,
+    ctaText,
   ].join("\n");
 
   return {

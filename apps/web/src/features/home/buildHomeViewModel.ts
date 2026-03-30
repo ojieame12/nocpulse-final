@@ -32,6 +32,10 @@ export async function buildHomeViewModel() {
         return {
           actor: null,
           authMode: "development-fallback" as const,
+          authRedirectPath:
+            error.status === 403
+              ? "/auth/pending-access?next=%2F"
+              : null,
           authModeLabel:
             error.status === 401
               ? "No Supabase session available"
@@ -63,6 +67,10 @@ export async function buildHomeViewModel() {
     liveDataLabel: liveData.liveDataLabel,
     liveFields: liveData.liveFields,
     bootstrapHint: liveData.bootstrapHint,
+    authRedirectPath:
+      "authRedirectPath" in actorContext
+        ? actorContext.authRedirectPath
+        : null,
     authMode: actorContext.actor ? actorContext.authMode : "none",
     authStatusLabel: actorContext.authModeLabel,
     authActorLabel: actorContext.actor

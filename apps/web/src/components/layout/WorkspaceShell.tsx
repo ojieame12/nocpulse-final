@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { TopBar } from "./TopBar";
 import { Sidebar, type SidebarFieldItem } from "./Sidebar";
 import type { ReactNode } from "react";
+import { AppShellErrorBoundary } from "./AppShellErrorBoundary";
 
 export type AppTheme = "light" | "dark";
 
@@ -70,8 +71,14 @@ export function WorkspaceShell({
             onFieldSelect={handleFieldSelect}
           />
           <div className="map-area">
-            {children}
-            {panel ? <div className="map-area__panel-layer">{panel}</div> : null}
+            <AppShellErrorBoundary
+              resetKey={`${activeFieldId ?? "workspace"}:${panelHidden ? "closed" : "open"}`}
+              title="Workspace shell recovered"
+              description="A render path inside the field shell failed. Reload the shell to recover the map and panel."
+            >
+              {children}
+              {panel ? <div className="map-area__panel-layer">{panel}</div> : null}
+            </AppShellErrorBoundary>
           </div>
         </div>
       </div>

@@ -21,21 +21,32 @@ export function PendingAccessStatusWatcher({
     "Checking for workspace access every few seconds.",
   );
   const redirectingRef = useRef(false);
+  const activeRequestRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: number | null = null;
 
     async function checkActor() {
       if (redirectingRef.current || cancelled) {
         return;
       }
 
+      activeRequestRef.current?.abort();
+      const controller = new AbortController();
+      activeRequestRef.current = controller;
+
       try {
         const response = await fetch("/api/auth/actor", {
           cache: "no-store",
+          signal: controller.signal,
         });
 
-        if (cancelled || redirectingRef.current) {
+        if (
+          cancelled ||
+          redirectingRef.current ||
+          activeRequestRef.current !== controller
+        ) {
           return;
         }
 
@@ -64,22 +75,38 @@ export function PendingAccessStatusWatcher({
 
         setStatusText("Waiting for workspace access. You can stay on this page while NocPulse checks again.");
       } catch {
-        if (!cancelled && !redirectingRef.current) {
+        if (
+          !cancelled &&
+          !redirectingRef.current &&
+          !controller.signal.aborted
+        ) {
           setStatusText(
             "Waiting for workspace access. Network checks will retry automatically.",
           );
+        }
+      } finally {
+        if (activeRequestRef.current === controller) {
+          activeRequestRef.current = null;
+        }
+
+        if (!cancelled && !redirectingRef.current) {
+          timeoutId = window.setTimeout(() => {
+            void checkActor();
+          }, PENDING_ACCESS_POLL_MS);
         }
       }
     }
 
     void checkActor();
-    const intervalId = window.setInterval(() => {
-      void checkActor();
-    }, PENDING_ACCESS_POLL_MS);
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      activeRequestRef.current?.abort();
+      activeRequestRef.current = null;
+
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [nextPath, router]);
 

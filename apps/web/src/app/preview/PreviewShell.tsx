@@ -9,6 +9,7 @@ import type {
   CellClickEvent,
 } from '@fieldpulse/map';
 import { TopBar } from '../../components/layout/TopBar';
+import { AppShellErrorBoundary } from '../../components/layout/AppShellErrorBoundary';
 import { ThemeContext, type AppTheme } from '../../components/layout/WorkspaceShell';
 import type { SidebarFieldItem } from '../../components/layout/Sidebar';
 import { FieldStrip } from '../../components/layout/FieldStrip';
@@ -1103,81 +1104,86 @@ export function PreviewShell({ initial }: PreviewShellProps) {
       />
       <div className="app-body">
         <div className="map-area">
-          <div className="map-area__canvas">
-            <LazyFieldBoundaryMap
-              model={mapModel}
-              onCellHover={setHoveredCell}
-              onCellClick={handleCellClick}
-              onFieldClick={handleFieldSelect}
-              onSurfaceChange={setRenderedSurface}
-              activeMetric={LAYER_TO_METRIC[activeLayer]}
-            />
-            {/* Loading indicator during field switch */}
-            {isLoadingField && (
-              <div className="map-area__loading-indicator">
-                <span className="map-area__loading-dot" />
-              </div>
-            )}
-          </div>
-
-          {/* Field strip — horizontal bottom dock */}
-          <FieldStrip
-            fields={sidebarFields}
-            activeFieldId={activeFieldId}
-            revealFieldId={revealedFieldId ?? undefined}
-            onFieldSelect={handleFieldSelect}
-            onFieldPrefetch={handleFieldPrefetch}
-            onAddField={() => switchPanel(activePanel === 'add-field' ? 'detail' : 'add-field')}
-            onSearchOpen={() => setPaletteOpen(true)}
-          />
-
-          {/* Command palette — anchored above the field strip */}
-          <FieldCommandPalette
-            open={paletteOpen}
-            onClose={() => setPaletteOpen(false)}
-            onSelectField={handlePaletteSelectField}
-            onSelectZone={handlePaletteSelectZone}
-            onSelectFinding={handlePaletteSelectFinding}
-            searchIndex={paletteSearchIndex}
-          />
-
-          {renderedSurface ? (
-            <MetricLegendCard
-              metricKey={renderedSurface.metricKey}
-              metricAveragePct={renderedSurface.metricAveragePct}
-              hoveredMetricPct={
-                hoveredCell?.metricKey === renderedSurface.metricKey
-                  ? hoveredCell.metricValuePct
-                  : null
-              }
-              confidence={renderedSurface.confidence}
-              sourceLabel={renderedSurface.sourceLabel}
-              allMetrics={AVAILABLE_METRICS}
-              availableMetrics={availableMetrics}
-              availableMetricDetails={availableMetricDetails}
-              onMetricChange={(metric) => {
-                const nextLayer = LAYER_TABS.find((layer) => LAYER_TO_METRIC[layer] === metric);
-                if (nextLayer) {
-                  setActiveLayer(nextLayer);
-                }
-              }}
-            />
-          ) : null}
-
-          {/* Right panel — floats over map.
-           * IMPORTANT: Clear the entering animation after it finishes so the
-           * compositing layer is torn down. While a parent has an active
-           * opacity animation, Chromium blocks backdrop-filter on children
-           * (.fdp) from sampling content outside the layer. */}
-          <div
-            key={fieldData.fieldId}
-            className={`map-area__panel-layer ${panelAnim ? `panel--${panelAnim}` : ''}`}
-            onAnimationEnd={() => {
-              if (panelAnim === 'entering') setPanelAnim('');
-            }}
+          <AppShellErrorBoundary
+            resetKey={`${activeFieldId}:${activePanel}:${activeLayer}`}
+            title="Preview shell recovered"
+            description="The preview map or panel hit a render failure. Reload the shell to continue exploring this field."
           >
-            {renderPanel()}
-          </div>
+            <div className="map-area__canvas">
+              <LazyFieldBoundaryMap
+                model={mapModel}
+                onCellHover={setHoveredCell}
+                onCellClick={handleCellClick}
+                onFieldClick={handleFieldSelect}
+                onSurfaceChange={setRenderedSurface}
+                activeMetric={LAYER_TO_METRIC[activeLayer]}
+              />
+              {/* Loading indicator during field switch */}
+              {isLoadingField && (
+                <div className="map-area__loading-indicator">
+                  <span className="map-area__loading-dot" />
+                </div>
+              )}
+            </div>
+
+            {/* Field strip — horizontal bottom dock */}
+            <FieldStrip
+              fields={sidebarFields}
+              activeFieldId={activeFieldId}
+              revealFieldId={revealedFieldId ?? undefined}
+              onFieldSelect={handleFieldSelect}
+              onFieldPrefetch={handleFieldPrefetch}
+              onAddField={() => switchPanel(activePanel === 'add-field' ? 'detail' : 'add-field')}
+              onSearchOpen={() => setPaletteOpen(true)}
+            />
+
+            {/* Command palette — anchored above the field strip */}
+            <FieldCommandPalette
+              open={paletteOpen}
+              onClose={() => setPaletteOpen(false)}
+              onSelectField={handlePaletteSelectField}
+              onSelectZone={handlePaletteSelectZone}
+              onSelectFinding={handlePaletteSelectFinding}
+              searchIndex={paletteSearchIndex}
+            />
+
+            {renderedSurface ? (
+              <MetricLegendCard
+                metricKey={renderedSurface.metricKey}
+                metricAveragePct={renderedSurface.metricAveragePct}
+                hoveredMetricPct={
+                  hoveredCell?.metricKey === renderedSurface.metricKey
+                    ? hoveredCell.metricValuePct
+                    : null
+                }
+                confidence={renderedSurface.confidence}
+                sourceLabel={renderedSurface.sourceLabel}
+                allMetrics={AVAILABLE_METRICS}
+                availableMetrics={availableMetrics}
+                availableMetricDetails={availableMetricDetails}
+                onMetricChange={(metric) => {
+                  const nextLayer = LAYER_TABS.find((layer) => LAYER_TO_METRIC[layer] === metric);
+                  if (nextLayer) {
+                    setActiveLayer(nextLayer);
+                  }
+                }}
+              />
+            ) : null}
+
+            {/* Right panel — floats over map.
+             * IMPORTANT: Clear the entering animation after it finishes so the
+             * compositing layer is torn down. While a parent has an active
+             * opacity animation, Chromium blocks backdrop-filter on children
+             * (.fdp) from sampling content outside the layer. */}
+            <div
+              className={`map-area__panel-layer ${panelAnim ? `panel--${panelAnim}` : ''}`}
+              onAnimationEnd={() => {
+                if (panelAnim === 'entering') setPanelAnim('');
+              }}
+            >
+              {renderPanel()}
+            </div>
+          </AppShellErrorBoundary>
         </div>
       </div>
     </div>

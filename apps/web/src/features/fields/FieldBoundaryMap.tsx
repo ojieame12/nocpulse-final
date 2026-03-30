@@ -32,6 +32,8 @@ export function FieldBoundaryMap({
 }: FieldBoundaryMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<MapRuntimeContract<FieldBoundaryPreviewRenderModel> | null>(null);
+  const [runtimeError, setRuntimeError] = useState<Error | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   const [hover, setHover] = useState<CellHoverEvent | null>(null);
   const [hoveredFieldId, setHoveredFieldId] = useState<string | null>(null);
@@ -126,6 +128,39 @@ export function FieldBoundaryMap({
   // Track whether mount has finished so the update effect can fire safely.
   const [mountReady, setMountReady] = useState(false);
 
+  const handleRuntimeFailure = useCallback(
+    (
+      phase: "mount" | "update" | "unmount",
+      error: unknown,
+      runtime?: MapRuntimeContract<FieldBoundaryPreviewRenderModel> | null,
+    ) => {
+      const nextError =
+        error instanceof Error ? error : new Error(String(error));
+
+      console.error(`[map] field boundary runtime ${phase} failed`, nextError);
+      const activeRuntime = runtime ?? runtimeRef.current;
+      runtimeRef.current = null;
+      setMountReady(false);
+      setHover(null);
+      setHoveredFieldId(null);
+      pendingHoverRef.current = null;
+      if (hoverFrameRef.current !== null) {
+        cancelAnimationFrame(hoverFrameRef.current);
+        hoverFrameRef.current = null;
+      }
+      onCellHoverRef.current?.(null);
+
+      if (activeRuntime) {
+        void activeRuntime.unmount().catch((unmountError) => {
+          console.error("[map] field boundary runtime cleanup failed", unmountError);
+        });
+      }
+
+      setRuntimeError(nextError);
+    },
+    [],
+  );
+
   useEffect(() => {
     let disposed = false;
     let mountedRuntime: MapRuntimeContract<FieldBoundaryPreviewRenderModel> | null = null;
@@ -134,48 +169,166 @@ export function FieldBoundaryMap({
       const container = containerRef.current;
       if (!container) return;
 
-      const { createFieldBoundaryPreviewRuntime } = await import("@fieldpulse/map");
+      try {
+        const { createFieldBoundaryPreviewRuntime } = await import("@fieldpulse/map");
 
-      if (disposed || containerRef.current !== container) return;
+        if (disposed || containerRef.current !== container) return;
 
-      mountedRuntime = createFieldBoundaryPreviewRuntime({
-        onCellHover: handleCellHover,
-        onCellClick: handleCellClick,
-        onFieldHover: handleFieldHover,
-        onFieldClick: (fieldId) => onFieldClickRef.current?.(fieldId),
-      });
-      runtimeRef.current = mountedRuntime;
-      // Always mount with the latest model (not the stale closure capture).
-      await mountedRuntime.mount(container, latestModelRef.current);
-      if (!disposed) setMountReady(true);
+        mountedRuntime = createFieldBoundaryPreviewRuntime({
+          onCellHover: handleCellHover,
+          onCellClick: handleCellClick,
+          onFieldHover: handleFieldHover,
+          onFieldClick: (fieldId) => onFieldClickRef.current?.(fieldId),
+          onFatalError: (error) => handleRuntimeFailure("update", error, mountedRuntime),
+        });
+        runtimeRef.current = mountedRuntime;
+        // Always mount with the latest model (not the stale closure capture).
+        await mountedRuntime.mount(container, latestModelRef.current);
+
+        if (disposed) {
+          await mountedRuntime.unmount();
+          return;
+        }
+
+        setRuntimeError(null);
+        setMountReady(true);
+      } catch (error) {
+        if (!disposed) {
+          handleRuntimeFailure("mount", error, mountedRuntime);
+        }
+      }
     }
 
+    setMountReady(false);
     void mountRuntime();
 
     return () => {
       disposed = true;
+      const activeRuntime = mountedRuntime;
       runtimeRef.current = null;
       if (hoverFrameRef.current !== null) {
         cancelAnimationFrame(hoverFrameRef.current);
         hoverFrameRef.current = null;
       }
-      if (mountedRuntime) {
-        void mountedRuntime.unmount();
+      setMountReady(false);
+      if (activeRuntime) {
+        void activeRuntime.unmount().catch((error) => {
+          console.error("[map] field boundary runtime unmount failed", error);
+        });
       }
     };
-  }, []);
+  }, [handleCellClick, handleCellHover, handleFieldHover, handleRuntimeFailure, retryNonce]);
 
   // Push model changes to the runtime after mount is ready.
   useEffect(() => {
-    if (!mountReady) return;
+    if (!mountReady || runtimeError) return;
     const runtime = runtimeRef.current;
     if (!runtime) return;
-    void runtime.update(effectiveModel);
-  }, [effectiveModel, mountReady]);
+    let cancelled = false;
+
+    void runtime.update(effectiveModel).catch((error) => {
+      if (!cancelled) {
+        handleRuntimeFailure("update", error, runtime);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveModel, handleRuntimeFailure, mountReady, runtimeError]);
+
+  useEffect(() => {
+    if (!runtimeError) {
+      return;
+    }
+
+    setRuntimeError(null);
+    setRetryNonce((current) => current + 1);
+  }, [model.fieldId]);
 
   useEffect(() => {
     onSurfaceChange?.(effectiveModel.agronomicSurface ?? null);
   }, [effectiveModel.agronomicSurface, onSurfaceChange]);
+
+  if (runtimeError) {
+    return (
+      <div
+        className="mapCanvas mapCanvas--fallback"
+        role="alert"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "var(--space-2xl)",
+          background: "var(--surface-bg)",
+        }}
+      >
+        <div
+          style={{
+            width: "min(100%, 360px)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "var(--space-lg)",
+            padding: "var(--empty-padding)",
+            borderRadius: "var(--empty-radius)",
+            border: "var(--empty-border)",
+            background: "var(--surface-white)",
+            boxShadow: "var(--shadow-card)",
+            textAlign: "center",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: "var(--font-body)",
+              fontSize: "var(--text-lg)",
+              fontWeight: 700,
+              color: "var(--text-primary)",
+              lineHeight: "var(--leading-snug)",
+            }}
+          >
+            Map render failed safely
+          </span>
+          <span
+            style={{
+              fontFamily: "var(--font-body)",
+              fontSize: "var(--text-sm)",
+              color: "var(--text-secondary)",
+              lineHeight: "var(--leading-normal)",
+            }}
+          >
+            The map runtime hit an error during {mountReady ? "update" : "mount"}.
+            Retry the map without reloading the full workspace.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setRuntimeError(null);
+              setRetryNonce((current) => current + 1);
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "var(--space-sm)",
+              padding: "var(--btn-padding-v) var(--btn-padding-h)",
+              border: "1px solid transparent",
+              borderRadius: "var(--btn-radius)",
+              background: "var(--btn-fill-primary)",
+              boxShadow: "var(--shadow-btn)",
+              color: "var(--btn-text-primary)",
+              fontFamily: "var(--font-body)",
+              fontSize: "var(--btn-font-size)",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Retry map
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

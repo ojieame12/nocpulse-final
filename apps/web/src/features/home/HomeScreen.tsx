@@ -7,6 +7,10 @@ import { HomePageShell } from "./HomePageShell";
 export async function HomeScreen() {
   const viewModel = await buildHomeViewModel();
 
+  if (viewModel.authRedirectPath) {
+    redirect(viewModel.authRedirectPath);
+  }
+
   /* Auto-select the first field if available */
   if (viewModel.liveFields.length > 0) {
     redirect(`/fields/${viewModel.liveFields[0].id}`);

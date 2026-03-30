@@ -358,6 +358,44 @@ img {
   gap: 12px;
 }
 
+.app-topbar__guest-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--status-warning);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.app-topbar__guest-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: var(--btn-fill-primary, var(--primary-green));
+  color: var(--btn-text-primary, #fff);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 0 #002a15;
+}
+
+.app-topbar__guest-cta:hover {
+  filter: brightness(1.04);
+}
+
 .app-topbar__bell {
   color: var(--text-secondary);
   flex-shrink: 0;
@@ -439,6 +477,80 @@ img {
   height: 28px;
   border-radius: 50%;
   background: var(--primary-green-light);
+}
+
+.app-topbar__avatar--initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+}
+
+.app-topbar__viewer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.app-topbar__viewer-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-topbar__viewer-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-topbar__viewer-name {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  line-height: var(--leading-snug);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-topbar__viewer-role {
+  flex-shrink: 0;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-forest-50, #dcfce7);
+  color: var(--color-forest-800, #004726);
+  white-space: nowrap;
+}
+
+.app-topbar__viewer-email {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: var(--leading-normal);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
 }
 
 /* ── Nav Link ── */
@@ -528,6 +640,38 @@ img {
 
 [data-theme="dark"] .app-topbar__avatar {
   background: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .app-topbar__guest-badge {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+}
+
+[data-theme="dark"] .app-topbar__guest-cta {
+  background: rgba(0, 71, 38, 0.95);
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .app-topbar__viewer {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .app-topbar__avatar--initials {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="dark"] .app-topbar__viewer-name {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="dark"] .app-topbar__viewer-role {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+[data-theme="dark"] .app-topbar__viewer-email {
+  color: rgba(255, 255, 255, 0.44);
 }
 
 /* ── Main content area ── */
@@ -2446,6 +2590,11 @@ img {
 [data-theme="light"] .app-topbar__avatar {
   background: rgba(0, 0, 0, 0.08);
   border-color: rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .app-topbar__viewer {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -12837,3 +12986,157 @@ img {
 /* ═══════════════════════════════════════════════════════════════════
    Field Detail Panel — Card Grid Design (fdp__ prefix)
    ═══════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   Metric Hint — Contextual Tooltip System
+   ═══════════════════════════════════════════════════════════════════ */
+
+.metric-hint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 200;
+  pointer-events: none;
+  width: 280px;
+  max-width: calc(100% - 24px);
+
+  /* ── Fluid position glide ── */
+  transition:
+    transform 320ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 220ms ease;
+
+  /* ── Hidden state ── */
+  opacity: 0;
+
+  /* Prevent layout contribution */
+  will-change: transform, opacity;
+}
+
+.metric-hint--visible {
+  opacity: 1;
+}
+
+/* Card shell */
+.metric-hint::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: rgb(18, 24, 20);
+  box-shadow:
+    0 4px 24px -4px rgba(0, 0, 0, 0.28),
+    0 1px 4px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  z-index: -1;
+}
+
+/* Inner content wrapper — crossfades independently of position */
+.metric-hint__inner {
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  /* Content crossfade */
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.metric-hint__inner--visible {
+  opacity: 1;
+}
+
+/* Metric label */
+.metric-hint__label {
+  font-family: var(--font-body, 'Sintony', sans-serif);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  line-height: 1;
+}
+
+/* Static definition */
+.metric-hint__definition {
+  font-family: var(--font-body, 'Sintony', sans-serif);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.78);
+  margin: 0;
+}
+
+/* Divider between definition and interpretation */
+.metric-hint__divider {
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 2px 0;
+}
+
+/* Contextual interpretation */
+.metric-hint__interpretation {
+  font-family: var(--font-body, 'Sintony', sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.95);
+  margin: 0;
+}
+
+/* Arrow pointing down toward the metric */
+.metric-hint__arrow {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: rgb(18, 24, 20);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Light theme override ── */
+@media (prefers-color-scheme: light) {
+  .metric-hint::before {
+    background: rgb(252, 253, 252);
+    border-color: rgba(0, 0, 0, 0.06);
+    box-shadow:
+      0 4px 24px -4px rgba(0, 0, 0, 0.10),
+      0 1px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .metric-hint__label {
+    color: rgba(0, 0, 0, 0.38);
+  }
+
+  .metric-hint__definition {
+    color: rgba(0, 0, 0, 0.62);
+  }
+
+  .metric-hint__divider {
+    background: rgba(0, 0, 0, 0.06);
+  }
+
+  .metric-hint__interpretation {
+    color: rgba(0, 0, 0, 0.88);
+  }
+
+  .metric-hint__arrow {
+    background: rgb(252, 253, 252);
+    border-color: rgba(0, 0, 0, 0.06);
+  }
+}
+
+/* ── Hintable metric cells get subtle cursor change ── */
+[data-metric-hint] {
+  cursor: default;
+}
+
+[data-metric-hint]:hover {
+  background: var(--color-slate-50, #f8fafc);
+  transition: background 200ms ease;
+}

@@ -1217,6 +1217,33 @@ export function AddFieldPanel({
           <SpreadsheetIssuesCard issues={spreadsheetPreview.issues} />
         ) : null}
 
+        {/* ── Progress context during long operations ── */}
+        {isSubmitting && (
+          <Card span={-1} className="fdp-card--muted" style={{ gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                width: 12, height: 12, border: '2px solid rgba(255,255,255,0.15)',
+                borderTopColor: 'var(--primary-green)', borderRadius: '50%',
+                animation: 'fdp-spinner 600ms linear infinite', flexShrink: 0,
+              }} />
+              <Sub>
+                {method === 'lld' && !lldDraftReady && 'Searching land description databases…'}
+                {method === 'lld' && lldDraftReady && 'Creating field boundary and queuing satellite analysis…'}
+                {method === 'csv' && !spreadsheetPreview && 'Parsing spreadsheet and validating field data…'}
+                {method === 'csv' && spreadsheetPreview && 'Creating fields, resolving boundaries, and queuing satellite onboarding…'}
+                {method === 'kml' && !boundaryDraftReady && 'Parsing boundary geometry from file…'}
+                {method === 'kml' && boundaryDraftReady && 'Creating field from boundary and queuing analysis…'}
+              </Sub>
+            </div>
+            <Sub>
+              {method === 'csv' && !spreadsheetPreview && 'This usually takes 5–15 seconds depending on file size.'}
+              {method === 'csv' && spreadsheetPreview && `Importing ${spreadsheetPreview.fieldCount} fields — this may take up to a minute.`}
+              {method === 'lld' && 'LLD lookups typically resolve within a few seconds.'}
+              {method === 'kml' && 'Boundary parsing depends on file complexity.'}
+            </Sub>
+          </Card>
+        )}
+
         <ActionButtons
           onClose={onClose}
           label={primaryLabel}
@@ -1244,18 +1271,35 @@ function ActionButtons({
 }) {
   return (
     <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-      <button type="button" onClick={onPrimaryClick} disabled={disabled} style={{
+      <button type="button" onClick={onPrimaryClick} disabled={disabled || busy} style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         padding: '12px 28px', borderRadius: 10, border: 'none',
         background: disabled ? 'rgba(255,255,255,0.12)' : 'var(--btn-fill-primary)',
-        color: '#fff',
+        color: '#fff', position: 'relative', overflow: 'hidden',
         fontFamily: 'var(--font-body)', fontSize: 14, fontWeight: 700,
-        cursor: disabled ? 'not-allowed' : 'pointer',
+        cursor: disabled || busy ? 'not-allowed' : 'pointer',
         boxShadow: disabled ? 'none' : '0 4px 0 var(--color-forest-950)',
         opacity: disabled ? 0.6 : 1,
         transition: 'all 150ms cubic-bezier(.2,.8,.2,1)',
       }}>
-        <Plus size={16} /> {busy ? `${label}...` : label}
+        {busy ? (
+          <>
+            <span style={{
+              width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)',
+              borderTopColor: '#fff', borderRadius: '50%',
+              animation: 'fdp-spinner 600ms linear infinite',
+            }} />
+            {label}…
+            {/* Indeterminate progress shimmer */}
+            <span style={{
+              position: 'absolute', inset: 0,
+              background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%)',
+              animation: 'fdp-btn-shimmer 1.5s ease-in-out infinite',
+            }} />
+          </>
+        ) : (
+          <><Plus size={16} /> {label}</>
+        )}
       </button>
       {onClose && (
         <button type="button" onClick={onClose} style={{

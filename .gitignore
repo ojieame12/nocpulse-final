@@ -18,3 +18,5 @@ venv/
 .claude/
 _tmp_*
 *.tsbuildinfo
+.vercel
+.env*.local

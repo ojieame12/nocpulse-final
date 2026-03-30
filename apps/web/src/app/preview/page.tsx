@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { buildPreviewViewModel } from './buildPreviewViewModel';
 import { PreviewShell, type FieldViewModel } from './PreviewShell';
-
+import { ErrorBoundary } from '../../components/layout/ErrorBoundary';
 export const dynamic = 'force-dynamic';
 
 type PreviewPageProps = {
@@ -88,5 +88,9 @@ export default async function PreviewPage({ searchParams }: PreviewPageProps) {
     cellInspector: vm.cellInspector ?? null,
   };
 
-  return <PreviewShell initial={initial} />;
+  return (
+    <ErrorBoundary fallbackMessage="The preview environment crashed unexpectedly.">
+      <PreviewShell initial={initial} />
+    </ErrorBoundary>
+  );
 }

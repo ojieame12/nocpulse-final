@@ -155,6 +155,7 @@
 
 .fdp__body {
   flex: 1;
+  min-height: 0;          /* allow flex shrink below grid intrinsic height */
   overflow-y: auto;
   padding: 6px 16px 16px;
   display: grid;
@@ -171,6 +172,7 @@
 
 .fdp__subpage {
   flex: 1;
+  min-height: 0;          /* allow flex shrink so footer stays visible */
   overflow-y: auto;
   padding: 0 16px 16px;
   display: flex;
@@ -1530,4 +1532,15 @@
 
 [data-theme="dark"] .cell-peek-compare__label {
   color: rgba(255, 255, 255, 0.35);
+}
+
+/* ── Button progress animations ── */
+
+@keyframes fdp-spinner {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fdp-btn-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }

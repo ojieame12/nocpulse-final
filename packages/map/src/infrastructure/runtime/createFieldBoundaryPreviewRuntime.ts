@@ -65,7 +65,7 @@ const HOVER_DIM_TARGET_ALPHA = 130;
 const HOVER_DIM_RATE = 1 / 70; // 70ms to full dim — snappy response
 
 /** Entrance animation duration (ms). Extrusions grow + colors fade in. */
-const ENTRANCE_DURATION_MS = 700;
+const ENTRANCE_DURATION_MS = 400;
 
 /** Slight overshoot for bounce-settle feel on entrance. */
 const ENTRANCE_OVERSHOOT = 1.06;
@@ -703,6 +703,7 @@ export type CreateFieldBoundaryPreviewRuntimeOptions = {
   onCellClick?: (event: CellClickEvent) => void;
   onFieldHover?: (fieldId: string | null) => void;
   onFieldClick?: (fieldId: string) => void;
+  onFatalError?: (error: Error) => void;
 };
 
 export function createFieldBoundaryPreviewRuntime({
@@ -711,6 +712,7 @@ export function createFieldBoundaryPreviewRuntime({
   onCellClick,
   onFieldHover,
   onFieldClick,
+  onFatalError,
 }: CreateFieldBoundaryPreviewRuntimeOptions = {}): MapRuntimeContract<FieldBoundaryPreviewRenderModel> {
   let map: MapLibreMap | null = null;
   let overlay: MapboxOverlay | null = null;
@@ -984,8 +986,8 @@ export function createFieldBoundaryPreviewRuntime({
         const dist = Math.sqrt(
           (nextCenter[0] - prevCenter[0]) ** 2 + (nextCenter[1] - prevCenter[1]) ** 2,
         );
-        // ~600ms for nearby fields, up to 1400ms for cross-region jumps
-        flyDuration = Math.min(500 + dist * 4000, 1400);
+        // ~400ms for nearby fields, up to 900ms for cross-region jumps
+        flyDuration = Math.min(350 + dist * 3000, 900);
       }
 
       mounted.map.fitBounds(toBounds(targetBbox), {
@@ -1062,6 +1064,10 @@ export function createFieldBoundaryPreviewRuntime({
         touchPitch: true,
         keyboard: true,
         maxPitch: 72,
+      });
+
+      map.on("webglcontextlost", () => {
+        onFatalError?.(new Error("MapLibre WebGL context lost. The browser exhausted GPU memory resources."));
       });
 
       currentModel = model;

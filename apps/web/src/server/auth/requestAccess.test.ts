@@ -60,3 +60,21 @@ test("renderRequestAccessNotificationEmail includes lead details", () => {
   assert.match(rendered.html, /Doe Family Farms/);
   assert.match(rendered.text, /Interested in season-long monitoring\./);
 });
+
+test("renderRequestAccessNotificationEmail uses a review link instead of direct grant copy", () => {
+  const rendered = renderRequestAccessNotificationEmail(
+    {
+      name: "Jane Doe",
+      email: "jane@example.com",
+      farmName: "Doe Family Farms",
+      acreage: "450 ha",
+      message: "Interested in season-long monitoring.",
+    },
+    "https://fieldpulse-v3.vercel.app/api/grant-access?token=abc123",
+  );
+
+  assert.match(rendered.html, /Review Request/);
+  assert.match(rendered.html, /grant .*workspace access/i);
+  assert.doesNotMatch(rendered.html, />Grant Access</);
+  assert.match(rendered.text, /Review request:/);
+});
