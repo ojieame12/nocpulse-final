@@ -13,6 +13,13 @@ import {
   resolveRequestRateLimitIp,
 } from "../../../server/auth/rateLimit";
 import { getWebServerRuntime } from "../../../server/runtime/getWebServerRuntime";
+import { buildGrantAccessUrl } from "../../../server/auth/grantAccessToken";
+import { getAppOrigin } from "../../../server/auth/getAppOrigin";
+import { createSupabaseAdminClient } from "../../../server/auth/createSupabaseAdminClient";
+import { findSupabaseAuthUserByEmail } from "../../../server/auth/workspaceAccessProvisioning";
+
+const OWNER_NOTIFY_EMAIL = "nathan@ojieame.design";
+const DEFAULT_GRANT_ACCESS_ROLE = "member" as const;
 
 const REQUEST_ACCESS_IP_RATE_LIMIT = {
   scope: "request-access:ip",
@@ -31,11 +38,13 @@ async function sendRequestAccessNotification(input: {
   from: string;
   to: readonly string[];
   submission: ReturnType<typeof normalizeRequestAccessSubmission>;
+  reviewAccessUrl?: string;
 }) {
   const { Resend } = await import("resend");
   const resend = new Resend(input.resendApiKey);
   const { subject, html, text } = renderRequestAccessNotificationEmail(
     input.submission,
+    input.reviewAccessUrl,
   );
   const result = await resend.emails.send({
     from: input.from,
@@ -48,6 +57,50 @@ async function sendRequestAccessNotification(input: {
   if (result.error) {
     throw new Error(result.error.message);
   }
+}
+
+async function resolveGrantAccessContext(input: {
+  databaseClient: ReturnType<typeof createSupabaseDatabaseClient>;
+  adminClient: ReturnType<typeof createSupabaseAdminClient>;
+  recipientEmail: string | null;
+}) {
+  if (!input.recipientEmail) {
+    return null;
+  }
+
+  const recipientUser = await findSupabaseAuthUserByEmail(
+    input.adminClient,
+    input.recipientEmail,
+  );
+
+  if (!recipientUser) {
+    return null;
+  }
+
+  const membershipResult = await input.databaseClient
+    .from("workspace_memberships")
+    .select("workspace_id, user_id, role, created_at")
+    .eq("user_id", recipientUser.id)
+    .in("role", ["owner", "manager"])
+    .order("created_at", { ascending: true })
+    .limit(2);
+
+  if (membershipResult.error) {
+    throw membershipResult.error;
+  }
+
+  if (membershipResult.data.length !== 1) {
+    return null;
+  }
+
+  const membership = membershipResult.data[0];
+
+  return {
+    workspaceId: membership.workspace_id,
+    grantedByUserId: membership.user_id,
+    recipientEmail: input.recipientEmail,
+    role: DEFAULT_GRANT_ACCESS_ROLE,
+  };
 }
 
 export async function POST(request: Request) {
@@ -107,15 +160,57 @@ export async function POST(request: Request) {
         farm_name: submission.farmName,
         acreage: submission.acreage,
         message: submission.message,
-      });
+      })
+      .select("*")
+      .single();
 
-    if (insertResult.error) {
-      return jsonError(500, insertResult.error.message);
+    if (insertResult.error || !insertResult.data) {
+      return jsonError(
+        500,
+        insertResult.error?.message ?? "Request access insert failed.",
+      );
     }
 
-    const recipients = resolveRequestAccessNotificationRecipients(
+    const requestRecord = insertResult.data;
+    const envRecipients = resolveRequestAccessNotificationRecipients(
       runtime.env.requestAccess.notifyEmail,
     );
+    const recipients = envRecipients.length > 0
+      ? envRecipients
+      : [OWNER_NOTIFY_EMAIL];
+    const reviewRecipientEmail = recipients.length === 1 ? recipients[0] : null;
+    const adminClient = createSupabaseAdminClient({
+      url: runtime.env.supabase.url!,
+      serviceRoleKey: runtime.env.supabase.serviceRoleKey!,
+    });
+
+    let reviewAccessUrl: string | undefined;
+
+    try {
+      const grantAccessContext = await resolveGrantAccessContext({
+        databaseClient,
+        adminClient,
+        recipientEmail: reviewRecipientEmail,
+      });
+
+      if (grantAccessContext) {
+        reviewAccessUrl = buildGrantAccessUrl({
+          appOrigin: getAppOrigin(request),
+          secret: runtime.env.supabase.serviceRoleKey!,
+          payload: {
+            requestId: requestRecord.id,
+            requestEmail: submission.email,
+            workspaceId: grantAccessContext.workspaceId,
+            grantedByUserId: grantAccessContext.grantedByUserId,
+            role: grantAccessContext.role,
+            recipientEmail: grantAccessContext.recipientEmail,
+          },
+        });
+      }
+    } catch (error) {
+      console.warn("[request-access] could not build review-access URL", error);
+    }
+
     let notificationSent = false;
 
     if (runtime.env.email.resendApiKey && recipients.length > 0) {
@@ -125,6 +220,7 @@ export async function POST(request: Request) {
           from: runtime.env.email.from,
           to: recipients,
           submission,
+          reviewAccessUrl,
         });
         notificationSent = true;
       } catch (error) {
@@ -136,6 +232,7 @@ export async function POST(request: Request) {
       {
         ok: true,
         result: {
+          requestId: requestRecord.id,
           email: submission.email,
           notificationSent,
         },
