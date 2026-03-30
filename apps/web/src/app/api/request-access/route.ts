@@ -63,7 +63,40 @@ async function resolveGrantAccessContext(input: {
   databaseClient: ReturnType<typeof createSupabaseDatabaseClient>;
   adminClient: ReturnType<typeof createSupabaseAdminClient>;
   recipientEmail: string | null;
+  explicitWorkspaceId?: string | null;
+  explicitGrantedByUserId?: string | null;
 }) {
+  if (input.explicitWorkspaceId && input.explicitGrantedByUserId) {
+    const explicitMembershipResult = await input.databaseClient
+      .from("workspace_memberships")
+      .select("workspace_id, user_id, role")
+      .eq("workspace_id", input.explicitWorkspaceId)
+      .eq("user_id", input.explicitGrantedByUserId)
+      .in("role", ["owner", "manager"])
+      .maybeSingle();
+
+    if (explicitMembershipResult.error) {
+      throw explicitMembershipResult.error;
+    }
+
+    if (explicitMembershipResult.data) {
+      return {
+        workspaceId: explicitMembershipResult.data.workspace_id,
+        grantedByUserId: explicitMembershipResult.data.user_id,
+        recipientEmail: input.recipientEmail,
+        role: DEFAULT_GRANT_ACCESS_ROLE,
+      };
+    }
+
+    console.warn(
+      "[request-access] explicit review grant binding is invalid; falling back to recipient lookup",
+      {
+        workspaceId: input.explicitWorkspaceId,
+        grantedByUserId: input.explicitGrantedByUserId,
+      },
+    );
+  }
+
   if (!input.recipientEmail) {
     return null;
   }
@@ -191,6 +224,8 @@ export async function POST(request: Request) {
         databaseClient,
         adminClient,
         recipientEmail: reviewRecipientEmail,
+        explicitWorkspaceId: runtime.env.requestAccess.reviewWorkspaceId,
+        explicitGrantedByUserId: runtime.env.requestAccess.reviewGrantedByUserId,
       });
 
       if (grantAccessContext) {
