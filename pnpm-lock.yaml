@@ -29,6 +29,9 @@ importers:
       '@fieldpulse/module-auth':
         specifier: workspace:*
         version: link:../../packages/modules/auth
+      '@fieldpulse/module-field-intake':
+        specifier: workspace:*
+        version: link:../../packages/modules/field-intake
       '@fieldpulse/module-fields':
         specifier: workspace:*
         version: link:../../packages/modules/fields
@@ -44,6 +47,9 @@ importers:
       '@fieldpulse/platform-config':
         specifier: workspace:*
         version: link:../../packages/platform/config
+      '@fieldpulse/platform-db':
+        specifier: workspace:*
+        version: link:../../packages/platform/db
       '@fieldpulse/platform-runtime':
         specifier: workspace:*
         version: link:../../packages/platform/runtime
