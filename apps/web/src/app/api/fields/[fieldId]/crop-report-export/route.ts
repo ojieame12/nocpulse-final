@@ -40,7 +40,8 @@ export async function GET(
       return jsonError(404, `Field ${fieldId} not found.`);
     }
 
-    const crop = viewModel.cropPanel;
+    const panels = await viewModel.resolvePanels();
+    const crop = panels.cropPanel;
     const summary = viewModel.summary;
     const lines: string[] = [
       `# Crop Report: ${viewModel.fieldName}`,
