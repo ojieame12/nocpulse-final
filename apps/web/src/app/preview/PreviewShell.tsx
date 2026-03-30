@@ -68,9 +68,18 @@ export type FieldViewModel = {
   cellInspector: FieldCellInspectorModel | null;
 };
 
+export type PreviewShellViewer = {
+  displayName: string;
+  email: string | null;
+  initials: string;
+  workspaceRoleLabel: string;
+  workspaceName: string | null;
+};
+
 export type PreviewShellProps = {
   initial: FieldViewModel;
   initialPanelsPromise?: Promise<Partial<FieldViewModel>>;
+  viewer?: PreviewShellViewer | null;
 };
 
 import React from "react";
@@ -91,6 +100,7 @@ function StreamingPanels({
 const PREFETCH_DELAY_MS = 250;
 const FAILED_FETCH_RETRY_MS = 15_000;
 const ONBOARDING_STATUS_POLL_MS = 3_000;
+const EMPTY_PREVIEW_FIELD_ID = "__empty__";
 
 type PendingOnboardingWatch = {
   workspaceId?: string | null;
@@ -103,6 +113,10 @@ type OnboardingDispatchSnapshot = {
   id: string;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 };
+
+function isPlaceholderFieldId(fieldId?: string | null) {
+  return !fieldId || fieldId === EMPTY_PREVIEW_FIELD_ID;
+}
 
 function toFieldViewModel(data: FieldViewModel): FieldViewModel;
 function toFieldViewModel(data: Record<string, unknown>): FieldViewModel;
@@ -334,7 +348,7 @@ function buildZoneDetailSelection(
 
 /* ── Main shell ── */
 
-export function PreviewShell({ initial, initialPanelsPromise }: PreviewShellProps) {
+export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: PreviewShellProps) {
   const [theme, setTheme] = useState<AppTheme>("dark");
 
   /* Field data state — starts with server-loaded initial */
@@ -467,6 +481,10 @@ export function PreviewShell({ initial, initialPanelsPromise }: PreviewShellProp
         force?: boolean;
       },
     ) => {
+      if (isPlaceholderFieldId(fieldId)) {
+        return Promise.resolve(null);
+      }
+
       const cached = fieldCacheRef.current.get(fieldId);
       if (cached && !options?.force) {
         return Promise.resolve(cached);
@@ -551,6 +569,10 @@ export function PreviewShell({ initial, initialPanelsPromise }: PreviewShellProp
   );
 
   const handleMarketScenarioSaved = useCallback(async () => {
+    if (isPlaceholderFieldId(activeFieldId)) {
+      return;
+    }
+
     const nextField = await fetchFieldOverview(activeFieldId, { force: true });
     if (!nextField || nextField.fieldId !== activeFieldId) {
       return;
@@ -695,7 +717,7 @@ export function PreviewShell({ initial, initialPanelsPromise }: PreviewShellProp
   /* ── Field switching via API ── */
   const handleFieldSelect = useCallback(
     (id: string) => {
-      if (id === activeFieldId) return;
+      if (isPlaceholderFieldId(id) || id === activeFieldId) return;
       setActiveFieldId(id);
       setActivePanel('detail');
       setPanelAnim('entering');
@@ -740,6 +762,7 @@ export function PreviewShell({ initial, initialPanelsPromise }: PreviewShellProp
   const handleFieldPrefetch = useCallback(
     (fieldId: string) => {
       if (
+        isPlaceholderFieldId(fieldId) ||
         fieldId === activeFieldId ||
         fieldCacheRef.current.has(fieldId) ||
         inflightRequestsRef.current.has(fieldId) ||
@@ -795,6 +818,10 @@ export function PreviewShell({ initial, initialPanelsPromise }: PreviewShellProp
   }, [activeFieldId, fetchFieldOverview, sidebarFields]);
 
   useEffect(() => {
+    if (isPlaceholderFieldId(activeFieldId)) {
+      return;
+    }
+
     let cancelled = false;
 
     void (async () => {
@@ -1117,6 +1144,7 @@ export function PreviewShell({ initial, initialPanelsPromise }: PreviewShellProp
         onAddField={() => switchPanel(activePanel === 'add-field' ? 'detail' : 'add-field')}
         theme={theme}
         onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
+        viewer={viewer}
       />
       <div className="app-body">
         {initialPanelsPromise && (

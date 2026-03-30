@@ -110,6 +110,11 @@ type TrackedJob = {
 };
 
 const JOB_STATUS_POLL_MS = 3_000;
+const EMPTY_PREVIEW_ID = "__empty__";
+
+function normalizeWorkspaceId(workspaceId?: string | null) {
+  return workspaceId && workspaceId !== EMPTY_PREVIEW_ID ? workspaceId : null;
+}
 
 function formatArea(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value)
@@ -598,6 +603,7 @@ export function AddFieldPanel({
   onOnboardingTracked,
   workspaceId = null,
 }: AddFieldPanelProps) {
+  const effectiveWorkspaceId = normalizeWorkspaceId(workspaceId);
   const [method, setMethod] = useState<MethodKey>('lld');
   const [fieldName, setFieldName] = useState('');
   const [lldCode, setLldCode] = useState('');
@@ -642,7 +648,7 @@ export function AddFieldPanel({
             'content-type': 'application/json',
           },
           body: JSON.stringify({
-            workspaceId: workspaceId ?? undefined,
+            workspaceId: effectiveWorkspaceId ?? undefined,
             ids: trackedJobs.map((job) => job.dispatchId),
           }),
         });
@@ -683,7 +689,7 @@ export function AddFieldPanel({
         clearTimeout(timeoutId);
       }
     };
-  }, [trackedJobs, workspaceId]);
+  }, [effectiveWorkspaceId, trackedJobs]);
 
   const primaryLabel = useMemo(() => {
     if (isSubmitting) {
@@ -768,7 +774,7 @@ export function AddFieldPanel({
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        workspaceId: workspaceId ?? undefined,
+        workspaceId: effectiveWorkspaceId ?? undefined,
         code: lldCode.trim(),
         suggestedFieldName: fieldName.trim() || undefined,
         cropType: cropType.trim() || undefined,
@@ -819,7 +825,7 @@ export function AddFieldPanel({
       preferredFieldId: result.field.id,
       fieldIds: [result.field.id],
       dispatchIds: Array.from(new Set(nextTrackedJobs.map((job) => job.dispatchId))),
-      workspaceId,
+      workspaceId: effectiveWorkspaceId,
     });
     onFieldsChanged?.({
       preferredFieldId: result.field.id,
@@ -864,8 +870,8 @@ export function AddFieldPanel({
 
     const formData = new FormData();
     formData.set('file', selectedFile);
-    if (workspaceId) {
-      formData.set('workspaceId', workspaceId);
+    if (effectiveWorkspaceId) {
+      formData.set('workspaceId', effectiveWorkspaceId);
     }
     if (fieldName.trim()) {
       formData.set('suggestedFieldName', fieldName.trim());
@@ -918,7 +924,7 @@ export function AddFieldPanel({
       preferredFieldId: result.field.id,
       fieldIds: [result.field.id],
       dispatchIds: Array.from(new Set(nextTrackedJobs.map((job) => job.dispatchId))),
-      workspaceId,
+      workspaceId: effectiveWorkspaceId,
     });
     onFieldsChanged?.({
       preferredFieldId: result.field.id,
@@ -971,7 +977,7 @@ export function AddFieldPanel({
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        workspaceId: workspaceId ?? undefined,
+        workspaceId: effectiveWorkspaceId ?? undefined,
         preview: spreadsheetPreview,
       }),
     });
@@ -985,7 +991,7 @@ export function AddFieldPanel({
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          workspaceId: workspaceId ?? undefined,
+          workspaceId: effectiveWorkspaceId ?? undefined,
           onboardingDryRun: false,
         }),
       },
@@ -1007,7 +1013,7 @@ export function AddFieldPanel({
         { label: 'Reused', value: String(reusedCount) },
         { label: 'Queued Fields', value: String(queuedFieldCount) },
         { label: 'Queued Jobs', value: String(queuedJobCount) },
-        { label: 'Workspace', value: workspaceId ?? 'Active actor workspace' },
+        { label: 'Workspace', value: effectiveWorkspaceId ?? 'Active actor workspace' },
       ],
     });
     setSpreadsheetPreview(null);
@@ -1027,7 +1033,7 @@ export function AddFieldPanel({
           : null,
       fieldIds: committed.candidates.map((entry) => entry.field.id),
       dispatchIds: Array.from(new Set(nextTrackedJobs.map((job) => job.dispatchId))),
-      workspaceId,
+      workspaceId: effectiveWorkspaceId,
     });
     onFieldsChanged?.({
       preferredFieldId:

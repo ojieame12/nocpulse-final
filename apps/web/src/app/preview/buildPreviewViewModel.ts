@@ -2,6 +2,32 @@ import { resolveFieldBoundaryPreviewPresentation } from "@fieldpulse/map/server"
 import type { FieldBoundaryPreviewRenderModel } from "@fieldpulse/map";
 import { buildFieldOverviewViewModel } from "../../features/fields/buildFieldOverviewViewModel";
 import { resolvePreviewFieldSelection } from "./resolvePreviewFieldSelection";
+import { getWebServerRuntime } from "../../server/runtime/getWebServerRuntime";
+import { createServerComponentRequest } from "../../server/runtime/createServerComponentRequest";
+import { resolveRequestAuthViewer, type AuthViewer } from "../../server/auth/resolveAuthViewer";
+
+/**
+ * Resolve the authenticated viewer for the TopBar avatar / identity display.
+ * Returns null silently if resolution fails (the shell still renders, just
+ * without the viewer badge — same as before this change).
+ */
+async function resolvePreviewViewer(
+  preferredWorkspaceId?: string,
+): Promise<AuthViewer | null> {
+  try {
+    const runtime = getWebServerRuntime();
+    if (runtime.mode !== "supabase") return null;
+    const request = await createServerComponentRequest("/");
+    const { viewer } = await resolveRequestAuthViewer({
+      request,
+      runtime,
+      preferredWorkspaceId,
+    });
+    return viewer;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Stub map preview for empty workspaces — shows a satellite basemap
@@ -43,8 +69,10 @@ export async function buildPreviewViewModel(initialFieldId?: string) {
 
   // Empty workspace — render the full shell with no field data
   if (selection.status === "no-fields") {
+    const viewer = await resolvePreviewViewer();
     return {
       status: "ready" as const,
+      viewer,
       workspaceId: "__empty__",
       fieldId: "__empty__",
       fieldName: "",
@@ -64,9 +92,12 @@ export async function buildPreviewViewModel(initialFieldId?: string) {
     };
   }
 
-  const viewModel = await buildFieldOverviewViewModel(selection.selectedFieldId, {
-    preferredWorkspaceId: selection.preferredWorkspaceId,
-  });
+  const [viewModel, viewer] = await Promise.all([
+    buildFieldOverviewViewModel(selection.selectedFieldId, {
+      preferredWorkspaceId: selection.preferredWorkspaceId,
+    }),
+    resolvePreviewViewer(selection.preferredWorkspaceId),
+  ]);
 
   if (viewModel.status !== "ready") {
     return {
@@ -76,6 +107,7 @@ export async function buildPreviewViewModel(initialFieldId?: string) {
 
   return {
     status: "ready" as const,
+    viewer,
     workspaceId: viewModel.workspaceId,
     fieldId: viewModel.fieldId,
     fieldName: viewModel.fieldName,

@@ -8,6 +8,7 @@ import { extractSupabaseAccessToken } from "../auth/extractSupabaseAccessToken";
 const FALLBACK_ACTOR_USER_ID = "00000000-0000-4000-8000-000000000001";
 const USER_ID_HEADER = "x-fieldpulse-user-id";
 const WORKSPACE_ID_HEADER = "x-fieldpulse-workspace-id";
+const PLACEHOLDER_WORKSPACE_IDS = new Set(["__empty__", "_empty_"]);
 
 type SupabaseServerRuntime = Extract<ServerRuntime, { mode: "supabase" }>;
 type ResolvedRequestActor = NonNullable<
@@ -42,13 +43,22 @@ export function resolveRequestedWorkspaceId(
   fallbackWorkspaceId?: string | null,
 ) {
   const headerValue = request.headers.get(WORKSPACE_ID_HEADER);
+  const normalizedHeaderValue = headerValue?.trim() ?? "";
 
-  if (headerValue && headerValue.trim()) {
-    return headerValue;
+  if (
+    normalizedHeaderValue &&
+    !PLACEHOLDER_WORKSPACE_IDS.has(normalizedHeaderValue)
+  ) {
+    return normalizedHeaderValue;
   }
 
-  if (fallbackWorkspaceId) {
-    return fallbackWorkspaceId;
+  const normalizedFallbackWorkspaceId = fallbackWorkspaceId?.trim() ?? "";
+
+  if (
+    normalizedFallbackWorkspaceId &&
+    !PLACEHOLDER_WORKSPACE_IDS.has(normalizedFallbackWorkspaceId)
+  ) {
+    return normalizedFallbackWorkspaceId;
   }
 
   return null;

@@ -46,7 +46,7 @@ export default async function PreviewPage({ searchParams }: PreviewPageProps) {
 
   return (
     <ErrorBoundary fallbackMessage="The preview environment crashed unexpectedly.">
-      <PreviewShell initial={initial} initialPanelsPromise={vm.panelsPromise} />
+      <PreviewShell initial={initial} initialPanelsPromise={vm.panelsPromise} viewer={vm.viewer ?? null} />
     </ErrorBoundary>
   );
 }
