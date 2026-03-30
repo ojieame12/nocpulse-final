@@ -58,10 +58,13 @@ export async function resolveRequestActor(
   request: Request,
   runtime: ServerRuntime,
   options: {
+    allowDevelopmentFallback?: boolean;
     preferredWorkspaceId?: string | null;
   } = {},
 ): Promise<ResolvedRequestActor> {
   const configured = requireSupabaseRuntime(runtime);
+  const allowDevelopmentFallback =
+    options.allowDevelopmentFallback ?? true;
   const preferredWorkspaceId =
     resolveRequestedWorkspaceId(request, options.preferredWorkspaceId) ??
     configured.env.devWorkspaceId ??
@@ -103,7 +106,7 @@ export async function resolveRequestActor(
     }
   }
 
-  if (!canUseDevelopmentFallback(configured)) {
+  if (!allowDevelopmentFallback || !canUseDevelopmentFallback(configured)) {
     throw new RequestContextError(
       401,
       "[auth] No Supabase session was provided for this request.",

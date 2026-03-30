@@ -1,319 +1,320 @@
 "use client";
 
 import Link from "next/link";
-import { Leaf } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useState, type CSSProperties, type FormEvent } from "react";
+import { AuthNoticeScreen } from "./AuthNoticeScreen";
 
-/**
- * Request-access screen — lead-capture form for users who want full
- * NocPulse access after a shared preview or expired token.
- */
-export function RequestAccessScreen() {
+type RequestAccessScreenProps = {
+  email?: string | null;
+  nextPath?: string;
+};
+
+type RequestAccessFormState = {
+  name: string;
+  email: string;
+  farmName: string;
+  acreage: string;
+  message: string;
+};
+
+function buildSignInHref(nextPath: string) {
+  return `/auth/sign-in?next=${encodeURIComponent(nextPath)}`;
+}
+
+export function RequestAccessScreen({
+  email,
+  nextPath = "/preview",
+}: RequestAccessScreenProps) {
+  const [formState, setFormState] = useState<RequestAccessFormState>(() => ({
+    name: "",
+    email: email ?? "",
+    farmName: "",
+    acreage: "",
+    message: "",
+  }));
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const signInHref = buildSignInHref(nextPath);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setSubmitting(true);
-
-    const form = e.currentTarget;
-    const data = {
-      name: (form.elements.namedItem("name") as HTMLInputElement).value,
-      email: (form.elements.namedItem("email") as HTMLInputElement).value,
-      farmName: (form.elements.namedItem("farmName") as HTMLInputElement).value,
-      acreage: (form.elements.namedItem("acreage") as HTMLInputElement).value,
-      message: (form.elements.namedItem("message") as HTMLTextAreaElement)
-        .value,
-    };
+    setError(null);
 
     try {
-      // Placeholder endpoint — will be wired to an actual API later
-      await fetch("/api/request-access", {
+      const response = await fetch("/api/request-access", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(formState),
       });
-    } catch {
-      // Silently succeed for now — endpoint doesn't exist yet
-    }
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            error?: {
+              message?: string;
+            };
+          }
+        | null;
 
-    setSubmitting(false);
-    setSubmitted(true);
+      if (!response.ok) {
+        throw new Error(
+          payload?.error?.message ?? "We could not submit your request.",
+        );
+      }
+
+      setSubmitted(true);
+    } catch (submissionError) {
+      setError(
+        submissionError instanceof Error
+          ? submissionError.message
+          : "We could not submit your request.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (submitted) {
+    return (
+      <AuthNoticeScreen
+        eyebrow="Request Access"
+        title="Request received"
+        description="Your access request is in queue. NocPulse will review the details and follow up with the next step."
+        detail={
+          <span>
+            We&apos;ll contact{" "}
+            <span style={styles.monoValue}>{formState.email}</span> about{" "}
+            <span style={styles.monoValue}>{formState.farmName}</span>.
+          </span>
+        }
+        actions={[
+          {
+            href: signInHref,
+            label: "Sign in with an existing account",
+            variant: "secondary",
+          },
+        ]}
+        footer="We typically respond within one business day."
+      />
+    );
   }
 
   return (
-    <main style={styles.page}>
-      <div style={styles.card}>
-        {/* ── Icon ── */}
-        <div style={styles.iconWrap}>
-          <Leaf
-            size={48}
-            color="var(--accent-green, #008f4e)"
-            strokeWidth={1.5}
+    <AuthNoticeScreen
+      eyebrow="Request Access"
+      title="Request access to NocPulse"
+      description="Tell us about your farm or operation and NocPulse will review the request before provisioning access."
+      detail="Use the email address that should receive NocPulse access. Approved requests can move into the normal sign-in flow without changing email."
+      footer="We typically respond within one business day."
+    >
+      <form onSubmit={handleSubmit} style={styles.form}>
+        <label style={styles.field}>
+          <span style={styles.label}>Name</span>
+          <input
+            name="name"
+            type="text"
+            autoComplete="name"
+            required
+            value={formState.name}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setFormState((current) => ({
+                ...current,
+                name: value,
+              }));
+            }}
+            placeholder="Jane Doe"
+            style={styles.input}
           />
-        </div>
+        </label>
 
-        {/* ── Heading ── */}
-        <h1 style={styles.heading}>Request Access to NocPulse</h1>
-        <p style={styles.subtitle}>
-          Get precision agriculture intelligence for your fields
-        </p>
+        <label style={styles.field}>
+          <span style={styles.label}>Email</span>
+          <input
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={formState.email}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setFormState((current) => ({
+                ...current,
+                email: value,
+              }));
+            }}
+            placeholder="jane@example.com"
+            style={styles.input}
+          />
+        </label>
 
-        {submitted ? (
-          /* ── Success state ── */
-          <div style={styles.successBox}>
-            <p style={styles.successText}>
-              Your request has been submitted. We typically respond within one
-              business day.
-            </p>
-            <Link href="/auth/sign-in" style={styles.secondaryLink}>
-              Sign in with an existing account
-            </Link>
-          </div>
-        ) : (
-          /* ── Form ── */
-          <form onSubmit={handleSubmit} style={styles.form}>
-            {/* Name */}
-            <label style={styles.label}>
-              <span style={styles.labelText}>Name</span>
-              <input
-                name="name"
-                type="text"
-                required
-                autoComplete="name"
-                placeholder="Jane Doe"
-                style={styles.input}
-              />
-            </label>
+        <label style={styles.field}>
+          <span style={styles.label}>Farm / Operation</span>
+          <input
+            name="farmName"
+            type="text"
+            required
+            value={formState.farmName}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setFormState((current) => ({
+                ...current,
+                farmName: value,
+              }));
+            }}
+            placeholder="Doe Family Farms"
+            style={styles.input}
+          />
+        </label>
 
-            {/* Email */}
-            <label style={styles.label}>
-              <span style={styles.labelText}>Email</span>
-              <input
-                name="email"
-                type="email"
-                required
-                autoComplete="email"
-                placeholder="jane@example.com"
-                style={styles.input}
-              />
-            </label>
+        <label style={styles.field}>
+          <span style={styles.label}>Approximate Acreage</span>
+          <input
+            name="acreage"
+            type="text"
+            inputMode="decimal"
+            value={formState.acreage}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setFormState((current) => ({
+                ...current,
+                acreage: value,
+              }));
+            }}
+            placeholder="e.g. 450 ha"
+            style={styles.input}
+          />
+        </label>
 
-            {/* Farm / Operation Name */}
-            <label style={styles.label}>
-              <span style={styles.labelText}>Farm / Operation Name</span>
-              <input
-                name="farmName"
-                type="text"
-                required
-                placeholder="Doe Family Farms"
-                style={styles.input}
-              />
-            </label>
+        <label style={styles.field}>
+          <span style={styles.label}>
+            Message <span style={styles.optional}>(optional)</span>
+          </span>
+          <textarea
+            name="message"
+            rows={4}
+            value={formState.message}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setFormState((current) => ({
+                ...current,
+                message: value,
+              }));
+            }}
+            placeholder="Tell us about your operation or what you want from NocPulse."
+            style={{ ...styles.input, ...styles.textarea }}
+          />
+        </label>
 
-            {/* Approximate Acreage */}
-            <label style={styles.label}>
-              <span style={styles.labelText}>Approximate Acreage (ha)</span>
-              <input
-                name="acreage"
-                type="text"
-                inputMode="decimal"
-                placeholder="e.g. 450"
-                style={styles.input}
-              />
-            </label>
+        {error ? (
+          <p role="alert" style={styles.error}>
+            {error}
+          </p>
+        ) : null}
 
-            {/* Message */}
-            <label style={styles.label}>
-              <span style={styles.labelText}>
-                Message{" "}
-                <span style={{ fontWeight: 400, color: "rgba(255,255,255,0.3)" }}>
-                  (optional)
-                </span>
-              </span>
-              <textarea
-                name="message"
-                rows={3}
-                placeholder="Tell us about your operation or what you're looking for..."
-                style={{ ...styles.input, ...styles.textarea }}
-              />
-            </label>
+        <button
+          type="submit"
+          disabled={submitting}
+          style={{
+            ...styles.primaryButton,
+            opacity: submitting ? 0.7 : 1,
+            cursor: submitting ? "wait" : "pointer",
+          }}
+        >
+          {submitting ? "Submitting..." : "Request Access"}
+        </button>
+      </form>
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={submitting}
-              style={{
-                ...styles.primaryBtn,
-                opacity: submitting ? 0.65 : 1,
-                cursor: submitting ? "not-allowed" : "pointer",
-              }}
-            >
-              {submitting ? "Submitting..." : "Request Access"}
-            </button>
-          </form>
-        )}
-
-        {/* ── Secondary link ── */}
-        {!submitted && (
-          <Link href="/auth/sign-in" style={styles.secondaryLink}>
-            Already have an account? Sign in
-          </Link>
-        )}
-
-        {/* ── Footer ── */}
-        <p style={styles.footer}>
-          We typically respond within one business day
-        </p>
-      </div>
-    </main>
+      <p style={styles.secondaryCopy}>
+        Already have an account?{" "}
+        <Link href={signInHref} style={styles.secondaryLink}>
+          Sign in
+        </Link>
+      </p>
+    </AuthNoticeScreen>
   );
 }
 
-/* ── Inline styles (CSS-variable-driven, dark-theme default) ── */
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "24px 16px",
-    background: "#0c120e",
-    fontFamily: "var(--font-body, 'Sintony', sans-serif)",
-  },
-
-  card: {
-    width: "100%",
-    maxWidth: 480,
-    background: "rgba(255, 255, 255, 0.04)",
-    border: "1px solid rgba(255, 255, 255, 0.08)",
-    borderRadius: 18,
-    padding: "44px 36px 36px",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 14,
-    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.35)",
-  },
-
-  iconWrap: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: 80,
-    height: 80,
-    borderRadius: "50%",
-    background: "rgba(0, 143, 78, 0.1)",
-    marginBottom: 2,
-  },
-
-  heading: {
-    fontFamily: "var(--font-heading, 'P22 Mackinac', Georgia, serif)",
-    fontSize: "var(--text-2xl, 28px)",
-    fontWeight: 500,
-    color: "#ffffff",
-    margin: 0,
-    textAlign: "center" as const,
-    lineHeight: 1.2,
-  },
-
-  subtitle: {
-    fontSize: "var(--text-base, 14px)",
-    lineHeight: 1.5,
-    color: "rgba(255, 255, 255, 0.5)",
-    textAlign: "center" as const,
-    margin: 0,
-    maxWidth: 320,
-  },
-
+const styles: Record<string, CSSProperties> = {
   form: {
-    width: "100%",
     display: "flex",
     flexDirection: "column",
-    gap: 16,
-    marginTop: 8,
+    gap: "var(--space-lg)",
   },
-
+  field: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-xs)",
+  },
   label: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-  },
-
-  labelText: {
-    fontSize: "var(--text-sm, 13px)",
+    fontFamily: "var(--font-body)",
+    fontSize: "9px",
     fontWeight: 700,
-    color: "rgba(255, 255, 255, 0.65)",
-    letterSpacing: "0.02em",
+    letterSpacing: "1px",
+    textTransform: "uppercase",
+    color: "var(--text-muted)",
   },
-
+  optional: {
+    fontWeight: 400,
+    textTransform: "none",
+    letterSpacing: "normal",
+  },
   input: {
     width: "100%",
-    padding: "12px 14px",
-    background: "rgba(255, 255, 255, 0.06)",
-    border: "1px solid rgba(255, 255, 255, 0.1)",
-    borderRadius: 10,
-    color: "#ffffff",
-    fontSize: "var(--text-base, 14px)",
-    fontFamily: "var(--font-body, 'Sintony', sans-serif)",
-    outline: "none",
-    transition: "border-color 0.15s ease, background 0.15s ease",
-    boxSizing: "border-box" as const,
+    padding: "12px 16px",
+    borderRadius: "var(--btn-radius)",
+    border: "1px solid var(--border-light)",
+    background: "var(--surface-white)",
+    color: "var(--text-primary)",
+    fontFamily: "var(--font-body)",
+    fontSize: "var(--text-sm)",
+    lineHeight: "var(--leading-normal)",
   },
-
   textarea: {
-    resize: "vertical" as const,
-    minHeight: 72,
-    lineHeight: 1.5,
+    minHeight: 112,
+    resize: "vertical",
   },
-
-  primaryBtn: {
-    display: "inline-flex",
+  error: {
+    margin: 0,
+    padding: "12px 14px",
+    borderRadius: "var(--section-radius)",
+    background: "var(--status-danger-bg)",
+    color: "var(--status-danger-fg)",
+    fontFamily: "var(--font-body)",
+    fontSize: "var(--text-sm)",
+    lineHeight: "var(--leading-normal)",
+  },
+  primaryButton: {
+    display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    width: "100%",
-    padding: "14px 28px",
-    marginTop: 4,
-    background: "var(--btn-fill-primary, #004726)",
-    color: "var(--btn-text-primary, #ffffff)",
-    fontFamily: "var(--font-body, 'Sintony', sans-serif)",
-    fontSize: "var(--btn-font-size, 14px)",
+    padding: "var(--btn-padding-v) var(--btn-padding-h)",
+    borderRadius: "var(--btn-radius)",
+    border: "1px solid transparent",
+    background: "var(--btn-fill-primary)",
+    boxShadow: "var(--shadow-btn)",
+    color: "var(--btn-text-primary)",
+    fontFamily: "var(--font-body)",
+    fontSize: "var(--btn-font-size)",
     fontWeight: 700,
-    border: "none",
-    borderRadius: "var(--btn-radius, 10px)",
-    letterSpacing: "0.01em",
-    transition: "background 0.15s ease, opacity 0.15s ease",
+    lineHeight: "var(--leading-normal)",
   },
-
-  secondaryLink: {
-    fontSize: "var(--text-sm, 13px)",
-    color: "var(--accent-green-bright, #22c55e)",
-    textDecoration: "none",
-    marginTop: 2,
-  },
-
-  successBox: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 16,
-    padding: "24px 0",
-  },
-
-  successText: {
-    fontSize: "var(--text-base, 14px)",
-    lineHeight: 1.6,
-    color: "rgba(255, 255, 255, 0.6)",
-    textAlign: "center" as const,
+  secondaryCopy: {
     margin: 0,
-    maxWidth: 320,
+    fontFamily: "var(--font-body)",
+    fontSize: "var(--text-sm)",
+    lineHeight: "var(--leading-normal)",
+    color: "var(--text-muted)",
   },
-
-  footer: {
-    fontSize: "var(--text-xs, 11px)",
-    color: "rgba(255, 255, 255, 0.3)",
-    margin: "8px 0 0",
-    textAlign: "center" as const,
+  secondaryLink: {
+    color: "var(--btn-fill-primary)",
+    fontWeight: 700,
+    textDecoration: "none",
+  },
+  monoValue: {
+    fontFamily: "var(--font-mono)",
+    color: "var(--text-primary)",
   },
 };

@@ -1,46 +1,51 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  GUEST_SHARE_COOKIE_NAME,
+  hasActiveGuestShareCookie,
+} from "./server/auth/guestShareSession";
 import { updateSupabaseSession } from "./server/auth/updateSupabaseSession";
-import { collectSupabaseAuthCookieNames } from "./server/auth/extractSupabaseAccessToken";
 
 /**
  * NocPulse auth middleware.
  *
  * For every matched route (see `config.matcher` below) this middleware:
  *   1. Refreshes the Supabase session cookies via `updateSupabaseSession`.
- *   2. Checks whether any recognised Supabase auth cookie exists.
+ *   2. Verifies the request resolves to a live Supabase session.
  *   3. Redirects unauthenticated visitors to /auth/sign-in?next={path}.
  *
- * It intentionally does NOT validate the JWT — pages resolve the actor
- * themselves. The middleware only gates access to protected routes.
+ * The middleware only protects page routes. API routes return JSON auth
+ * errors from their own handlers so they are excluded from this matcher.
  */
 export async function middleware(request: NextRequest) {
-  // 1. Refresh the session (sets updated cookies on the response).
-  const response = await updateSupabaseSession(request);
+  const hasActiveGuestShareSession =
+    request.nextUrl.pathname.startsWith("/preview") &&
+    hasActiveGuestShareCookie(
+      request.cookies.get(GUEST_SHARE_COOKIE_NAME)?.value,
+    );
 
-  // 2. Check for the presence of any Supabase auth cookie.
-  const knownNames = collectSupabaseAuthCookieNames();
-  const cookies = request.cookies.getAll();
+  // 1. Try to refresh the session. If Supabase isn't configured (dev mode), skip gracefully.
+  let response: NextResponse;
+  let hasValidSession = false;
+  try {
+    const session = await updateSupabaseSession(request);
+    response = session.response;
+    hasValidSession = session.hasValidSession;
+  } catch {
+    // Supabase not configured — pass through without auth check (dev mode)
+    return NextResponse.next();
+  }
 
-  const hasAuthCookie = cookies.some((cookie) => {
-    // Exact match on known cookie names
-    if (knownNames.has(cookie.name)) {
-      return true;
-    }
-    // Chunked cookies: sb-<ref>-auth-token.0, sb-<ref>-auth-token.1, ...
-    if (/^sb-.+-auth-token(\.\d+)?$/.test(cookie.name)) {
-      return true;
-    }
-    return false;
-  });
-
-  if (hasAuthCookie) {
+  if (hasValidSession || hasActiveGuestShareSession) {
     return response;
   }
 
-  // 3. No auth cookies — redirect to sign-in, preserving the intended path.
+  // 3. No valid session — redirect to sign-in, preserving the intended path.
   const signInUrl = request.nextUrl.clone();
   signInUrl.pathname = "/auth/sign-in";
-  signInUrl.searchParams.set("next", request.nextUrl.pathname);
+  signInUrl.searchParams.set(
+    "next",
+    `${request.nextUrl.pathname}${request.nextUrl.search}`,
+  );
 
   return NextResponse.redirect(signInUrl);
 }
@@ -51,8 +56,9 @@ export async function middleware(request: NextRequest) {
  *   - /fonts/*          (self-hosted fonts)
  *   - /logo.svg         (brand mark)
  *   - /favicon.ico      (browser icon)
- *   - /api/auth/*       (auth API callbacks)
+ *   - /api/*            (API routes handle auth as JSON)
  *   - /auth/*           (sign-in, check-email, callback pages)
+ *   - /request-access   (public lead capture)
  *   - /share/*          (public share links)
  */
 export const config = {
@@ -62,6 +68,6 @@ export const config = {
      *   - Negative lookahead (?!...) excludes the listed prefixes.
      *   - The trailing /:path* matches everything else.
      */
-    "/((?!_next|fonts|logo\\.svg|favicon\\.ico|api/auth|auth|share).*)",
+    "/((?!_next|fonts|logo\\.svg|favicon\\.ico|api|auth|request-access|share).*)",
   ],
 };

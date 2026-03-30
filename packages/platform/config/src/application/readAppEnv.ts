@@ -33,6 +33,7 @@ export function readAppEnv(source: Partial<Record<keyof AppEnv | string, string 
   return {
     nodeEnv: parsed.NODE_ENV,
     publicAppName: parsed.NEXT_PUBLIC_APP_NAME,
+    appUrl: parsed.APP_URL,
     supabaseUrl: parsed.SUPABASE_URL,
     supabaseProjectRef,
     databaseUrl: parsed.DATABASE_URL,
@@ -62,6 +63,13 @@ export function readAppEnv(source: Partial<Record<keyof AppEnv | string, string 
         enabled: true,
         apiKey: parsed.OPEN_METEO_API_KEY,
       },
+    },
+    email: {
+      resendApiKey: parsed.RESEND_API_KEY,
+      from: parsed.EMAIL_FROM ?? "NocPulse <noreply@nocpulse.com>",
+    },
+    requestAccess: {
+      notifyEmail: parsed.REQUEST_ACCESS_NOTIFY_EMAIL,
     },
     r2: {
       enabled: r2Enabled,

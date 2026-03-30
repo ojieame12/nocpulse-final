@@ -1,4 +1,5 @@
 import { SignInScreen } from "../../../features/auth/SignInScreen";
+import { sanitizeNextPath } from "../../../server/auth/sanitizeNextPath";
 
 type SignInPageProps = {
   searchParams?: Promise<{
@@ -6,16 +7,12 @@ type SignInPageProps = {
   }>;
 };
 
-function sanitizeNextPath(value: string | undefined) {
-  return value && value.startsWith("/") ? value : "/";
-}
-
 export default async function SignInPage({ searchParams }: SignInPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
   return (
     <SignInScreen
-      nextPath={sanitizeNextPath(resolvedSearchParams?.next)}
+      nextPath={sanitizeNextPath(resolvedSearchParams?.next, "/preview")}
     />
   );
 }

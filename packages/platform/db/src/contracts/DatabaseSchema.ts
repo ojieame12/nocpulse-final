@@ -51,6 +51,121 @@ export type DatabaseSchema = {
         }>;
         Relationships: [];
       };
+      workspace_email_provisions: {
+        Row: {
+          workspace_id: string;
+          email: string;
+          role: "owner" | "manager" | "member" | "viewer";
+          created_by: string | null;
+          created_at: string;
+          claimed_by: string | null;
+          claimed_at: string | null;
+        };
+        Insert: {
+          workspace_id: string;
+          email: string;
+          role: "owner" | "manager" | "member" | "viewer";
+          created_by?: string | null;
+          created_at?: string;
+          claimed_by?: string | null;
+          claimed_at?: string | null;
+        };
+        Update: Partial<{
+          role: "owner" | "manager" | "member" | "viewer";
+          created_by: string | null;
+          created_at: string;
+          claimed_by: string | null;
+          claimed_at: string | null;
+        }>;
+        Relationships: [];
+      };
+      request_access_requests: {
+        Row: {
+          id: string;
+          name: string;
+          email: string;
+          farm_name: string;
+          acreage: string | null;
+          message: string | null;
+          status: "new" | "reviewed" | "contacted" | "archived";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          email: string;
+          farm_name: string;
+          acreage?: string | null;
+          message?: string | null;
+          status?: "new" | "reviewed" | "contacted" | "archived";
+          created_at?: string;
+        };
+        Update: Partial<{
+          name: string;
+          email: string;
+          farm_name: string;
+          acreage: string | null;
+          message: string | null;
+          status: "new" | "reviewed" | "contacted" | "archived";
+          created_at: string;
+        }>;
+        Relationships: [];
+      };
+      rate_limit_events: {
+        Row: {
+          id: number;
+          scope: string;
+          identifier: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          scope: string;
+          identifier: string;
+          created_at?: string;
+        };
+        Update: Partial<{
+          scope: string;
+          identifier: string;
+          created_at: string;
+        }>;
+        Relationships: [];
+      };
+      workspace_share_tokens: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          field_id: string;
+          token_hash: string;
+          created_by: string;
+          created_at: string;
+          expires_at: string;
+          revoked_at: string | null;
+          last_accessed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          field_id: string;
+          token_hash: string;
+          created_by: string;
+          created_at?: string;
+          expires_at: string;
+          revoked_at?: string | null;
+          last_accessed_at?: string | null;
+        };
+        Update: Partial<{
+          workspace_id: string;
+          field_id: string;
+          token_hash: string;
+          created_by: string;
+          created_at: string;
+          expires_at: string;
+          revoked_at: string | null;
+          last_accessed_at: string | null;
+        }>;
+        Relationships: [];
+      };
       workspace_user_settings: {
         Row: {
           workspace_id: string;
@@ -1570,6 +1685,21 @@ export type DatabaseSchema = {
           actor_user_id: string;
         };
         Returns: DatabaseSchema["app"]["Tables"]["workspaces"]["Row"][];
+      };
+      consume_rate_limit: {
+        Args: {
+          target_scope: string;
+          target_identifier: string;
+          max_attempts: number;
+          window_seconds: number;
+        };
+        Returns: {
+          allowed: boolean;
+          limit_count: number;
+          remaining_count: number;
+          retry_after_seconds: number;
+          reset_at: string;
+        }[];
       };
       create_field_record: {
         Args: {

@@ -1,4 +1,5 @@
 import { CheckEmailScreen } from "../../../features/auth/CheckEmailScreen";
+import { sanitizeNextPath } from "../../../server/auth/sanitizeNextPath";
 
 type CheckEmailPageProps = {
   searchParams?: Promise<{
@@ -6,10 +7,6 @@ type CheckEmailPageProps = {
     next?: string;
   }>;
 };
-
-function sanitizeNextPath(value: string | undefined) {
-  return value && value.startsWith("/") ? value : "/";
-}
 
 export default async function CheckEmailPage({
   searchParams,
@@ -19,7 +16,7 @@ export default async function CheckEmailPage({
   return (
     <CheckEmailScreen
       email={resolvedSearchParams?.email}
-      nextPath={sanitizeNextPath(resolvedSearchParams?.next)}
+      nextPath={sanitizeNextPath(resolvedSearchParams?.next, "/preview")}
     />
   );
 }

@@ -5,7 +5,7 @@ import {
   type UserId,
   type WorkspaceId,
 } from "@fieldpulse/platform-db";
-import type { WorkspaceMembership } from "../contracts/workspace";
+import type { WorkspaceMembership, WorkspaceRole } from "../contracts/workspace";
 import type { WorkspaceMembershipRepository } from "./WorkspaceMembershipRepository";
 
 type WorkspaceMembershipRow =
@@ -43,6 +43,44 @@ export function createSupabaseWorkspaceMembershipRepository(
       return mapWorkspaceMembership(
         requireSupabaseData(result, "workspaceMemberships.addMembership"),
       );
+    },
+
+    async updateMembershipRole(
+      workspaceId: WorkspaceId,
+      userId: UserId,
+      role: WorkspaceRole,
+    ) {
+      const result = await client
+        .from("workspace_memberships")
+        .update({
+          role,
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", userId)
+        .select("*")
+        .maybeSingle();
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      return result.data ? mapWorkspaceMembership(result.data) : null;
+    },
+
+    async removeMembership(workspaceId: WorkspaceId, userId: UserId) {
+      const result = await client
+        .from("workspace_memberships")
+        .delete()
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", userId)
+        .select("workspace_id")
+        .maybeSingle();
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      return result.data != null;
     },
 
     async isMember(workspaceId: WorkspaceId, userId: UserId) {

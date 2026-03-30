@@ -1,30 +1,127 @@
 import { NextResponse } from "next/server";
+import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import { createRouteHandlerSupabaseClient } from "../../../server/auth/createRouteHandlerSupabaseClient";
+import { sanitizeNextPath } from "../../../server/auth/sanitizeNextPath";
+import { claimWorkspaceEmailProvisions } from "../../../server/auth/workspaceEmailProvisioning";
+import { getWebServerRuntime } from "../../../server/runtime/getWebServerRuntime";
 
-function sanitizeNextPath(value: string | null) {
-  if (!value || !value.startsWith("/")) {
-    return "/";
+const EMAIL_OTP_TYPES = new Set([
+  "signup",
+  "invite",
+  "magiclink",
+  "recovery",
+  "email_change",
+  "email",
+]);
+
+function copyCookies(source: NextResponse, destination: NextResponse) {
+  for (const cookie of source.cookies.getAll()) {
+    destination.cookies.set(cookie.name, cookie.value, cookie);
   }
 
-  return value;
+  return destination;
+}
+
+function buildAuthErrorUrl(
+  requestUrl: URL,
+  reason: "missing-code" | "callback-error",
+  nextPath: string,
+) {
+  const target = new URL("/auth/error", requestUrl.origin);
+  target.searchParams.set("reason", reason);
+  target.searchParams.set("next", nextPath);
+  return target;
+}
+
+function buildPendingAccessUrl(
+  requestUrl: URL,
+  nextPath: string,
+  email?: string | null,
+) {
+  const target = new URL("/auth/pending-access", requestUrl.origin);
+  target.searchParams.set("next", nextPath);
+
+  if (email) {
+    target.searchParams.set("email", email);
+  }
+
+  return target;
 }
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const code = url.searchParams.get("code");
-  const nextPath = sanitizeNextPath(url.searchParams.get("next"));
-  const response = NextResponse.redirect(new URL(nextPath, url.origin));
+  const code = url.searchParams.get("code")?.trim();
+  const tokenHash = url.searchParams.get("token_hash")?.trim();
+  const verificationType = url.searchParams.get("type")?.trim();
+  const nextPath = sanitizeNextPath(url.searchParams.get("next"), "/preview");
 
-  if (!code) {
-    return NextResponse.redirect(new URL("/?auth=missing-code", url.origin));
+  if (!code && (!tokenHash || !verificationType)) {
+    return NextResponse.redirect(buildAuthErrorUrl(url, "missing-code", nextPath));
   }
 
-  const { client } = createRouteHandlerSupabaseClient(request, response);
-  const result = await client.auth.exchangeCodeForSession(code);
+  const exchangeResponse = NextResponse.next();
+  const { client } = createRouteHandlerSupabaseClient(request, exchangeResponse);
+  const result = code
+    ? await client.auth.exchangeCodeForSession(code)
+    : EMAIL_OTP_TYPES.has(verificationType ?? "")
+      ? await client.auth.verifyOtp({
+          token_hash: tokenHash!,
+          type: verificationType! as
+            | "signup"
+            | "invite"
+            | "magiclink"
+            | "recovery"
+            | "email_change"
+            | "email",
+        })
+      : {
+          data: { session: null, user: null },
+          error: new Error("Unsupported email verification type."),
+        };
 
   if (result.error) {
-    return NextResponse.redirect(new URL("/?auth=callback-error", url.origin));
+    return NextResponse.redirect(buildAuthErrorUrl(url, "callback-error", nextPath));
   }
 
-  return response;
+  const runtime = getWebServerRuntime();
+  const resolvedUserId = result.data.user?.id ?? result.data.session?.user?.id;
+  const resolvedEmail = result.data.user?.email ?? result.data.session?.user?.email;
+
+  if (runtime.mode === "supabase" && resolvedUserId) {
+    let actor = await runtime.services.auth.resolveActor({
+      userId: resolvedUserId,
+    });
+
+    if (!actor && resolvedEmail) {
+      const databaseClient = createSupabaseDatabaseClient({
+        url: runtime.env.supabase.url!,
+        serviceKey: runtime.env.supabase.serviceRoleKey!,
+      });
+      const claimed = await claimWorkspaceEmailProvisions({
+        client: databaseClient,
+        email: resolvedEmail,
+        userId: resolvedUserId,
+      });
+
+      if (claimed.claimedCount > 0) {
+        actor = await runtime.services.auth.resolveActor({
+          userId: resolvedUserId,
+        });
+      }
+    }
+
+    if (!actor) {
+      return copyCookies(
+        exchangeResponse,
+        NextResponse.redirect(
+          buildPendingAccessUrl(url, nextPath, resolvedEmail),
+        ),
+      );
+    }
+  }
+
+  return copyCookies(
+    exchangeResponse,
+    NextResponse.redirect(new URL(nextPath, url.origin)),
+  );
 }

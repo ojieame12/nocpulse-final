@@ -1,5 +1,5 @@
 function looksLikeJwt(value: string) {
-  return value.split(".").length === 3;
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value);
 }
 
 function decodeCookieValue(value: string) {
@@ -10,8 +10,25 @@ function decodeCookieValue(value: string) {
   }
 }
 
+function decodeBase64CookieValue(value: string) {
+  if (!value.startsWith("base64-")) {
+    return value;
+  }
+
+  const encoded = value.slice("base64-".length);
+  const normalized = encoded.replaceAll("-", "+").replaceAll("_", "/");
+
+  try {
+    return Buffer.from(normalized, "base64").toString("utf8");
+  } catch {
+    return value;
+  }
+}
+
 function extractTokenFromCookieValue(value: string) {
-  const decoded = decodeCookieValue(value).trim();
+  const decoded = decodeBase64CookieValue(
+    decodeCookieValue(value).trim(),
+  ).trim();
 
   if (looksLikeJwt(decoded)) {
     return decoded;

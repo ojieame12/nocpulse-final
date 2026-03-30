@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Mail, Leaf } from "lucide-react";
 
 type CheckEmailScreenProps = {
   email?: string;
@@ -7,47 +8,83 @@ type CheckEmailScreenProps = {
 
 export function CheckEmailScreen({
   email,
-  nextPath = "/",
+  nextPath = "/preview",
 }: CheckEmailScreenProps) {
   return (
-    <main>
-      <div className="shell">
-        <section className="hero">
-          <span className="pill">Check your email</span>
-          <h1>Magic link sent</h1>
-          <p>
-            {email
-              ? `A sign-in link was requested for ${email}.`
-              : "A sign-in link was requested for your email address."}
-          </p>
-          <p>
-            After you open the link, Supabase redirects back through
-            <code> /auth/callback</code> and then returns you to the app.
-          </p>
-        </section>
+    <div style={{
+      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+      background: "#0c120e", padding: "24px",
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 400, display: "flex", flexDirection: "column",
+        alignItems: "center", gap: 24, padding: "40px 32px", borderRadius: 20,
+        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 8px 40px rgba(0,0,0,0.4), 0 2px 10px rgba(0,0,0,0.2)",
+        textAlign: "center",
+      }}>
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Leaf size={20} strokeWidth={2.25} style={{ color: "#16a34a" }} />
+          <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.5)" }}>
+            NocPulse
+          </span>
+        </div>
 
-        <section className="grid">
-          <article className="panel">
-            <h2>Next destination</h2>
-            <p>
-              After callback completion, the browser will return to
-              <code> {nextPath}</code>.
-            </p>
-          </article>
+        {/* Mail icon */}
+        <div style={{
+          width: 64, height: 64, borderRadius: "50%",
+          background: "rgba(22,163,74,0.1)", display: "flex",
+          alignItems: "center", justifyContent: "center",
+        }}>
+          <Mail size={28} style={{ color: "#16a34a" }} />
+        </div>
 
-          <article className="panel">
-            <h2>Need another link?</h2>
-            <p>
-              <Link href={`/auth/sign-in?next=${encodeURIComponent(nextPath)}`}>
-                Send another email
-              </Link>
-            </p>
-            <p>
-              <Link href={nextPath}>Return without signing in</Link>
-            </p>
-          </article>
-        </section>
+        {/* Heading */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <h1 style={{ fontFamily: "var(--font-heading)", fontSize: 24, fontWeight: 400, color: "rgba(255,255,255,0.85)", margin: 0 }}>
+            Check your email
+          </h1>
+          <p style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "rgba(255,255,255,0.42)", margin: 0, lineHeight: 1.5 }}>
+            We sent a sign-in link to
+          </p>
+          {email && (
+            <span style={{
+              fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500,
+              color: "rgba(255,255,255,0.72)", padding: "6px 12px", borderRadius: 8,
+              background: "rgba(255,255,255,0.06)",
+            }}>
+              {email}
+            </span>
+          )}
+        </div>
+
+        {/* Instructions */}
+        <p style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "rgba(255,255,255,0.35)", margin: 0, lineHeight: 1.5 }}>
+          Click the link in your email to sign in. It expires in 10 minutes.
+        </p>
+
+        {/* Actions */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%", paddingTop: 8 }}>
+          <Link
+            href={`/auth/sign-in?next=${encodeURIComponent(nextPath)}`}
+            style={{
+              fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600,
+              color: "#16a34a", textDecoration: "none",
+            }}
+          >
+            Didn&apos;t receive it? Resend
+          </Link>
+          <Link
+            href={nextPath}
+            style={{
+              fontFamily: "var(--font-body)", fontSize: 12,
+              color: "rgba(255,255,255,0.25)", textDecoration: "none",
+            }}
+          >
+            Return to app
+          </Link>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }

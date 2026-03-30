@@ -1,24 +1,74 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Loader2, AlertCircle } from "lucide-react";
 
 type ShareLandingScreenProps = {
   token: string;
-  /** Set to true to show the invalid-link state instead of the loading state. */
-  invalid?: boolean;
 };
 
 /**
  * Share landing page — shown when someone opens a shared field-view link.
  * Displays a centered loading card while the token is validated.
- * If the token is invalid/expired, shows an error state inline.
- *
- * Token validation will be wired in a future pass; for now both UI states
- * are built and the `invalid` prop toggles between them.
+ * If the token is invalid, shows an error state inline. Expired or revoked
+ * tokens are redirected to the dedicated access-expired route.
  */
-export function ShareLandingScreen({
-  token,
-  invalid = false,
-}: ShareLandingScreenProps) {
+export function ShareLandingScreen({ token }: ShareLandingScreenProps) {
+  const router = useRouter();
+  const [invalid, setInvalid] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/share/consume", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            token,
+          }),
+          signal: controller.signal,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (response.ok) {
+          const payload = (await response.json()) as {
+            result?: {
+              previewPath?: string;
+            };
+          };
+          router.replace(payload.result?.previewPath ?? "/preview");
+          return;
+        }
+
+        if (response.status === 410) {
+          router.replace("/share/expired");
+          return;
+        }
+      } catch {
+        // Fall back to the inline invalid state on network or route errors.
+      }
+
+      if (!cancelled) {
+        setInvalid(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [router, token]);
+
   return (
     <main style={styles.page}>
       <div style={styles.card}>
@@ -43,7 +93,7 @@ export function ShareLandingScreen({
         </div>
 
         {invalid ? (
-          /* ── Invalid / expired state ── */
+          /* ── Invalid state ── */
           <>
             <div style={styles.iconWrap}>
               <AlertCircle size={48} color="#ef4444" strokeWidth={1.5} />

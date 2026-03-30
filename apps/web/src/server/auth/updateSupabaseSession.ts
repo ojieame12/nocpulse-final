@@ -37,7 +37,10 @@ export async function updateSupabaseSession(request: NextRequest) {
     cookies: cookieMethods,
   });
 
-  await client.auth.getClaims();
+  const result = await client.auth.getClaims();
 
-  return response;
+  return {
+    response,
+    hasValidSession: Boolean(result.data && !result.error),
+  };
 }

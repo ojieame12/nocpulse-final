@@ -17,6 +17,7 @@ const optionalUrl = () =>
 export const AppEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   NEXT_PUBLIC_APP_NAME: z.string().default("FieldPulse"),
+  APP_URL: optionalUrl(),
   SUPABASE_URL: optionalUrl(),
   SUPABASE_ANON_KEY: optionalString(),
   SUPABASE_SERVICE_ROLE_KEY: optionalString(),
@@ -45,6 +46,12 @@ export const AppEnvSchema = z.object({
   SENTRY_DSN: optionalString(),
   /** MapTiler API key – used by MapLibre GL JS for base map tiles & terrain. */
   NEXT_PUBLIC_MAPTILER_KEY: optionalString(),
+  /** Resend API key for custom transactional emails. */
+  RESEND_API_KEY: optionalString(),
+  /** Sender address for auth emails, e.g. "NocPulse <auth@nocpulse.com>". */
+  EMAIL_FROM: optionalString(),
+  /** Internal recipient for request-access notifications. */
+  REQUEST_ACCESS_NOTIFY_EMAIL: optionalString(),
 });
 
 export type AppEnv = z.infer<typeof AppEnvSchema>;

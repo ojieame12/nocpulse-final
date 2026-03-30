@@ -1,8 +1,8 @@
 import { jsonError, jsonOk } from "../../../../server/http/json";
+import { resolveRequestAuthViewer } from "../../../../server/auth/resolveAuthViewer";
 import { getWebServerRuntime } from "../../../../server/runtime/getWebServerRuntime";
 import {
   RequestContextError,
-  resolveRequestActor,
 } from "../../../../server/runtime/resolveRequestContext";
 
 export async function GET(request: Request) {
@@ -13,10 +13,14 @@ export async function GET(request: Request) {
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const { actor, viewer } = await resolveRequestAuthViewer({
+      request,
+      runtime,
+    });
 
     return jsonOk({
       actor,
+      viewer,
     });
   } catch (error) {
     if (error instanceof RequestContextError) {
