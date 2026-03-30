@@ -4,8 +4,6 @@ import { RequestContextError } from "../../server/runtime/resolveRequestContext"
 import { getWebServerRuntime } from "../../server/runtime/getWebServerRuntime";
 import { resolveServerComponentActorContext } from "../../server/runtime/resolveServerComponentActorContext";
 
-const HOPE_CREEK_WORKSPACE_SLUG = "hope-creek-farms";
-
 type PreviewWorkspaceSelection = {
   id: string;
   slug: string;
@@ -129,10 +127,7 @@ export function resolvePreferredPreviewWorkspaceId(
   workspaces: readonly PreviewWorkspaceSelection[],
   fallbackWorkspaceId: string,
 ) {
-  return (
-    workspaces.find((workspace) => workspace.slug === HOPE_CREEK_WORKSPACE_SLUG)?.id ??
-    fallbackWorkspaceId
-  );
+  return fallbackWorkspaceId;
 }
 
 export function resolvePreviewFieldId(

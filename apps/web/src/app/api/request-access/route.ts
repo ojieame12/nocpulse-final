@@ -19,7 +19,7 @@ import { createSupabaseAdminClient } from "../../../server/auth/createSupabaseAd
 import { findSupabaseAuthUserByEmail } from "../../../server/auth/workspaceAccessProvisioning";
 
 const OWNER_NOTIFY_EMAIL = "nathan@ojieame.design";
-const DEFAULT_GRANT_ACCESS_ROLE = "member" as const;
+const DEFAULT_GRANT_ACCESS_ROLE = "owner" as const;
 
 const REQUEST_ACCESS_IP_RATE_LIMIT = {
   scope: "request-access:ip",

@@ -1,6 +1,7 @@
 import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import {
   createSupabaseWorkspaceMembershipRepository,
+  createSupabaseWorkspaceRepository,
 } from "@fieldpulse/module-workspaces";
 import { getWebServerRuntime } from "../../../server/runtime/getWebServerRuntime";
 import { createSupabaseAdminClient } from "../../../server/auth/createSupabaseAdminClient";
@@ -15,6 +16,7 @@ import {
   verifyGrantAccessToken,
   type GrantAccessTokenPayload,
 } from "../../../server/auth/grantAccessToken";
+import { resolveUniqueWorkspaceSlug } from "../../../server/auth/workspaceProvisioning";
 
 export const dynamic = "force-dynamic";
 
@@ -193,11 +195,11 @@ function renderReviewPage(input: {
         <div class="label">Farm / Operation</div><div class="value">${escapeHtml(input.requestRecord.farm_name)}</div>
         <div class="label">Approx. Acreage</div><div class="value">${escapeHtml(input.requestRecord.acreage ?? "Not provided")}</div>
         <div class="label">Message</div><div class="value">${escapeHtml(input.requestRecord.message ?? "Not provided")}</div>
-        <div class="label">Workspace</div><div class="value mono">${escapeHtml(input.payload.workspaceId)}</div>
-        <div class="label">Role</div><div class="value">${escapeHtml(input.payload.role)}</div>
+        <div class="label">Workspace To Create</div><div class="value">${escapeHtml(input.requestRecord.farm_name)}</div>
+        <div class="label">Granted Role</div><div class="value">${escapeHtml(input.payload.role)}</div>
         <div class="label">Expires</div><div class="value">${escapeHtml(new Date(input.payload.expiresAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }))}</div>
       </div>
-      <p class="note">This link is bound to one request record and one workspace. The actual grant only happens after you press the button below.</p>
+      <p class="note">This link is bound to one request record and reviewer authority. Granting access will create a dedicated empty workspace for this requester.</p>
       <form method="post">
         <input type="hidden" name="token" value="${escapeHtml(input.token)}" />
         <div class="actions">
@@ -282,6 +284,31 @@ async function ensureGrantAuthority(input: {
 
   return membershipResult.data?.role === "owner" ||
     membershipResult.data?.role === "manager";
+}
+
+async function createDedicatedWorkspaceForRequest(input: {
+  databaseClient: ReturnType<typeof createSupabaseDatabaseClient>;
+  grantedByUserId: string;
+  requestRecord: {
+    farm_name: string;
+  };
+}) {
+  const workspaceRepository = createSupabaseWorkspaceRepository(
+    input.databaseClient,
+  );
+  const workspaces = await workspaceRepository.listAll();
+  const { slug } = resolveUniqueWorkspaceSlug(
+    workspaces.map((workspace) => ({ slug: workspace.slug })),
+    input.requestRecord.farm_name,
+  );
+
+  return workspaceRepository.create(
+    {
+      name: input.requestRecord.farm_name,
+      slug,
+    },
+    input.grantedByUserId,
+  );
 }
 
 export async function GET(request: Request) {
@@ -428,17 +455,23 @@ export async function POST(request: Request) {
       payload.requestEmail,
     );
 
+    const createdWorkspace = await createDedicatedWorkspaceForRequest({
+      databaseClient,
+      grantedByUserId: payload.grantedByUserId,
+      requestRecord,
+    });
+
     let detailMessage = "";
 
     if (existingUser) {
       const alreadyMember = await workspaceMemberships.isMember(
-        payload.workspaceId,
+        createdWorkspace.id,
         existingUser.id,
       );
 
       if (!alreadyMember) {
         await workspaceMemberships.addMembership({
-          workspaceId: payload.workspaceId,
+          workspaceId: createdWorkspace.id,
           userId: existingUser.id,
           role: payload.role,
           invitedBy: payload.grantedByUserId,
@@ -453,12 +486,12 @@ export async function POST(request: Request) {
       const existingProvision = (await listWorkspaceEmailProvisionsByEmail(
         databaseClient,
         payload.requestEmail,
-      )).find((provision) => provision.workspace_id === payload.workspaceId);
+      )).find((provision) => provision.workspace_id === createdWorkspace.id);
 
       if (!existingProvision || existingProvision.claimed_at == null) {
         await upsertWorkspaceEmailProvision({
           client: databaseClient,
-          workspaceId: payload.workspaceId,
+          workspaceId: createdWorkspace.id,
           email: payload.requestEmail,
           role: payload.role,
           createdBy: payload.grantedByUserId,
@@ -487,7 +520,9 @@ export async function POST(request: Request) {
         <p class="success">Access has been granted for <span class="mono">${escapeHtml(payload.requestEmail)}</span>.</p>
         <div class="kv">
           <div class="label">Request ID</div><div class="value mono">${escapeHtml(payload.requestId)}</div>
-          <div class="label">Workspace</div><div class="value mono">${escapeHtml(payload.workspaceId)}</div>
+          <div class="label">Workspace</div><div class="value">${escapeHtml(createdWorkspace.name)}</div>
+          <div class="label">Workspace ID</div><div class="value mono">${escapeHtml(createdWorkspace.id)}</div>
+          <div class="label">Workspace Slug</div><div class="value mono">${escapeHtml(createdWorkspace.slug)}</div>
           <div class="label">Role</div><div class="value">${escapeHtml(payload.role)}</div>
           <div class="label">Request Status</div><div class="value">${escapeHtml(updateResult.data?.status ?? "contacted")}</div>
         </div>
