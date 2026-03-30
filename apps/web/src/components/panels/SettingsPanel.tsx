@@ -7,12 +7,16 @@ import {
   normalizeWorkspaceSettings,
   type WorkspaceSettingsState,
 } from '../../features/settings/workspaceSettings';
+import { WorkspaceAccessCard } from './WorkspaceAccessCard';
+import { FieldShareCard } from './FieldShareCard';
 
 /* ── Types ── */
 
 interface SettingsPanelProps {
   onClose?: () => void;
   workspaceId?: string | null;
+  fieldId?: string | null;
+  fieldName?: string | null;
 }
 
 function readPersistedSettings(storageKey: string): WorkspaceSettingsState | null {
@@ -134,7 +138,12 @@ function Integration({ icon: Icon, name, desc, status, color }: {
 
 /* ── Component ── */
 
-export function SettingsPanel({ onClose, workspaceId = null }: SettingsPanelProps) {
+export function SettingsPanel({
+  onClose,
+  workspaceId = null,
+  fieldId = null,
+  fieldName = null,
+}: SettingsPanelProps) {
   const [emailAlerts, setEmailAlerts] = useState(true);
   const [healthWarnings, setHealthWarnings] = useState(true);
   const [sprayWindows, setSprayWindows] = useState(false);
@@ -303,6 +312,14 @@ export function SettingsPanel({ onClose, workspaceId = null }: SettingsPanelProp
           </div>
           <Mono>Saskatchewan, CA</Mono>
         </Card>
+
+        <FieldShareCard
+          workspaceId={workspaceId}
+          fieldId={fieldId}
+          fieldName={fieldName}
+        />
+
+        <WorkspaceAccessCard workspaceId={workspaceId} />
 
         {/* ── Notifications ── */}
         <Card span={-1} style={{ gap: 4 }}>

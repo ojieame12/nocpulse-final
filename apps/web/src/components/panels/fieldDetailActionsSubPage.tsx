@@ -13,6 +13,10 @@ function compactConfidence(raw?: string | null): string {
   if (!raw || raw === "—") return "—";
   // Take first segment before · or ,
   const first = raw.split(/[·,]/)[0].trim();
+  if (/watchlist/i.test(first)) return "Watchlist";
+  if (/no active intelligence/i.test(first)) return "Quiet";
+  if (/finding-backed/i.test(first)) return "Finding";
+  if (/alert-backed/i.test(first)) return "Alert";
   // Map known verbose phrases to concise labels
   if (/context.only/i.test(first)) return "Context";
   if (/pending/i.test(first)) return "Pending";
@@ -89,6 +93,10 @@ export function ActionsSubPage({
   handleOpenContextNotes,
   statusColor,
 }: ActionsSubPageProps) {
+  const intelligenceMeta =
+    [action?.intelligenceSourceLabel, action?.intelligenceFreshnessLabel]
+      .filter((value): value is string => Boolean(value))
+      .join(" · ") || null;
   return (
     <>
       <Card span={-1} accent={ac}>
@@ -110,6 +118,13 @@ export function ActionsSubPage({
               Due: {action?.dueDate ?? "—"}
             </span>
           </div>
+          {intelligenceMeta ? (
+            <div style={{ marginTop: 4 }}>
+              <span className="fdp-mono" style={{ fontSize: 10, color: "var(--text-muted)" }}>
+                {intelligenceMeta}
+              </span>
+            </div>
+          ) : null}
           {contextOnlyOptical ? (
             <div style={{ marginTop: 6 }}>
               <Sub>{`Optical canopy layers are context-only here. Action priority is being weighted toward moisture, ${radarWetnessModeLabel}, and weather signals.`}</Sub>

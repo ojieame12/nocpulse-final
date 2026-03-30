@@ -1,5 +1,5 @@
-import { appendFileSync, mkdirSync } from "node:fs";
-import path from "node:path";
+import { appendFileSync, mkdirSync } from "fs";
+import path from "path";
 
 declare global {
   // eslint-disable-next-line no-var

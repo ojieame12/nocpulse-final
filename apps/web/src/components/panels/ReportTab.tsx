@@ -15,6 +15,7 @@ import {
   Gauge,
   type LucideIcon,
 } from 'lucide-react';
+import { MetricHintProvider } from '../ui/MetricHintProvider';
 
 /* ── Serializable Types (no React.ReactNode) ── */
 
@@ -201,7 +202,12 @@ function ReadingsSection({ readings }: { readings: ReportReadingCell[] }) {
             {readings.slice(rowIdx * 2, rowIdx * 2 + 2).map((r, i) => {
               const iconInfo = READING_ICONS[r.iconKey];
               return (
-                <div key={i} className="panel__data-cell">
+                <div
+                  key={i}
+                  className="panel__data-cell"
+                  data-metric-hint={r.iconKey}
+                  data-metric-value={r.value}
+                >
                   <div className="panel__data-cell-icon-label">
                     <iconInfo.Icon size={12} color={iconInfo.color} />
                     <span className="panel__data-cell-label">{r.label}</span>
@@ -238,7 +244,7 @@ function CropAssessmentSection({
       {params.map((p, i) => {
         const paramIcon = CROP_PARAM_ICONS[p.label.toLowerCase()] ?? { Icon: Gauge, color: "var(--text-muted)" };
         return (
-        <div key={i} className="progress-row">
+        <div key={i} className="progress-row" data-metric-hint={p.label.toLowerCase()} data-metric-value={p.value}>
           <div className="progress-row__top">
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
               <paramIcon.Icon size={13} color={paramIcon.color} strokeWidth={2} />
@@ -761,6 +767,7 @@ export function ReportTab({
   onZoneSelect?: (zoneId: string | null) => void;
 }) {
   return (
+    <MetricHintProvider>
     <div className="panel__body">
       {/* Title */}
       <div className="panel__title-section">
@@ -811,5 +818,6 @@ export function ReportTab({
       {/* Moisture Provenance */}
       <ProvenanceSection text={field.provenanceText} sources={field.sources} />
     </div>
+    </MetricHintProvider>
   );
 }

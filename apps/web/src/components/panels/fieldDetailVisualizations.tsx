@@ -79,6 +79,70 @@ export function LineSpark({ data, color, height = 48 }: { data: number[]; color:
   );
 }
 
+export function MultiLineSpark({
+  series,
+  height = 48,
+}: {
+  series: { data: number[]; color: string }[];
+  height?: number;
+}) {
+  const normalizedSeries = series
+    .map((entry) => ({
+      color: entry.color,
+      data: entry.data.filter((value) => Number.isFinite(value)),
+    }))
+    .filter((entry) => entry.data.length > 0);
+
+  if (normalizedSeries.length === 0) return <div style={{ height }} />;
+
+  const allValues = normalizedSeries.flatMap((entry) => entry.data);
+  const max = Math.max(...allValues);
+  const min = Math.min(...allValues);
+  const range = max - min || 1;
+
+  return (
+    <svg
+      width="100%"
+      height={height}
+      viewBox={`0 0 200 ${height}`}
+      preserveAspectRatio="none"
+      style={{ display: "block" }}
+    >
+      {normalizedSeries.map((entry, index) => {
+        const denominator = Math.max(entry.data.length - 1, 1);
+        const pts = entry.data
+          .map((value, pointIndex) => {
+            const x = entry.data.length === 1 ? 100 : (pointIndex / denominator) * 200;
+            const y = height - 4 - ((value - min) / range) * (height - 8);
+            return `${x},${y}`;
+          })
+          .join(" ");
+
+        return (
+          <g key={`${entry.color}-${index}`}>
+            {index === 0 && entry.data.length > 1 ? (
+              <polygon
+                points={`0,${height} ${pts} 200,${height}`}
+                fill={entry.color}
+                opacity={0.05}
+              />
+            ) : null}
+            <polyline
+              points={pts}
+              fill="none"
+              stroke={entry.color}
+              strokeWidth={index === 0 ? 2 : 1.6}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={index === 0 ? 0.55 : 0.38}
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export function MiniDonut({
   value,
   color,

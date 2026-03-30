@@ -18,6 +18,7 @@ import {
 import {
   RequestContextError,
 } from "../../server/runtime/resolveRequestContext";
+import type { ResolvedGuestShareSession } from "../../server/auth/guestShareSession";
 import { getWebServerRuntime } from "../../server/runtime/getWebServerRuntime";
 import { resolveServerComponentActorContext } from "../../server/runtime/resolveServerComponentActorContext";
 import type { SidebarFieldItem } from "../../components/layout/Sidebar";
@@ -275,6 +276,7 @@ export async function buildFieldOverviewViewModel(
   options: {
     preferredWorkspaceId?: string | null;
     request?: Request;
+    guestShareSession?: ResolvedGuestShareSession | null;
   } = {},
 ) {
   const debugPerfEnabled = isStabilityDebugEnabled();
@@ -289,49 +291,74 @@ export async function buildFieldOverviewViewModel(
     };
   }
 
-  const actorContextStartedAt = startPerfTimer(debugPerfEnabled);
-  const actorContext = await resolveServerComponentActorContext(runtime, {
-    preferredWorkspaceId: options.preferredWorkspaceId,
-    request: options.request,
-  }).catch(
-    (error: unknown) => {
-      if (error instanceof RequestContextError) {
-        return {
-          actor: null,
-          authMode: "none" as const,
-          authModeLabel:
-            error.status === 401
-              ? "No Supabase session available"
-              : "Authenticated actor access denied",
-          actorErrorMessage: error.message,
-        };
-      }
+  const guestShareSession = options.guestShareSession ?? null;
 
-      throw error;
-    },
-  );
-
-  if (!actorContext.actor) {
+  if (guestShareSession && guestShareSession.fieldId !== fieldId) {
     return {
-      status: "unauthenticated" as const,
+      status: "not-found" as const,
       fieldId,
-      authMessage:
-        actorContext.actorErrorMessage ??
-        "A valid actor is required to load this field.",
+      workspaceLabel: "Shared guest access is limited to a single field.",
     };
   }
 
-  const actorContextDurationMs = finishPerfTimer(
-    actorContextStartedAt,
-    debugPerfEnabled,
-  );
+  let authStatusLabel = "Shared guest access";
+  let actorContextDurationMs = 0;
   const selectionStartedAt = startPerfTimer(debugPerfEnabled);
-  const selection = await runtime.services.catalog.loadWorkspaceFieldDetail({
-    actorUserId: actorContext.actor.userId,
-    preferredWorkspaceId:
-      options.preferredWorkspaceId ?? actorContext.actor.workspaceId,
-    fieldId,
-  });
+  let selection:
+    | Awaited<ReturnType<typeof runtime.services.catalog.loadFieldDetailByWorkspace>>
+    | Awaited<ReturnType<typeof runtime.services.catalog.loadWorkspaceFieldDetail>>;
+
+  if (guestShareSession) {
+    selection = await runtime.services.catalog.loadFieldDetailByWorkspace({
+      workspaceId: guestShareSession.workspaceId,
+      fieldId,
+    });
+  } else {
+    const actorContextStartedAt = startPerfTimer(debugPerfEnabled);
+    const actorContext = await resolveServerComponentActorContext(runtime, {
+      preferredWorkspaceId: options.preferredWorkspaceId,
+      request: options.request,
+    }).catch(
+      (error: unknown) => {
+        if (error instanceof RequestContextError) {
+          return {
+            actor: null,
+            authMode: "none" as const,
+            authModeLabel:
+              error.status === 401
+                ? "No Supabase session available"
+                : "Authenticated actor access denied",
+            actorErrorMessage: error.message,
+          };
+        }
+
+        throw error;
+      },
+    );
+
+    if (!actorContext.actor) {
+      return {
+        status: "unauthenticated" as const,
+        fieldId,
+        authMessage:
+          actorContext.actorErrorMessage ??
+          "A valid actor is required to load this field.",
+      };
+    }
+
+    authStatusLabel = actorContext.authModeLabel;
+    actorContextDurationMs = finishPerfTimer(
+      actorContextStartedAt,
+      debugPerfEnabled,
+    );
+
+    selection = await runtime.services.catalog.loadWorkspaceFieldDetail({
+      actorUserId: actorContext.actor.userId,
+      preferredWorkspaceId:
+        options.preferredWorkspaceId ?? actorContext.actor.workspaceId,
+      fieldId,
+    });
+  }
   const selectionDurationMs = finishPerfTimer(
     selectionStartedAt,
     debugPerfEnabled,
@@ -410,6 +437,18 @@ export async function buildFieldOverviewViewModel(
       .catch((err) => {
         console.error("[buildFieldOverviewViewModel] failed to load crop contexts:", err);
         return [];
+      }),
+    runtime.services.intelligence
+      .loadLatestFieldActionCuration({
+        workspaceId,
+        fieldId,
+      })
+      .catch((err) => {
+        console.error(
+          "[buildFieldOverviewViewModel] failed to load field action curation:",
+          err,
+        );
+        return null;
       }),
   ]);
   const rasterFamilyObservations = await rasterFamilyPromise;
@@ -599,13 +638,13 @@ export async function buildFieldOverviewViewModel(
     field.name,
     formatTimeAgo,
   );
-  const actionPanel: FieldActionProps = buildActionProps(effectiveReadModel, field.name);
   const [
     scoutNotes,
     recentMarketPrices,
     fieldBasisAssumption,
     fieldYieldAssumption,
     allCropContexts,
+    fieldActionCuration,
   ] = await serviceReadsPromise;
   const serviceReadsDurationMs = finishPerfTimer(
     serviceReadsStartedAt,
@@ -626,6 +665,13 @@ export async function buildFieldOverviewViewModel(
     recentMarketPrices,
     fieldBasisAssumption,
     fieldYieldAssumption,
+  );
+  const actionPanel: FieldActionProps = buildActionProps(
+    effectiveReadModel,
+    field.name,
+    {
+      curation: fieldActionCuration,
+    },
   );
   const cropPanel: FieldCropProps = buildCropProps(effectiveReadModel);
   const activityPanel: FieldActivityPanelModel = buildActivityPanelModel(effectiveReadModel);
@@ -898,7 +944,7 @@ export async function buildFieldOverviewViewModel(
     fieldId,
     workspaceId,
     workspaceLabel: `${selection.selectedWorkspace.name} · ${selection.selectedWorkspace.slug}`,
-    authStatusLabel: actorContext.authModeLabel,
+    authStatusLabel,
     fieldName: field.name,
     areaHaLabel: `${field.areaHa.toFixed(1)} ha`,
     createdAtLabel: new Date(field.createdAt).toLocaleString("en-US", {

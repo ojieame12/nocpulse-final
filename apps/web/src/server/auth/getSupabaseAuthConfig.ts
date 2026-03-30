@@ -1,13 +1,6 @@
-import { loadEnvFile, readAppEnv } from "@fieldpulse/platform-config";
-
-let envLoaded = false;
+import { readAppEnv } from "@fieldpulse/platform-config";
 
 export function getSupabaseAuthConfig() {
-  if (!envLoaded) {
-    loadEnvFile();
-    envLoaded = true;
-  }
-
   const env = readAppEnv(process.env);
 
   if (!env.supabase.url || !env.supabase.anonKey) {

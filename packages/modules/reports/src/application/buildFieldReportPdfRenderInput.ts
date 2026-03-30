@@ -1,320 +1,510 @@
-import type { PdfRenderInput, PdfTextBlock } from "@fieldpulse/pdf";
+import type { PdfRenderInput, PdfBlock, RGB } from "@fieldpulse/pdf";
 import type { FieldAlert } from "@fieldpulse/module-alerts";
 import type { FieldIntelligenceFinding } from "@fieldpulse/module-crop-intelligence";
 import type { FieldZoneActivityItem } from "@fieldpulse/module-crop-intelligence";
 import type { FieldWeatherForecast } from "@fieldpulse/module-weather";
 import type { FieldReportReadModel } from "../contracts/FieldReportReadModel";
 
+/* ═══════════════════════════════════════════════════════════════════
+   NocPulse Field Report — PDF Document Builder
+   ───────────────────────────────────────────────────────────────────
+   Produces a branded, visually structured report with:
+   • Cover summary with vitals strip and status badge
+   • Metric grids for moisture and weather data
+   • Severity-colored alert and finding cards
+   • Forecast table with proper column layout
+   • Progress bars for crop thresholds
+   • Tracked zone summary table
+   • Data provenance footer
+   ═══════════════════════════════════════════════════════════════════ */
+
 type BuildFieldReportPdfRenderInput = {
   artifactKey: string;
   readModel: FieldReportReadModel;
 };
 
-function formatNumber(value: number | null, digits = 1) {
-  if (value === null || Number.isNaN(value)) {
-    return "n/a";
-  }
+/* ── Brand palette ── */
 
+const GREEN: RGB = [0.08, 0.24, 0.17];
+const RED: RGB = [0.93, 0.27, 0.27];
+const AMBER: RGB = [0.96, 0.62, 0.04];
+const TEAL: RGB = [0.09, 0.64, 0.29];
+
+/* ── Helpers ── */
+
+function fmt(value: number | null, digits = 1) {
+  if (value === null || Number.isNaN(value)) return "—";
   return value.toFixed(digits);
 }
 
-function formatPercent(value: number | null, digits = 1) {
-  if (value === null || Number.isNaN(value)) {
-    return "n/a";
-  }
-
+function fmtPct(value: number | null, digits = 1) {
+  if (value === null || Number.isNaN(value)) return "—";
   return `${value.toFixed(digits)}%`;
 }
 
-function formatTimestamp(value: string | null) {
-  if (!value) {
-    return "n/a";
-  }
-
-  return value.replace("T", " ").replace(".000Z", "Z");
-}
-
-function pushBlock(blocks: PdfTextBlock[], style: PdfTextBlock["style"], text: string) {
-  if (text.trim().length === 0) {
-    return;
-  }
-
-  blocks.push({ style, text });
-}
-
-function pushAlertSection(
-  blocks: PdfTextBlock[],
-  alerts: readonly FieldAlert[],
-  activeAlertsAvailable: boolean,
-) {
-  pushBlock(blocks, "heading", "Active alerts");
-
-  if (!activeAlertsAvailable) {
-    pushBlock(
-      blocks,
-      "body",
-      "Active alert data was unavailable when this report was built. Re-run the report before treating this field as all clear.",
-    );
-    return;
-  }
-
-  if (alerts.length === 0) {
-    pushBlock(blocks, "body", "No active alerts.");
-    return;
-  }
-
-  for (const [index, alert] of alerts.slice(0, 8).entries()) {
-    pushBlock(
-      blocks,
-      "subheading",
-      `${index + 1}. [${alert.severity.toUpperCase()}] ${alert.title}`,
-    );
-
-    if (alert.summary) {
-      pushBlock(blocks, "body", alert.summary);
-    }
-
-    if (alert.explanation) {
-      pushBlock(blocks, "body", `Why it matters: ${alert.explanation}`);
-    }
-
-    if (alert.recommendedAction) {
-      pushBlock(blocks, "body", `Action: ${alert.recommendedAction}`);
-    }
+function fmtTs(value: string | null) {
+  if (!value) return "—";
+  try {
+    const d = new Date(value);
+    return d.toLocaleDateString("en-CA", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return value.replace("T", " ").slice(0, 19);
   }
 }
 
-function pushFindingSection(
-  blocks: PdfTextBlock[],
-  findings: readonly FieldIntelligenceFinding[],
-) {
-  pushBlock(blocks, "heading", "Active findings");
-
-  if (findings.length === 0) {
-    pushBlock(blocks, "body", "No active findings.");
-    return;
-  }
-
-  for (const [index, finding] of findings.slice(0, 8).entries()) {
-    pushBlock(
-      blocks,
-      "subheading",
-      `${index + 1}. [${finding.severity.toUpperCase()}] ${finding.title}`,
-    );
-
-    if (finding.summary) {
-      pushBlock(blocks, "body", finding.summary);
-    }
-
-    if (finding.explanation) {
-      pushBlock(blocks, "body", `Reason: ${finding.explanation}`);
-    }
-
-    if (finding.recommendedAction) {
-      pushBlock(blocks, "body", `Action: ${finding.recommendedAction}`);
-    }
-
-    if (finding.affectedCellKeys.length > 0) {
-      pushBlock(
-        blocks,
-        "body",
-        `Affected cells: ${finding.affectedCellKeys.length} (${finding.affectedCellKeys.slice(0, 8).join(", ")})`,
-      );
-    }
-  }
+function sevToType(severity: string): "critical" | "warning" | "info" {
+  const s = severity.toLowerCase();
+  if (s === "high" || s === "critical") return "critical";
+  if (s === "medium" || s === "med" || s === "warning") return "warning";
+  return "info";
 }
 
-function buildForecastSummaryLine(forecast: FieldWeatherForecast) {
-  const parts = [
-    formatTimestamp(forecast.validAt),
-    `min ${formatNumber(forecast.airTemperatureMinC)} C`,
-    `max ${formatNumber(forecast.airTemperatureMaxC)} C`,
-    `precip ${formatNumber(forecast.precipitationMm)} mm`,
-    `wind ${formatNumber(forecast.windSpeedKph)} kph`,
-  ];
-
-  if (forecast.precipitationProbabilityPct !== null) {
-    parts.push(`precip prob ${formatNumber(forecast.precipitationProbabilityPct)}%`);
-  }
-
-  return parts.join(" | ");
+function sevToColor(severity: string): RGB {
+  const t = sevToType(severity);
+  return t === "critical" ? RED : t === "warning" ? AMBER : TEAL;
 }
 
-function pushZoneSection(
-  blocks: PdfTextBlock[],
-  zones: readonly FieldZoneActivityItem[],
-  reportTotal: number,
-  reportNew: number,
-  reportPersistent: number,
-  reportRecovering: number,
-  reportResolved: number,
-) {
-  pushBlock(blocks, "heading", "Tracked zones");
-  pushBlock(
-    blocks,
-    "body",
-    `Tracked zones: ${reportTotal} total, ${reportNew} new, ${reportPersistent} persistent, ${reportRecovering} recovering, ${reportResolved} resolved.`,
-  );
-
-  if (zones.length === 0) {
-    pushBlock(blocks, "body", "No tracked zones for this report window.");
-    return;
-  }
-
-  for (const zone of zones.slice(0, 8)) {
-    pushBlock(
-      blocks,
-      "subheading",
-      `[${zone.status.toUpperCase()}] ${zone.family} / ${zone.latestSeverity ?? "unknown"}`,
-    );
-    pushBlock(
-      blocks,
-      "body",
-      `Cells ${zone.affectedCellCount}, detections ${zone.detectionCount}, first seen ${formatTimestamp(zone.firstSeenAt)}, last seen ${formatTimestamp(zone.lastSeenAt)}.`,
-    );
-  }
-}
+/* ═══════════════════════════════════════════════════════════════════ */
 
 export function buildFieldReportPdfRenderInput({
   artifactKey,
   readModel,
 }: BuildFieldReportPdfRenderInput): PdfRenderInput {
-  const blocks: PdfTextBlock[] = [];
-  const weatherObservation = readModel.weather.profile.latestObservation;
-  const weatherSignals = readModel.weather.signals;
-  const latestMoistureSnapshot = readModel.moisture.latestSnapshot;
+  const blocks: PdfBlock[] = [];
+  const m = readModel;
+  const snap = m.moisture.latestSnapshot;
+  const obs = m.weather.profile.latestObservation;
+  const sig = m.weather.signals;
+  const crop = m.cropContext;
 
-  pushBlock(blocks, "title", `Field report: ${readModel.field.name}`);
-  pushBlock(
-    blocks,
-    "caption",
-    `Generated ${formatTimestamp(readModel.generatedAt)} for report date ${readModel.reportDate.slice(0, 10)}.`,
-  );
+  /* ━━ PAGE 1 — COVER ━━ */
 
-  pushBlock(blocks, "heading", "Field overview");
-  pushBlock(blocks, "body", `Field id: ${readModel.field.id}`);
-  pushBlock(blocks, "body", `Area: ${formatNumber(readModel.field.areaHa, 2)} ha`);
-  pushBlock(
-    blocks,
-    "body",
-    `Crop: ${readModel.cropContext?.cropType ?? readModel.summary.cropType ?? "n/a"}`,
-  );
-  pushBlock(
-    blocks,
-    "body",
-    `Growth stage: ${readModel.cropContext?.growthStage ?? readModel.summary.growthStage ?? "n/a"}`,
-  );
-  pushBlock(
-    blocks,
-    "body",
-    `Label point: ${formatNumber(readModel.field.labelPoint[1], 5)}, ${formatNumber(readModel.field.labelPoint[0], 5)}`,
-  );
+  // Title
+  blocks.push({ kind: "text", style: "title", text: m.field.name });
+  blocks.push({
+    kind: "text",
+    style: "caption",
+    text: `Field Report · ${m.reportDate.slice(0, 10)} · Generated ${fmtTs(m.generatedAt)}`,
+  });
 
-  pushBlock(blocks, "heading", "Operational summary");
-  pushBlock(
-    blocks,
-    "body",
-    `Active alerts ${
-      readModel.summary.activeAlertCount == null
-        ? "unavailable"
-        : readModel.summary.activeAlertCount
-    }, active findings ${readModel.summary.activeFindingCount}, tracked zones ${readModel.summary.trackedZoneCount}, active tracked zones ${readModel.summary.activeTrackedZoneCount}.`,
-  );
-  pushBlock(
-    blocks,
-    "body",
-    `Moisture observed ${formatTimestamp(readModel.summary.moistureObservedAt)}, weather observed ${formatTimestamp(readModel.summary.weatherObservedAt)}.`,
-  );
+  blocks.push({ kind: "spacer", height: 6 });
 
-  pushBlock(blocks, "heading", "Moisture");
-  if (!latestMoistureSnapshot) {
-    pushBlock(blocks, "body", "No moisture snapshot available.");
+  // Status badge
+  const alertCount = m.summary.activeAlertCount;
+  const hasAlerts = alertCount !== null && alertCount > 0;
+  blocks.push({
+    kind: "status-badge",
+    label: hasAlerts
+      ? `${alertCount} Active Alert${alertCount > 1 ? "s" : ""}`
+      : "All Clear",
+    color: hasAlerts ? RED : TEAL,
+    marginTop: 4,
+  });
+
+  // Field identity strip
+  blocks.push({
+    kind: "key-value",
+    pairs: [
+      { key: "Crop", value: crop?.cropType ?? m.summary.cropType ?? "—" },
+      {
+        key: "Growth stage",
+        value: crop?.growthStage ?? m.summary.growthStage ?? "—",
+      },
+      {
+        key: "Area",
+        value: `${fmt(m.field.areaHa, 2)} ha`,
+      },
+      {
+        key: "LLD",
+        value: m.intake.legalLandDescription ?? "—",
+      },
+    ],
+    columns: 2,
+    marginTop: 8,
+  });
+
+  // Vitals strip
+  blocks.push({
+    kind: "metric-strip",
+    cells: [
+      {
+        label: "Root Zone",
+        value: snap ? fmtPct(snap.rootZonePct) : "—",
+        valueColor: snap && snap.rootZonePct !== null && snap.rootZonePct < 30
+          ? RED
+          : undefined,
+      },
+      {
+        label: "Surface",
+        value: snap ? fmtPct(snap.surfacePct) : "—",
+      },
+      {
+        label: "Temperature",
+        value: obs ? `${fmt(obs.airTemperatureC)}°C` : "—",
+      },
+      {
+        label: "Wind",
+        value: obs ? `${fmt(obs.windSpeedKph)} km/h` : "—",
+      },
+      {
+        label: "Precipitation",
+        value: obs ? `${fmt(obs.precipitationMm)} mm` : "—",
+      },
+    ],
+    marginTop: 10,
+  });
+
+  // Operational summary
+  blocks.push({
+    kind: "section-header",
+    label: "Operational Summary",
+    meta: fmtTs(m.generatedAt),
+    accentColor: GREEN,
+  });
+
+  blocks.push({
+    kind: "metric-grid",
+    cells: [
+      {
+        label: "Active Alerts",
+        value: alertCount === null ? "Unavailable" : String(alertCount),
+        valueColor: hasAlerts ? RED : undefined,
+      },
+      {
+        label: "Active Findings",
+        value: String(m.summary.activeFindingCount),
+        valueColor: m.summary.activeFindingCount > 0 ? AMBER : undefined,
+      },
+      {
+        label: "Tracked Zones",
+        value: String(m.summary.trackedZoneCount),
+      },
+      {
+        label: "Active Zones",
+        value: String(m.summary.activeTrackedZoneCount),
+        valueColor: m.summary.activeTrackedZoneCount > 0 ? AMBER : undefined,
+      },
+    ],
+    columns: 4,
+    marginTop: 4,
+  });
+
+  /* ━━ MOISTURE ━━ */
+
+  blocks.push({
+    kind: "section-header",
+    label: "Moisture",
+    meta: snap ? fmtTs(snap.observedAt) : "No data",
+  });
+
+  if (snap) {
+    blocks.push({
+      kind: "metric-grid",
+      cells: [
+        {
+          label: "Root Zone",
+          value: fmtPct(snap.rootZonePct),
+          sub: `Avg ${fmtPct(m.moisture.rootZoneAvgPct)}`,
+        },
+        {
+          label: "Surface",
+          value: fmtPct(snap.surfacePct),
+          sub: `Avg ${fmtPct(m.moisture.surfaceAvgPct)}`,
+        },
+        {
+          label: "Confidence",
+          value: snap.confidence ?? "—",
+          sub: `${m.moisture.lowConfidenceCellCount} low-conf cells`,
+        },
+        {
+          label: "Total Cells",
+          value: String(m.moisture.latestCellCount),
+          sub: `Source: ${snap.sourceKey ?? "unknown"}`,
+        },
+      ],
+      columns: 4,
+      marginTop: 4,
+    });
+
+    blocks.push({
+      kind: "progress-bar",
+      label: "Root Zone Range",
+      value: `${fmtPct(m.moisture.rootZoneMinPct)} – ${fmtPct(m.moisture.rootZoneMaxPct)}`,
+      percent: m.moisture.rootZoneAvgPct ?? 50,
+      fillColor: GREEN,
+      rangeLabels: ["0%", "100%"],
+      marginTop: 6,
+    });
   } else {
-    pushBlock(
-      blocks,
-      "body",
-      `Observed ${formatTimestamp(latestMoistureSnapshot.observedAt)} from ${latestMoistureSnapshot.sourceKey}. Root zone ${formatPercent(latestMoistureSnapshot.rootZonePct)}, surface ${formatPercent(latestMoistureSnapshot.surfacePct)}, confidence ${latestMoistureSnapshot.confidence}.`,
-    );
-    pushBlock(
-      blocks,
-      "body",
-      `Cells ${readModel.moisture.latestCellCount}, low confidence ${readModel.moisture.lowConfidenceCellCount}, root zone range ${formatPercent(readModel.moisture.rootZoneMinPct)} to ${formatPercent(readModel.moisture.rootZoneMaxPct)} (avg ${formatPercent(readModel.moisture.rootZoneAvgPct)}).`,
-    );
-    pushBlock(
-      blocks,
-      "body",
-      `Surface range ${formatPercent(readModel.moisture.surfaceMinPct)} to ${formatPercent(readModel.moisture.surfaceMaxPct)} (avg ${formatPercent(readModel.moisture.surfaceAvgPct)}).`,
-    );
+    blocks.push({
+      kind: "text",
+      style: "body",
+      text: "No moisture snapshot available for this report date.",
+    });
   }
 
-  pushBlock(blocks, "heading", "Weather");
-  if (!readModel.weather.profile.dataAvailability.latestObservation) {
-    pushBlock(
-      blocks,
-      "body",
-      "Weather observation data was unavailable when this report was built.",
-    );
-  } else if (!weatherObservation) {
-    pushBlock(blocks, "body", "No weather observation available.");
+  /* ━━ WEATHER ━━ */
+
+  blocks.push({
+    kind: "section-header",
+    label: "Weather Observations",
+    meta: obs ? fmtTs(obs.observedAt) : "No data",
+  });
+
+  if (obs) {
+    blocks.push({
+      kind: "metric-grid",
+      cells: [
+        { label: "Air Temp", value: `${fmt(obs.airTemperatureC)}°C` },
+        { label: "Precipitation", value: `${fmt(obs.precipitationMm)} mm` },
+        { label: "Wind", value: `${fmt(obs.windSpeedKph)} km/h` },
+        { label: "Humidity", value: fmtPct(obs.relativeHumidityPct) },
+      ],
+      columns: 4,
+      marginTop: 4,
+    });
   } else {
-    pushBlock(
-      blocks,
-      "body",
-      `Observed ${formatTimestamp(weatherObservation.observedAt)} from ${weatherObservation.providerKey}. Air ${formatNumber(weatherObservation.airTemperatureC)} C, precip ${formatNumber(weatherObservation.precipitationMm)} mm, wind ${formatNumber(weatherObservation.windSpeedKph)} kph, humidity ${formatNumber(weatherObservation.relativeHumidityPct)}%, soil moisture ${formatPercent(weatherObservation.soilMoisturePct)}.`,
-    );
+    blocks.push({
+      kind: "text",
+      style: "body",
+      text: "Weather observation data was unavailable when this report was built.",
+    });
   }
 
-  if (!weatherSignals) {
-    pushBlock(blocks, "body", "No derived weather signal set available.");
-  } else {
-    pushBlock(
-      blocks,
-      "body",
-      `Signals at ${formatTimestamp(weatherSignals.observedAt)}: VPD now ${formatNumber(weatherSignals.currentVpdKpa, 3)} kPa, peak VPD 24h ${formatNumber(weatherSignals.peakForecastVpdKpa24h, 3)} kPa, net water balance 24h ${formatNumber(weatherSignals.netWaterBalance24hMm, 2)} mm, net water balance 72h ${formatNumber(weatherSignals.netWaterBalance72hMm, 2)} mm.`,
-    );
-    pushBlock(
-      blocks,
-      "body",
-      `Leaf wet hours 24h ${weatherSignals.leafWetHours24h}, spray windows 24h ${weatherSignals.sprayWindowCount24h}, frost minimum ${formatNumber(weatherSignals.frostRiskMinTempC, 1)} C, GDD 24h ${formatNumber(weatherSignals.gdd24h, 2)}, GDD 72h ${formatNumber(weatherSignals.gdd72h, 2)}, GDD base ${formatNumber(weatherSignals.gddBaseC, 1)} C.`,
-    );
+  /* ━━ DERIVED SIGNALS ━━ */
+
+  if (sig) {
+    blocks.push({
+      kind: "section-header",
+      label: "Derived Signals",
+      meta: fmtTs(sig.observedAt),
+    });
+
+    blocks.push({
+      kind: "metric-grid",
+      cells: [
+        { label: "VPD Now", value: `${fmt(sig.currentVpdKpa, 2)} kPa` },
+        { label: "Peak VPD 24h", value: `${fmt(sig.peakForecastVpdKpa24h, 2)} kPa` },
+        { label: "Water Bal 24h", value: `${fmt(sig.netWaterBalance24hMm, 1)} mm` },
+        { label: "Water Bal 72h", value: `${fmt(sig.netWaterBalance72hMm, 1)} mm` },
+        { label: "Leaf Wet Hrs", value: String(sig.leafWetHours24h ?? "—") },
+        { label: "Spray Windows", value: String(sig.sprayWindowCount24h ?? "—") },
+        { label: "Frost Min", value: `${fmt(sig.frostRiskMinTempC)}°C`, valueColor: sig.frostRiskMinTempC !== null && sig.frostRiskMinTempC < 0 ? RED : undefined },
+        { label: "GDD 72h", value: fmt(sig.gdd72h, 1) },
+      ],
+      columns: 4,
+      marginTop: 4,
+    });
   }
 
-  pushBlock(blocks, "subheading", "Forecast sample");
-  if (!readModel.weather.profile.dataAvailability.forecasts) {
-    pushBlock(
-      blocks,
-      "body",
-      "Forecast data was unavailable when this report was built.",
-    );
-  } else if (readModel.weather.profile.forecasts.length === 0) {
-    pushBlock(blocks, "body", "No forecast rows available.");
+  /* ━━ FORECAST TABLE ━━ */
+
+  const forecasts = m.weather.profile.forecasts.slice(0, 8);
+  if (forecasts.length > 0) {
+    blocks.push({
+      kind: "section-header",
+      label: "Forecast",
+      meta: `Next ${forecasts.length} periods`,
+    });
+
+    blocks.push({
+      kind: "table",
+      columns: [
+        { label: "Time", width: 0.28 },
+        { label: "Min", width: 0.12, align: "right" },
+        { label: "Max", width: 0.12, align: "right" },
+        { label: "Precip", width: 0.14, align: "right" },
+        { label: "Wind", width: 0.14, align: "right" },
+        { label: "Prob", width: 0.12, align: "right" },
+      ],
+      rows: forecasts.map((f) => ({
+        cells: [
+          fmtTs(f.validAt),
+          `${fmt(f.airTemperatureMinC)}°`,
+          `${fmt(f.airTemperatureMaxC)}°`,
+          `${fmt(f.precipitationMm)} mm`,
+          `${fmt(f.windSpeedKph)} km/h`,
+          f.precipitationProbabilityPct !== null
+            ? fmtPct(f.precipitationProbabilityPct, 0)
+            : "—",
+        ],
+      })),
+      marginTop: 4,
+    });
+  }
+
+  /* ━━ ALERTS ━━ */
+
+  blocks.push({
+    kind: "section-header",
+    label: "Active Alerts",
+    meta: alertCount === null
+      ? "Data unavailable"
+      : `${m.alerts.length} active`,
+    accentColor: hasAlerts ? RED : GREEN,
+  });
+
+  if (!m.dataAvailability.activeAlerts) {
+    blocks.push({
+      kind: "text",
+      style: "body",
+      text: "Alert data was unavailable when this report was built. Re-run the report before treating this field as all-clear.",
+    });
+  } else if (m.alerts.length === 0) {
+    blocks.push({
+      kind: "text",
+      style: "body",
+      text: "No active alerts. Field conditions are within expected parameters.",
+    });
   } else {
-    for (const forecast of readModel.weather.profile.forecasts.slice(0, 8)) {
-      pushBlock(blocks, "body", buildForecastSummaryLine(forecast));
+    for (const alert of m.alerts.slice(0, 8)) {
+      blocks.push({
+        kind: "severity-card",
+        severity: sevToType(alert.severity),
+        title: alert.title,
+        body: alert.summary ?? undefined,
+        detail: alert.explanation ?? undefined,
+        action: alert.recommendedAction ?? undefined,
+        marginTop: 4,
+      });
+    }
+    if (m.alerts.length > 8) {
+      blocks.push({
+        kind: "text",
+        style: "caption",
+        text: `+ ${m.alerts.length - 8} more alert${m.alerts.length - 8 > 1 ? "s" : ""} not shown.`,
+      });
     }
   }
 
-  pushAlertSection(
-    blocks,
-    readModel.alerts,
-    readModel.dataAvailability.activeAlerts,
-  );
-  pushFindingSection(blocks, readModel.findings);
-  pushZoneSection(
-    blocks,
-    readModel.zones.zones,
-    readModel.zones.totalZoneCount,
-    readModel.zones.newZoneCount,
-    readModel.zones.persistentZoneCount,
-    readModel.zones.recoveringZoneCount,
-    readModel.zones.resolvedZoneCount,
-  );
+  /* ━━ FINDINGS ━━ */
+
+  blocks.push({
+    kind: "section-header",
+    label: "Intelligence Findings",
+    meta: `${m.findings.length} active`,
+    accentColor: m.findings.length > 0 ? AMBER : GREEN,
+  });
+
+  if (m.findings.length === 0) {
+    blocks.push({
+      kind: "text",
+      style: "body",
+      text: "No active intelligence findings.",
+    });
+  } else {
+    for (const finding of m.findings.slice(0, 8)) {
+      blocks.push({
+        kind: "severity-card",
+        severity: sevToType(finding.severity),
+        title: finding.title,
+        body: finding.summary ?? undefined,
+        detail: finding.explanation
+          ? `${finding.explanation}${finding.affectedCellKeys.length > 0 ? ` · ${finding.affectedCellKeys.length} cells affected` : ""}`
+          : undefined,
+        action: finding.recommendedAction ?? undefined,
+        marginTop: 4,
+      });
+    }
+    if (m.findings.length > 8) {
+      blocks.push({
+        kind: "text",
+        style: "caption",
+        text: `+ ${m.findings.length - 8} more finding${m.findings.length - 8 > 1 ? "s" : ""} not shown.`,
+      });
+    }
+  }
+
+  /* ━━ TRACKED ZONES ━━ */
+
+  const zones = m.zones;
+  blocks.push({
+    kind: "section-header",
+    label: "Tracked Zones",
+    meta: `${zones.totalZoneCount} total`,
+  });
+
+  blocks.push({
+    kind: "metric-grid",
+    cells: [
+      { label: "New", value: String(zones.newZoneCount), valueColor: zones.newZoneCount > 0 ? RED : undefined },
+      { label: "Persistent", value: String(zones.persistentZoneCount), valueColor: zones.persistentZoneCount > 0 ? AMBER : undefined },
+      { label: "Recovering", value: String(zones.recoveringZoneCount), valueColor: zones.recoveringZoneCount > 0 ? TEAL : undefined },
+      { label: "Resolved", value: String(zones.resolvedZoneCount) },
+    ],
+    columns: 4,
+    marginTop: 4,
+  });
+
+  if (zones.zones.length > 0) {
+    blocks.push({
+      kind: "table",
+      columns: [
+        { label: "Status", width: 0.15 },
+        { label: "Family", width: 0.25 },
+        { label: "Severity", width: 0.15 },
+        { label: "Cells", width: 0.12, align: "right" },
+        { label: "First Seen", width: 0.18 },
+        { label: "Last Seen", width: 0.15 },
+      ],
+      rows: zones.zones.slice(0, 12).map((z) => ({
+        cells: [
+          z.status.toUpperCase(),
+          z.family,
+          z.latestSeverity ?? "—",
+          String(z.affectedCellCount),
+          fmtTs(z.firstSeenAt),
+          fmtTs(z.lastSeenAt),
+        ],
+        accentColor:
+          z.latestSeverity === "critical" || z.latestSeverity === "high"
+            ? RED
+            : z.latestSeverity === "medium"
+              ? AMBER
+              : undefined,
+      })),
+      marginTop: 4,
+    });
+  }
+
+  /* ━━ PROVENANCE FOOTER ━━ */
+
+  blocks.push({ kind: "divider", marginTop: 16 });
+
+  blocks.push({
+    kind: "key-value",
+    pairs: [
+      { key: "Field ID", value: m.field.id },
+      { key: "Workspace", value: m.field.workspaceId },
+      { key: "Moisture observed", value: fmtTs(m.summary.moistureObservedAt) },
+      { key: "Weather observed", value: fmtTs(m.summary.weatherObservedAt) },
+      {
+        key: "Coordinates",
+        value: `${fmt(m.field.labelPoint[1], 5)}, ${fmt(m.field.labelPoint[0], 5)}`,
+      },
+      { key: "Report date", value: m.reportDate.slice(0, 10) },
+    ],
+    columns: 2,
+    marginTop: 4,
+  });
+
+  blocks.push({
+    kind: "text",
+    style: "caption",
+    text: "This report was generated by NocPulse and reflects conditions at the time of data collection. Verify critical decisions with on-ground observation.",
+  });
 
   return {
     artifactKey,
-    title: `Field report: ${readModel.field.name}`,
-    subject: `Operational report for ${readModel.field.name} on ${readModel.reportDate.slice(0, 10)}`,
-    author: "FieldPulse",
+    title: `Field Report: ${m.field.name}`,
+    subject: `Operational report for ${m.field.name} on ${m.reportDate.slice(0, 10)}`,
+    author: "NocPulse",
     blocks,
   };
 }

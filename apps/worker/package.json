@@ -39,6 +39,7 @@
     "imagery:probe-report": "tsx src/imageryProbeReport.ts",
     "imagery:providers": "tsx src/imageryProviders.ts",
     "imagery:probe-schedule": "tsx src/imageryProbeSchedule.ts",
+    "imagery:optical-backfill": "tsx src/opticalHistoryBackfill.ts",
     "imagery:sync-report": "tsx src/imagerySyncReport.ts",
     "imagery:sync-schedule": "tsx src/imagerySyncSchedule.ts",
     "inspect": "tsx src/inspect.ts",
@@ -52,8 +53,10 @@
     "market:upsert-price": "tsx src/marketUpsertPrice.ts",
     "market:upsert-basis": "tsx src/marketUpsertBasis.ts",
     "market:upsert-yield": "tsx src/marketUpsertYield.ts",
+    "moisture:stress-cadence": "tsx src/moistureStressCadence.ts",
     "moisture:cell-backfill": "tsx src/moistureCellBackfillSchedule.ts",
     "phase-summary": "tsx src/phaseSummary.ts",
+    "report:readiness": "tsx src/reportReadinessReport.ts",
     "phases": "tsx src/phases.ts",
     "recover:stale": "tsx src/recoverStale.ts",
     "replay": "tsx src/replay.ts",
@@ -65,6 +68,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "watch": "tsx src/watch.ts",
     "zones:report": "tsx src/zoneActivityReport.ts",
+    "weather:risk-cadence": "tsx src/weatherRiskCadence.ts",
     "weather:refresh-schedule": "tsx src/weatherRefreshSchedule.ts",
     "weather:report": "tsx src/weatherRefreshReport.ts"
   }

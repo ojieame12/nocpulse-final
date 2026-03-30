@@ -15,6 +15,8 @@ export function Card({
   className: extra,
   style,
   sevTint,
+  "data-metric-hint": metricHint,
+  "data-metric-value": metricValue,
 }: {
   span?: number;
   children: React.ReactNode;
@@ -24,6 +26,8 @@ export function Card({
   style?: React.CSSProperties;
   /** Severity-aware background gradient tint */
   sevTint?: string;
+  "data-metric-hint"?: string;
+  "data-metric-value"?: string;
 }) {
   const spanClass =
     span === 2
@@ -53,6 +57,8 @@ export function Card({
         ...(sevTint ? { background: sevTint } : {}),
         ...style,
       }}
+      data-metric-hint={metricHint}
+      data-metric-value={metricValue}
     >
       {children}
     </div>

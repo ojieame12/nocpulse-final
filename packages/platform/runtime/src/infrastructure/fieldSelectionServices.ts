@@ -6,6 +6,8 @@ import {
 import { buildFieldReportReadModel } from "@fieldpulse/module-reports";
 import type { ServerRepositories } from "../contracts/ServerRuntime";
 import type {
+  DirectWorkspaceFieldDetailSelection,
+  LoadFieldDetailByWorkspaceInput,
   LoadWorkspaceFieldDetailInput,
   LoadWorkspaceFieldOverviewInput,
   WorkspaceFieldDetailSelection,
@@ -125,6 +127,99 @@ export async function loadWorkspaceFieldDetail(
 
   return {
     ...selection,
+    fields,
+    field: {
+      detail,
+      overview: fields.find((field) => field.id === detail.id) ?? null,
+      readModel:
+        readModel ??
+        (await buildFieldReportReadModel({
+          repositories: {
+            fields: repositories.fields,
+            fieldImportBatches: repositories.fieldImportBatches,
+            cropContexts: repositories.fieldCropContexts,
+            imageryRasterObservations: repositories.imageryRasterObservations,
+            moistureSnapshots: repositories.moistureSnapshots,
+            moistureCells: repositories.moistureCellSnapshots,
+            weatherObservations: repositories.weatherObservations,
+            weatherForecasts: repositories.weatherForecasts,
+            weatherSignals: repositories.weatherSignalSets,
+            alerts: repositories.alerts,
+            findings: repositories.cropIntelligenceFindings,
+            zones: repositories.cropIntelligenceZones,
+          },
+          workspaceId,
+          fieldId: detail.id,
+          field: detail,
+          reportDate,
+        })),
+    },
+  };
+}
+
+export async function loadFieldDetailByWorkspace(
+  repositories: ServerRepositories,
+  input: LoadFieldDetailByWorkspaceInput,
+): Promise<DirectWorkspaceFieldDetailSelection> {
+  const selectedWorkspace = await repositories.workspaces.getById(input.workspaceId);
+
+  if (!selectedWorkspace) {
+    return {
+      selectedWorkspace: null,
+      fields: [],
+      field: null,
+    };
+  }
+
+  const workspaceId = selectedWorkspace.id;
+  const reportDate = new Date().toISOString();
+  const fieldsPromise = listWorkspaceFieldOverview({
+    repository: repositories.fields,
+    workspaceId,
+  });
+  const detailPromise = repositories.fields.getById(workspaceId, input.fieldId);
+  const readModelPromise = detailPromise.then((detail) => {
+    if (!detail) {
+      return null;
+    }
+
+    return buildFieldReportReadModel({
+      repositories: {
+        fields: repositories.fields,
+        fieldImportBatches: repositories.fieldImportBatches,
+        cropContexts: repositories.fieldCropContexts,
+        imageryRasterObservations: repositories.imageryRasterObservations,
+        moistureSnapshots: repositories.moistureSnapshots,
+        moistureCells: repositories.moistureCellSnapshots,
+        weatherObservations: repositories.weatherObservations,
+        weatherForecasts: repositories.weatherForecasts,
+        weatherSignals: repositories.weatherSignalSets,
+        alerts: repositories.alerts,
+        findings: repositories.cropIntelligenceFindings,
+        zones: repositories.cropIntelligenceZones,
+      },
+      workspaceId,
+      fieldId: detail.id,
+      field: detail,
+      reportDate,
+    });
+  });
+  const [fields, detail, readModel] = await Promise.all([
+    fieldsPromise,
+    detailPromise,
+    readModelPromise,
+  ]);
+
+  if (!detail) {
+    return {
+      selectedWorkspace,
+      fields,
+      field: null,
+    };
+  }
+
+  return {
+    selectedWorkspace,
     fields,
     field: {
       detail,

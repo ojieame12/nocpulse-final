@@ -75,6 +75,7 @@ import {
   resolveVitalSeverity,
   vitalValueColor,
 } from "./fieldDetailColorSystem";
+import { MetricHintProvider } from "../ui/MetricHintProvider";
 
 /** Resolve footer badge data: count + color for each sub-page section */
 function resolveFooterBadge(
@@ -110,6 +111,7 @@ function resolveFooterBadge(
     }
     case "actions": {
       // Show badge if there's an action recommendation with urgent status
+      if (ctx.action?.intelligenceState === "none") return null;
       if (ctx.action?.urgency === "Urgent") return { count: 1, color: "#ef4444" };
       if (ctx.action?.recommendation) return { count: 1, color: "#f59e0b" };
       return null;
@@ -566,6 +568,7 @@ function SubPageView({
   /* handleNoteSubmit moved to NotesSubPage */
 
   return (
+    <MetricHintProvider>
     <div className="fdp__subpage">
       {/* Back + title row */}
       <div className="fdp__subpage-header">
@@ -734,6 +737,7 @@ function SubPageView({
         )}
       </div>
     </div>
+    </MetricHintProvider>
   );
 }
 
@@ -1087,8 +1091,30 @@ export function FieldDetailPanel({
           `Price ${conciseQuoteLabel ?? "N/A"}`,
           `Basis ${conciseBasisLabel ?? "N/A"}`,
         ].join(" · ");
-  const topFinding = report?.findings[0] ?? null;
-  const topAlert = report?.alerts[0] ?? null;
+  const intelligenceState = action?.intelligenceState ?? "none";
+  const intelligenceFindingCount = action?.activeFindingCount ?? report?.findings.length ?? 0;
+  const intelligenceZoneCount = action?.activeZoneCount ?? report?.zones.length ?? 0;
+  const intelligenceTopRisk =
+    action?.topRiskTitle ??
+    (intelligenceState === "watchlist"
+      ? "Watchlist only"
+      : "No active intelligence signal");
+  const intelligenceMeta =
+    [action?.intelligenceSourceLabel, action?.intelligenceFreshnessLabel]
+      .filter((value): value is string => Boolean(value))
+      .join(" · ") || null;
+  const intelligenceTopRiskLabel =
+    intelligenceState === "active" ? "Top Risk" : "Status";
+  const intelligenceAccentColor =
+    intelligenceState === "active" &&
+    (action?.topRiskSeverity === "critical" || action?.topRiskSeverity === "high")
+      ? "#ef4444"
+      : "#f59e0b";
+  const intelligenceCardSeverity =
+    intelligenceState === "active" &&
+    (action?.topRiskSeverity === "critical" || action?.topRiskSeverity === "high")
+      ? "danger"
+      : "warning";
   const hasAccumulatedGdd =
     parseNumericValue(crop?.accumulatedGddLabel) != null &&
     (parseNumericValue(crop?.accumulatedGddLabel) ?? 0) > 0;
@@ -1330,6 +1356,7 @@ export function FieldDetailPanel({
           onMarketScenarioSaved={onMarketScenarioSaved}
         />
       ) : (
+        <MetricHintProvider>
         <div
           key={`body-${modeSwitchKey}-${bodyKey}`}
           ref={bodyRef}
@@ -1367,7 +1394,7 @@ export function FieldDetailPanel({
               const vColor = vitalValueColor(v, modeAccent, isDark);
               const vSev = resolveVitalSeverity(v);
               return (
-                <Card key={i} sevTint={vSev ? sevCardGradient(vSev, isDark) : undefined}>
+                <Card key={i} sevTint={vSev ? sevCardGradient(vSev, isDark) : undefined} data-metric-hint={v.label.toLowerCase()} data-metric-value={typeof v.value === 'string' ? v.value : String(v.value)}>
                   <LblM>{v.label}</LblM>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     {v.icon === "down" && (
@@ -1385,7 +1412,7 @@ export function FieldDetailPanel({
 
 
           {/* ━━ TREND ━━ */}
-          <Card span={2}>
+          <Card span={2} data-metric-hint="trend" data-metric-value={liveModeData.trendLabel}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <Lbl color={liveModeData.trendColor ?? ac}>{liveModeData.trendLabel}</Lbl>
               <span className="fdp-mono" style={{ fontSize: 10, color: "var(--text-muted)" }}>
@@ -1398,7 +1425,7 @@ export function FieldDetailPanel({
           </Card>
 
           {/* ━━ SPATIAL ━━ */}
-          <Card>
+          <Card data-metric-hint="spread" data-metric-value={liveModeData.spatialColumns[1]?.value ?? ''}>
             <Lbl color={ac}>Spread</Lbl>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -1436,10 +1463,10 @@ export function FieldDetailPanel({
 
 
           {/* ━━ WEATHER ━━ */}
-          <Card><LblM>{temperatureCard.label}</LblM><div><Big size={24}>{temperatureCard.value}</Big><div><Sub>{temperatureCard.sub}</Sub></div></div></Card>
-          <Card><LblM>{waterBalanceCard.label}</LblM><div><Big size={24}>{waterBalanceCard.value}</Big><div><Sub>{waterBalanceCard.sub}</Sub></div></div></Card>
-          <Card><LblM>{nextRainCard.label}</LblM><div><Big size={24}>{nextRainCard.value}</Big><div><Sub>{nextRainCard.sub}</Sub></div></div></Card>
-          <Card><LblM>{windCard.label}</LblM><div><Big size={24}>{windCard.value}</Big><div><Sub>{windCard.sub}</Sub></div></div></Card>
+          <Card data-metric-hint="temperature" data-metric-value={temperatureCard.value}><LblM>{temperatureCard.label}</LblM><div><Big size={24}>{temperatureCard.value}</Big><div><Sub>{temperatureCard.sub}</Sub></div></div></Card>
+          <Card data-metric-hint="water balance" data-metric-value={waterBalanceCard.value}><LblM>{waterBalanceCard.label}</LblM><div><Big size={24}>{waterBalanceCard.value}</Big><div><Sub>{waterBalanceCard.sub}</Sub></div></div></Card>
+          <Card data-metric-hint="precipitation" data-metric-value={nextRainCard.value}><LblM>{nextRainCard.label}</LblM><div><Big size={24}>{nextRainCard.value}</Big><div><Sub>{nextRainCard.sub}</Sub></div></div></Card>
+          <Card data-metric-hint="wind" data-metric-value={windCard.value}><LblM>{windCard.label}</LblM><div><Big size={24}>{windCard.value}</Big><div><Sub>{windCard.sub}</Sub></div></div></Card>
           {outlookDays.length > 0 ? (
             <Card span={2}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1518,22 +1545,27 @@ export function FieldDetailPanel({
 
 
           {/* ━━ INTELLIGENCE ━━ */}
-          <AlertCard sev="danger" span={2}>
-            <Lbl color="#ef4444">Intelligence</Lbl>
+          <AlertCard sev={intelligenceCardSeverity} span={2}>
+            <Lbl color={intelligenceAccentColor}>Intelligence</Lbl>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                <Big color="#ef4444" size={32}>{report?.findings.length ?? 0}</Big>
+                <Big color={intelligenceAccentColor} size={32}>{intelligenceFindingCount}</Big>
                 <span style={{ fontFamily: "var(--font-body)", fontSize: 8, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Findings</span>
               </div>
               <div style={{ width: 1, height: 36, background: "#ef444420" }} />
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                <Big color="#f59e0b" size={32}>{report?.zones.length ?? 0}</Big>
+                <Big color="#f59e0b" size={32}>{intelligenceZoneCount}</Big>
                 <span style={{ fontFamily: "var(--font-body)", fontSize: 8, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Zones</span>
               </div>
               <div style={{ width: 1, height: 36, background: "#ef444420" }} />
               <div style={{ flex: 1 }}>
-                <span style={{ fontFamily: "var(--font-body)", fontSize: 9, fontWeight: 700, color: "#ef4444", textTransform: "uppercase", letterSpacing: 0.5 }}>Top Risk</span>
-                <p style={{ fontFamily: "var(--font-body)", fontSize: 11, color: "var(--text-body)", margin: "3px 0 0", lineHeight: 1.4 }}>{topFinding?.title ?? topAlert?.text ?? "No active intelligence signal"}</p>
+                <span style={{ fontFamily: "var(--font-body)", fontSize: 9, fontWeight: 700, color: intelligenceAccentColor, textTransform: "uppercase", letterSpacing: 0.5 }}>{intelligenceTopRiskLabel}</span>
+                <p style={{ fontFamily: "var(--font-body)", fontSize: 11, color: "var(--text-body)", margin: "3px 0 0", lineHeight: 1.4 }}>{intelligenceTopRisk}</p>
+                {intelligenceMeta ? (
+                  <p className="fdp-mono" style={{ fontSize: 9, color: "var(--text-muted)", margin: "4px 0 0" }}>
+                    {intelligenceMeta}
+                  </p>
+                ) : null}
               </div>
             </div>
           </AlertCard>
@@ -1609,8 +1641,8 @@ export function FieldDetailPanel({
           </Card>
 
           {/* ━━ MARKET ━━ */}
-          <Card><LblM>{market?.sectionLabel ?? "Market"}</LblM><div><div style={{ display: "flex", alignItems: "baseline", gap: 6 }}><Big size={24}>{marketCardValue}</Big><Mono color={ac}>{marketCardMeta}</Mono></div><Sub>{marketCardSub}</Sub></div></Card>
-          <Card><LblM>Revenue Est.</LblM><div><Big size={22}>{revenueCardValue}</Big><div><Sub>{revenueCardSub}</Sub></div></div></Card>
+          <Card data-metric-hint="price" data-metric-value={marketCardValue}><LblM>{market?.sectionLabel ?? "Market"}</LblM><div><div style={{ display: "flex", alignItems: "baseline", gap: 6 }}><Big size={24}>{marketCardValue}</Big><Mono color={ac}>{marketCardMeta}</Mono></div><Sub>{marketCardSub}</Sub></div></Card>
+          <Card data-metric-hint="revenue" data-metric-value={revenueCardValue}><LblM>Revenue Est.</LblM><div><Big size={22}>{revenueCardValue}</Big><div><Sub>{revenueCardSub}</Sub></div></div></Card>
 
 
           {/* ━━ SOURCE ━━ */}
@@ -1638,6 +1670,7 @@ export function FieldDetailPanel({
 
           <div style={{ height: 4 }} />
         </div>
+        </MetricHintProvider>
       )}
 
       {/* ── EXPLORE FOOTER ── */}

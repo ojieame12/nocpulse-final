@@ -69,11 +69,22 @@ export type FieldViewModel = {
 
 export type PreviewShellProps = {
   initial: FieldViewModel;
+  authViewer?: {
+    displayName: string;
+    email: string | null;
+    initials: string;
+    workspaceRoleLabel: string;
+    workspaceName: string | null;
+  } | null;
+  guestSession?: {
+    expiresAt: string;
+  } | null;
 };
 
 const PREFETCH_DELAY_MS = 250;
 const FAILED_FETCH_RETRY_MS = 15_000;
 const ONBOARDING_STATUS_POLL_MS = 3_000;
+const GUEST_COUNTDOWN_TICK_MS = 60_000;
 
 type PendingOnboardingWatch = {
   workspaceId?: string | null;
@@ -125,6 +136,21 @@ function resolveFieldMeta(
   const cropLabel = summary?.crop || crop?.cropName;
   const stageLabel = summary?.cropStage || crop?.thresholdStageLabel;
   return [cropLabel, stageLabel, areaLabel].filter(Boolean).join(' · ');
+}
+
+function formatGuestRemaining(expiresAt: string, now: number) {
+  const remainingMs = Math.max(0, Date.parse(expiresAt) - now);
+  const remainingHours = Math.floor(remainingMs / (60 * 60 * 1000));
+
+  if (remainingHours >= 1) {
+    return `${remainingHours}h remaining`;
+  }
+
+  const remainingMinutes = Math.max(
+    1,
+    Math.ceil(remainingMs / (60 * 1000)),
+  );
+  return `${remainingMinutes}m remaining`;
 }
 
 /* ── Panel views ── */
@@ -317,8 +343,13 @@ function buildZoneDetailSelection(
 
 /* ── Main shell ── */
 
-export function PreviewShell({ initial }: PreviewShellProps) {
+export function PreviewShell({
+  initial,
+  authViewer = null,
+  guestSession = null,
+}: PreviewShellProps) {
   const [theme, setTheme] = useState<AppTheme>("dark");
+  const [guestNow, setGuestNow] = useState(() => Date.now());
 
   /* Field data state — starts with server-loaded initial */
   const [fieldData, setFieldData] = useState<FieldViewModel>(initial);
@@ -353,6 +384,24 @@ export function PreviewShell({ initial }: PreviewShellProps) {
   const [renderedSurface, setRenderedSurface] = useState<FieldAgronomicSurfaceRenderModel | null>(
     initial.mapPreview.agronomicSurface ?? null,
   );
+  const isGuestSession = guestSession != null;
+  const guestBadgeLabel = guestSession
+    ? `Guest · ${formatGuestRemaining(guestSession.expiresAt, guestNow)}`
+    : null;
+
+  useEffect(() => {
+    if (!guestSession) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setGuestNow(Date.now());
+    }, GUEST_COUNTDOWN_TICK_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [guestSession]);
   const availableMetrics = useMemo(() => {
     const metrics = new Set<FieldAgronomicSurfaceMetricKey>();
 
@@ -821,10 +870,10 @@ export function PreviewShell({ initial }: PreviewShellProps) {
       else if (nav === 'Notes') switchPanel('notes');
       else if (nav === 'Zones') switchPanel('zone');
       else if (nav === 'Alerts') switchPanel('alerts');
-      else if (nav === 'Settings') switchPanel('settings');
+      else if (nav === 'Settings' && !isGuestSession) switchPanel('settings');
       else switchPanel('detail');
     },
-    [switchPanel],
+    [isGuestSession, switchPanel],
   );
 
   const handleCellClick = useCallback(
@@ -1005,9 +1054,13 @@ export function PreviewShell({ initial }: PreviewShellProps) {
           <AlertsPanel activeAlerts={[]} resolvedAlerts={[]} activeCount={0} criticalCount={0} weekCount={0} onClose={() => switchPanel('detail')} />
         );
       case 'settings':
-        return (
+        return isGuestSession ? (
+          renderCanonicalDetailPanel()
+        ) : (
           <SettingsPanel
             workspaceId={fieldData.workspaceId}
+            fieldId={fieldData.fieldId}
+            fieldName={fieldData.fieldName}
             onClose={() => switchPanel('detail')}
           />
         );
@@ -1077,7 +1130,9 @@ export function PreviewShell({ initial }: PreviewShellProps) {
           />
         );
       case 'add-field':
-        return (
+        return isGuestSession ? (
+          renderCanonicalDetailPanel()
+        ) : (
           <AddFieldPanel
             onFieldsChanged={handleFieldsChanged}
             onOnboardingTracked={handleOnboardingTracked}
@@ -1100,6 +1155,13 @@ export function PreviewShell({ initial }: PreviewShellProps) {
         onAddField={() => switchPanel(activePanel === 'add-field' ? 'detail' : 'add-field')}
         theme={theme}
         onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
+        showSettingsNav={!isGuestSession}
+        showAddField={!isGuestSession}
+        showAlertsBell={!isGuestSession}
+        showAvatar={!isGuestSession}
+        viewer={isGuestSession ? null : authViewer}
+        guestBadgeLabel={guestBadgeLabel}
+        guestCtaHref={isGuestSession ? "/request-access" : null}
       />
       <div className="app-body">
         <div className="map-area">
@@ -1127,8 +1189,12 @@ export function PreviewShell({ initial }: PreviewShellProps) {
             revealFieldId={revealedFieldId ?? undefined}
             onFieldSelect={handleFieldSelect}
             onFieldPrefetch={handleFieldPrefetch}
-            onAddField={() => switchPanel(activePanel === 'add-field' ? 'detail' : 'add-field')}
-            onSearchOpen={() => setPaletteOpen(true)}
+            onAddField={
+              isGuestSession
+                ? undefined
+                : () => switchPanel(activePanel === 'add-field' ? 'detail' : 'add-field')
+            }
+            onSearchOpen={isGuestSession ? undefined : () => setPaletteOpen(true)}
           />
 
           {/* Command palette — anchored above the field strip */}

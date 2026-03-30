@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { buildFieldActionCurationVersion } from "@fieldpulse/module-crop-intelligence";
 import {
   buildEffectiveMoistureSummary,
   buildMarketProps,
@@ -8,6 +9,7 @@ import {
   resolveCropStagePresentation,
   resolveOpticalSeasonality,
 } from "./buildFieldOverviewViewModel";
+import { buildActionProps } from "./buildFieldOverviewViewModel.action";
 
 function createBaseReadModel() {
   return {
@@ -625,4 +627,314 @@ test("buildReportProps surfaces unavailable alert data without presenting an all
   assert.equal(props.alerts.length, 0);
   assert.equal(props.alertsEmptyStateTitle, "Alert data unavailable");
   assert.match(props.alertsEmptyStateDescription ?? "", /could not be loaded/i);
+});
+
+test("buildReportProps returns a full seven-day outlook when seven forecast days are available", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    alerts: [],
+    findings: [],
+    zones: { zones: [] },
+    weather: {
+      profile: {
+        latestObservation: {
+          airTemperatureC: 6.5,
+          soilMoisturePct: 21.4,
+          windSpeedKph: 14,
+          providerKey: "open-meteo",
+        },
+        forecasts: Array.from({ length: 7 }, (_, index) => ({
+          validAt: new Date(Date.UTC(2026, 2, 30 + index, 12, 0, 0)).toISOString(),
+          airTemperatureMaxC: 8 + index,
+          airTemperatureMinC: -2 + index,
+          precipitationProbabilityPct: 15 + index * 5,
+          precipitationMm: 0.5 * index,
+        })),
+      },
+      signals: null,
+    },
+  };
+
+  const props = buildReportProps(
+    readModel,
+    "North Quarter Demo",
+    () => "just now",
+  );
+
+  assert.equal(props.forecast.length, 7);
+  assert.equal(props.charts[2]?.series[0]?.points.length, 8);
+});
+
+test("buildActionProps returns none state when no active intelligence or watchlist signals exist", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    summary: {
+      ...createBaseReadModel().summary,
+      activeAlertCount: 0,
+      activeFindingCount: 0,
+      activeTrackedZoneCount: 0,
+    },
+    findings: [],
+    alerts: [],
+    zones: {
+      zones: [],
+      newZoneCount: 0,
+      persistentZoneCount: 0,
+      recoveringZoneCount: 0,
+    },
+    moisture: {
+      latestSnapshot: {
+        rootZonePct: 48.2,
+        surfacePct: 34.1,
+        confidence: "high",
+        observedAt: "2026-03-29T09:30:00.000Z",
+        sourceKey: "sentinel-hub-stats-v1:sentinel-1",
+      },
+    },
+    weather: {
+      signals: {
+        peakForecastVpdKpa24h: 0.4,
+        frostRiskMinTempC: 4.1,
+        netWaterBalance72hMm: 3.2,
+        updatedAt: "2026-03-29T10:15:00.000Z",
+        sourceKey: "open-meteo:derived",
+      },
+    },
+  };
+
+  const action = buildActionProps(readModel, "North Quarter Demo");
+
+  assert.equal(action.intelligenceState, "none");
+  assert.equal(action.activeFindingCount, 0);
+  assert.equal(action.activeZoneCount, 0);
+  assert.equal(action.topRiskTitle, "No active intelligence signal");
+  assert.equal(action.intelligenceSourceLabel, "No active intelligence");
+  assert.equal(action.intelligenceFreshnessLabel, "Checked Mar 29");
+  assert.equal(action.signalCount, 0);
+  assert.match(action.recommendation, /No immediate intelligence-driven action/i);
+});
+
+test("buildActionProps returns watchlist state for heuristic-only dryness signals", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    summary: {
+      ...createBaseReadModel().summary,
+      activeAlertCount: 0,
+      activeFindingCount: 0,
+      activeTrackedZoneCount: 0,
+    },
+    findings: [],
+    alerts: [],
+    zones: {
+      zones: [],
+      newZoneCount: 0,
+      persistentZoneCount: 0,
+      recoveringZoneCount: 0,
+    },
+    moisture: {
+      latestSnapshot: {
+        rootZonePct: 28.4,
+        surfacePct: 17.9,
+        confidence: "high",
+        observedAt: "2026-03-29T09:30:00.000Z",
+        sourceKey: "imagery-weather-derived-v1:sentinel-1",
+      },
+    },
+    weather: {
+      signals: {
+        peakForecastVpdKpa24h: 0.7,
+        frostRiskMinTempC: 6.2,
+        netWaterBalance72hMm: -1.1,
+        updatedAt: "2026-03-29T10:15:00.000Z",
+        sourceKey: "open-meteo:derived",
+      },
+    },
+  };
+
+  const action = buildActionProps(readModel, "North Quarter Demo");
+
+  assert.equal(action.intelligenceState, "watchlist");
+  assert.equal(action.activeFindingCount, 0);
+  assert.equal(action.activeZoneCount, 0);
+  assert.match(action.topRiskTitle ?? "", /watch/i);
+  assert.equal(action.intelligenceSourceLabel, "Heuristic watchlist");
+  assert.equal(action.intelligenceFreshnessLabel, "Signals Mar 29");
+  assert.match(action.recommendation, /Scout the driest part of the field/i);
+  assert.equal(action.urgency, "Watch");
+  assert.equal(action.signalCount, 1);
+});
+
+test("buildActionProps deduplicates active signals while preserving active intelligence counts", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    summary: {
+      ...createBaseReadModel().summary,
+      activeAlertCount: 1,
+      activeFindingCount: 1,
+      activeTrackedZoneCount: 0,
+    },
+    findings: [
+      {
+        id: "finding-1",
+        family: "weather_risk",
+        status: "active",
+        severity: "critical",
+        title: "Critical frost risk next 24h",
+        summary: "Forecast minimum breaches the frost threshold.",
+        recommendedAction: "Check crop stage sensitivity before the overnight low.",
+        startedAt: "2026-03-28T00:00:00Z",
+        evidence: { trackedZones: [] },
+      },
+    ],
+    alerts: [
+      {
+        id: "alert-1",
+        family: "weather_risk",
+        status: "active",
+        severity: "critical",
+        title: "Critical frost risk next 24h",
+        summary: "Forecast minimum breaches the frost threshold.",
+        explanation: "Weather risk alert is active.",
+        evidence: { trackedZoneIds: [] },
+      },
+    ],
+    zones: {
+      zones: [],
+      newZoneCount: 0,
+      persistentZoneCount: 0,
+      recoveringZoneCount: 0,
+    },
+  };
+
+  const action = buildActionProps(readModel, "North Quarter Demo");
+
+  assert.equal(action.intelligenceState, "active");
+  assert.equal(action.activeFindingCount, 1);
+  assert.equal(action.activeAlertCount, 1);
+  assert.equal(action.topRiskTitle, "Critical frost risk next 24h");
+  assert.equal(action.intelligenceSourceLabel, "Finding-backed");
+  assert.equal(action.intelligenceFreshnessLabel, "Updated Mar 28");
+  assert.equal(
+    action.signals.filter((signal) => signal.label === "weather risk").length,
+    1,
+  );
+});
+
+test("buildActionProps ranks the strongest active intelligence entry across findings and alerts", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    summary: {
+      ...createBaseReadModel().summary,
+      activeAlertCount: 1,
+      activeFindingCount: 1,
+      activeTrackedZoneCount: 0,
+    },
+    findings: [
+      {
+        id: "finding-1",
+        family: "moisture_stress",
+        status: "active",
+        severity: "medium",
+        title: "Moisture stress building",
+        summary: "Drying is starting to spread.",
+        recommendedAction: "Check the driest cells on the next pass.",
+        startedAt: "2026-03-28T00:00:00Z",
+        updatedAt: "2026-03-28T10:00:00Z",
+        evidence: { trackedZones: [{ id: "zone-1" }] },
+      },
+    ],
+    alerts: [
+      {
+        id: "alert-1",
+        family: "weather_risk",
+        status: "active",
+        severity: "critical",
+        title: "Critical frost risk next 24h",
+        summary: "Forecast minimum breaches the frost threshold.",
+        recommendedAction: "Protect frost-sensitive areas before the overnight low.",
+        updatedAt: "2026-03-29T04:00:00Z",
+        evidence: { trackedZoneIds: [] },
+      },
+    ],
+    zones: {
+      zones: [],
+      newZoneCount: 0,
+      persistentZoneCount: 0,
+      recoveringZoneCount: 0,
+    },
+  };
+
+  const action = buildActionProps(readModel, "North Quarter Demo");
+
+  assert.equal(action.intelligenceState, "active");
+  assert.equal(action.topRiskTitle, "Critical frost risk next 24h");
+  assert.equal(action.urgency, "Urgent");
+  assert.equal(action.intelligenceSource, "alerts");
+  assert.equal(action.intelligenceSourceLabel, "Alert-backed");
+});
+
+test("buildActionProps applies matching cached field-action curation without changing the active risk contract", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    findings: [
+      {
+        id: "finding-1",
+        family: "weather_risk",
+        status: "active",
+        severity: "critical",
+        title: "Critical frost risk next 24h",
+        summary: "Forecast minimum breaches the frost threshold.",
+        recommendedAction: "Protect frost-sensitive areas before the overnight low.",
+        updatedAt: "2026-03-29T04:00:00Z",
+        evidence: { trackedZones: [] },
+      },
+    ],
+    alerts: [],
+    zones: {
+      zones: [],
+      newZoneCount: 0,
+      persistentZoneCount: 0,
+      recoveringZoneCount: 0,
+    },
+    summary: {
+      ...createBaseReadModel().summary,
+      activeAlertCount: 0,
+      activeFindingCount: 1,
+      activeTrackedZoneCount: 0,
+    },
+  };
+
+  const version = buildFieldActionCurationVersion({
+    state: "active",
+    source: "findings",
+    topRiskTitle: "Critical frost risk next 24h",
+    topRiskSeverity: "critical",
+    dueDate: "Within 24h",
+    activeFindingCount: 1,
+    activeZoneCount: 0,
+    activeAlertCount: 0,
+  });
+
+  const action = buildActionProps(readModel, "North Quarter Demo", {
+    curation: {
+      inputVersion: version,
+      generatedAt: "2026-03-30T10:15:00Z",
+      provider: "google-gemini",
+      modelKey: "gemini-2.5-flash",
+      recommendation: "Check frost-prone pockets before the overnight low and confirm stage sensitivity before acting field-wide.",
+      explanation: "Active frost intelligence is leading the action card. The rewrite should stay concise but grounded in the same risk.",
+      inspectFirst: "Start with low spots and exposed edges where frost settles first.",
+      whyNow: "The active frost signal is critical and time-bound to the next overnight window.",
+      supportingContext: "This wording is still grounded in the active weather-risk finding and current signal counts.",
+      confidence: "Finding-backed",
+    },
+  });
+
+  assert.equal(action.topRiskTitle, "Critical frost risk next 24h");
+  assert.equal(action.recommendation, "Check frost-prone pockets before the overnight low and confirm stage sensitivity before acting field-wide.");
+  assert.equal(action.explanation, "Active frost intelligence is leading the action card. The rewrite should stay concise but grounded in the same risk.");
+  assert.equal(action.questions[0]?.answer, "Start with low spots and exposed edges where frost settles first.");
+  assert.equal(action.questions[1]?.answer, "The active frost signal is critical and time-bound to the next overnight window.");
+  assert.equal(action.questions[2]?.answer, "This wording is still grounded in the active weather-risk finding and current signal counts.");
+  assert.equal(action.confidence, "Finding-backed");
 });
