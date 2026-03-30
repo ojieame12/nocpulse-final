@@ -9,6 +9,7 @@ import type { AuthenticatedActor } from "@fieldpulse/module-auth";
 import type {
   BuildFieldZoneActivityReportInput,
   CropIntelligenceRun,
+  FieldActionCuration,
   DiseaseRiskReport,
   GenerateDiseaseRiskFindingsResult,
   FieldIntelligenceFinding,
@@ -139,7 +140,22 @@ export type LoadWorkspaceFieldDetailInput = LoadWorkspaceFieldOverviewInput & {
   fieldId: string;
 };
 
+export type LoadFieldDetailByWorkspaceInput = {
+  workspaceId: WorkspaceId;
+  fieldId: string;
+};
+
 export type WorkspaceFieldDetailSelection = ResolvedWorkspaceSelection & {
+  fields: readonly FieldOverview[];
+  field: {
+    detail: FieldDetail;
+    overview: FieldOverview | null;
+    readModel: FieldReportReadModel;
+  } | null;
+};
+
+export type DirectWorkspaceFieldDetailSelection = {
+  selectedWorkspace: Workspace | null;
   fields: readonly FieldOverview[];
   field: {
     detail: FieldDetail;
@@ -384,6 +400,8 @@ export type LoadWorkspaceIntelligenceFindingsInput = {
   workspaceId: WorkspaceId;
   limit?: number;
   status?: IntelligenceFindingStatus;
+  family?: IntelligenceFindingFamily;
+  updatedAfter?: string;
 };
 
 export type SyncIntelligenceFindingAlertInput = {
@@ -460,6 +478,18 @@ export type GenerateFieldDiseaseRiskFindingsResult =
     alerts: readonly FieldAlert[];
     alertSync: IntelligenceAlertSyncSummary;
   };
+
+export type LoadLatestFieldActionCurationInput = {
+  workspaceId: WorkspaceId;
+  fieldId: string;
+};
+
+export type CurateFieldActionInput = {
+  workspaceId: WorkspaceId;
+  fieldId: string;
+  requestedAt?: string;
+  force?: boolean;
+};
 
 export type BuildRecentDiseaseRiskReportInput = {
   workspaceId?: WorkspaceId;
@@ -608,6 +638,9 @@ export type ServerServices = {
     loadWorkspaceFieldDetail(
       input: LoadWorkspaceFieldDetailInput,
     ): Promise<WorkspaceFieldDetailSelection>;
+    loadFieldDetailByWorkspace(
+      input: LoadFieldDetailByWorkspaceInput,
+    ): Promise<DirectWorkspaceFieldDetailSelection>;
   };
   imagery: {
     inspectProviders(): Promise<readonly ImageryProviderDiagnostics[]>;
@@ -726,6 +759,12 @@ export type ServerServices = {
     generateDiseaseRiskFindings(
       input: GenerateFieldDiseaseRiskFindingsInput,
     ): Promise<GenerateFieldDiseaseRiskFindingsResult>;
+    loadLatestFieldActionCuration(
+      input: LoadLatestFieldActionCurationInput,
+    ): Promise<FieldActionCuration | null>;
+    curateFieldAction(
+      input: CurateFieldActionInput,
+    ): Promise<FieldActionCuration | null>;
     buildRecentDiseaseRiskReport(
       input?: BuildRecentDiseaseRiskReportInput,
     ): Promise<DiseaseRiskReport>;

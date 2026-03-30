@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { buildPreviewViewModel } from './buildPreviewViewModel';
 import { PreviewShell, type FieldViewModel } from './PreviewShell';
 
@@ -48,6 +49,14 @@ export default async function PreviewPage({ searchParams }: PreviewPageProps) {
     );
   }
 
+  if (viewModel.status === 'pending-access') {
+    redirect(
+      `/auth/pending-access?next=${encodeURIComponent(
+        `/preview${requestedFieldId ? `?fieldId=${requestedFieldId}` : ''}`,
+      )}`,
+    );
+  }
+
   if (viewModel.status === 'no-fields') {
     return (
       <main>
@@ -88,5 +97,11 @@ export default async function PreviewPage({ searchParams }: PreviewPageProps) {
     cellInspector: vm.cellInspector ?? null,
   };
 
-  return <PreviewShell initial={initial} />;
+  return (
+    <PreviewShell
+      initial={initial}
+      authViewer={"authViewer" in vm ? vm.authViewer ?? null : null}
+      guestSession={vm.guestSession ?? null}
+    />
+  );
 }

@@ -1,11 +1,16 @@
 import type { FieldIntelligenceFinding } from "../contracts/FieldIntelligenceFinding";
-import type { IntelligenceFindingStatus } from "../contracts/IntelligenceFindingFamily";
+import type {
+  IntelligenceFindingFamily,
+  IntelligenceFindingStatus,
+} from "../contracts/IntelligenceFindingFamily";
 
 type ListWorkspaceIntelligenceFindingsRepository = {
   listRecentByWorkspace(input: {
     workspaceId: string;
     limit?: number;
     status?: IntelligenceFindingStatus;
+    family?: IntelligenceFindingFamily;
+    updatedAfter?: string;
   }): Promise<readonly FieldIntelligenceFinding[]>;
 };
 
@@ -14,6 +19,8 @@ export type ListWorkspaceIntelligenceFindingsInput = {
   workspaceId: string;
   limit?: number;
   status?: IntelligenceFindingStatus;
+  family?: IntelligenceFindingFamily;
+  updatedAfter?: string;
 };
 
 export async function listWorkspaceIntelligenceFindings(
@@ -23,5 +30,7 @@ export async function listWorkspaceIntelligenceFindings(
     workspaceId: input.workspaceId,
     limit: input.limit,
     status: input.status,
+    family: input.family,
+    updatedAfter: input.updatedAfter,
   });
 }

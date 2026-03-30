@@ -66,6 +66,10 @@ export function createSupabaseCropIntelligenceRunRepository(
         query = query.eq("workspace_id", input.workspaceId);
       }
 
+      if (input.fieldId) {
+        query = query.eq("field_id", input.fieldId);
+      }
+
       if (input.startedAfter) {
         query = query.gte("started_at", input.startedAfter);
       }

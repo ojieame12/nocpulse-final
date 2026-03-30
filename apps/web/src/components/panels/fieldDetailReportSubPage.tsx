@@ -38,10 +38,9 @@ const CROP_PARAM_ICONS: Record<string, { Icon: LucideIcon; color: string }> = {
   "temperature":       { Icon: Thermometer,   color: "#ef4444" },
   "wind":              { Icon: Wind,          color: "#6b7280" },
 };
-import { LineSpark, ProgBar } from "./fieldDetailVisualizations";
+import { LineSpark, MultiLineSpark, ProgBar } from "./fieldDetailVisualizations";
 import {
   parseNumericValue,
-  buildSparkFromReportChart,
   findLatestReportChartPointValue,
 } from "./fieldDetailHelpers";
 import type { FieldReportProps } from "./ReportTab";
@@ -85,6 +84,53 @@ interface ReportSubPageProps {
   statusColor: (status: string) => string;
 }
 
+function getChartSeriesValues(
+  chart: FieldReportProps["charts"][number] | null,
+) {
+  return (chart?.series ?? [])
+    .map((series) => ({
+      color: series.color,
+      label: series.label,
+      format: series.format,
+      values: series.points
+        .map((point) => point.value)
+        .filter((value): value is number => value != null && Number.isFinite(value)),
+    }))
+    .filter((series) => series.values.length > 0);
+}
+
+function chartHasTrend(chart: FieldReportProps["charts"][number] | null) {
+  return (chart?.series ?? []).some((series) => {
+    const finiteCount = series.points.filter(
+      (point) => point.value != null && Number.isFinite(point.value),
+    ).length;
+    return finiteCount > 1;
+  });
+}
+
+function formatChartLatestValue(
+  chart: FieldReportProps["charts"][number] | null,
+  seriesIndex: number,
+) {
+  const value = findLatestReportChartPointValue(chart, seriesIndex);
+  if (value == null) {
+    return "—";
+  }
+
+  const format = chart?.series[seriesIndex]?.format;
+  if (format === "percent") {
+    return `${value.toFixed(1)}%`;
+  }
+  if (format === "temperature") {
+    return `${value.toFixed(1)}°C`;
+  }
+  if (format === "millimetres") {
+    return `${value.toFixed(1)} mm`;
+  }
+
+  return value.toFixed(2);
+}
+
 export function ReportSubPage({
   ac,
   report,
@@ -115,6 +161,12 @@ export function ReportSubPage({
 }: ReportSubPageProps) {
   const reportFindings = report?.findings ?? [];
   const reportZones = report?.zones ?? [];
+  const vegetationSeries = getChartSeriesValues(vegetationChart);
+  const vegetationHasTrend = chartHasTrend(vegetationChart);
+  const moistureSeries = getChartSeriesValues(moistureHistoryChart);
+  const moistureHasTrend = chartHasTrend(moistureHistoryChart);
+  const temperatureSeries = getChartSeriesValues(temperatureChart);
+  const temperatureHasTrend = chartHasTrend(temperatureChart);
   const alertSeverityColor = (severity: string) =>
     severity === "High" ? "#ef4444" : severity === "Med" ? "#f59e0b" : "#16a34a";
 
@@ -208,7 +260,7 @@ export function ReportSubPage({
               ? (r as { color: string }).color
               : ac;
         return (
-          <Card key={i}>
+          <Card key={i} data-metric-hint={iconKey ?? r.label.toLowerCase()} data-metric-value={r.value}>
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
               <iconInfo.Icon size={11} color={iconInfo.color} strokeWidth={2.2} />
               <LblM>{r.label}</LblM>
@@ -290,11 +342,28 @@ export function ReportSubPage({
             </span>
           ) : null}
         </div>
-        <LineSpark
-          data={buildSparkFromReportChart(vegetationChart) ?? mc.spark}
-          color={contextOnlyOptical ? contextTone : ac}
-          height={56}
-        />
+        {vegetationChart ? (
+          vegetationHasTrend ? (
+            <MultiLineSpark
+              series={vegetationSeries.map((series) => ({
+                data: series.values,
+                color: series.color,
+              }))}
+              height={56}
+            />
+          ) : (
+            <div style={{ height: 56 }} />
+          )
+        ) : (
+          <LineSpark
+            data={mc.spark}
+            color={contextOnlyOptical ? contextTone : ac}
+            height={56}
+          />
+        )}
+        {vegetationChart?.emptyText && !vegetationHasTrend ? (
+          <Sub>{vegetationChart.emptyText}</Sub>
+        ) : null}
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <Sub>{vegetationChart ? vegetationRange.start : mc.spatialColumns[0].label}</Sub>
           <Sub>
@@ -317,19 +386,32 @@ export function ReportSubPage({
         <Lbl color={ac}>
           {moistureHistoryChart?.title ?? "Spread Snapshot"}
         </Lbl>
-        <LineSpark
-          data={
-            moistureHistoryChart
-              ? buildSparkFromReportChart(moistureHistoryChart, 0)
-              : [
-                  parseNumericValue(mc.spatialColumns[0].value) ?? 0,
-                  parseNumericValue(mc.spatialColumns[1].value) ?? 0,
-                  parseNumericValue(mc.spatialColumns[2].value) ?? 0,
-                ]
-          }
-          color={ac}
-          height={48}
-        />
+        {moistureHistoryChart ? (
+          moistureHasTrend ? (
+            <MultiLineSpark
+              series={moistureSeries.map((series) => ({
+                data: series.values,
+                color: series.color,
+              }))}
+              height={48}
+            />
+          ) : (
+            <div style={{ height: 48 }} />
+          )
+        ) : (
+          <LineSpark
+            data={[
+              parseNumericValue(mc.spatialColumns[0].value) ?? 0,
+              parseNumericValue(mc.spatialColumns[1].value) ?? 0,
+              parseNumericValue(mc.spatialColumns[2].value) ?? 0,
+            ]}
+            color={ac}
+            height={48}
+          />
+        )}
+        {moistureHistoryChart?.emptyText && !moistureHasTrend ? (
+          <Sub>{moistureHistoryChart.emptyText}</Sub>
+        ) : null}
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <Sub>
             {moistureHistoryChart ? moistureHistoryRange.start : mc.spatialColumns[0].value}
@@ -341,6 +423,9 @@ export function ReportSubPage({
                   moistureHistoryChart.series[1]
                     ? `Surface ${findLatestReportChartPointValue(moistureHistoryChart, 1)?.toFixed(1) ?? "—"}%`
                     : null,
+                  moistureHistoryChart.series[2]
+                    ? `${moistureHistoryChart.series[2].label} ${formatChartLatestValue(moistureHistoryChart, 2)}`
+                    : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")
@@ -350,23 +435,48 @@ export function ReportSubPage({
       </Card>
       <Card span={-1}>
         <LblM>{temperatureChart?.title ?? "Temperature Snapshot"}</LblM>
-        <LineSpark
-          data={
-            temperatureChart
-              ? buildSparkFromReportChart(temperatureChart, 0)
-              : reportForecast.length > 0
+        {temperatureChart ? (
+          temperatureHasTrend ? (
+            <MultiLineSpark
+              series={temperatureSeries.map((series) => ({
+                data: series.values,
+                color: series.color,
+              }))}
+              height={48}
+            />
+          ) : (
+            <div style={{ height: 48 }} />
+          )
+        ) : (
+          <LineSpark
+            data={
+              reportForecast.length > 0
                 ? reportForecast.map((day) => parseNumericValue(day.temp) ?? 0)
                 : [0]
-          }
-          color={ac}
-          height={48}
-        />
+            }
+            color={ac}
+            height={48}
+          />
+        )}
+        {temperatureChart?.emptyText && !temperatureHasTrend ? (
+          <Sub>{temperatureChart.emptyText}</Sub>
+        ) : null}
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <Sub>
             {temperatureChart ? temperatureRange.start : reportForecast[0]?.day ?? "Now"}
           </Sub>
           <Sub>
-            {temperatureChart ? temperatureChart.subtitle : reportForecast.at(-1)?.day ?? "Later"}
+            {temperatureChart
+              ? [
+                  temperatureChart.subtitle,
+                  `High ${formatChartLatestValue(temperatureChart, 0)}`,
+                  temperatureChart.series[1]
+                    ? `Low ${formatChartLatestValue(temperatureChart, 1)}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : reportForecast.at(-1)?.day ?? "Later"}
           </Sub>
         </div>
       </Card>
@@ -418,7 +528,7 @@ export function ReportSubPage({
                   className="fdp-mono"
                   style={{ fontSize: 9, color: "var(--text-muted)" }}
                 >
-                  {tempValue > 0 ? "temp" : ""}
+                  {f.precip}
                 </span>
                 <div style={{ width: "80%", marginTop: 2 }}>
                   <ProgBar value={precipPct} color="#3b82f6" height={3} />

@@ -2,6 +2,7 @@ import { jsonError, jsonOk } from "../../../../../server/http/json";
 import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 import { logServerError } from "../../../../../server/runtime/installServerCrashLogging";
+import { resolveGuestShareSessionFromRequest } from "../../../../../server/auth/guestShareSession";
 import { buildFieldOverviewViewModel } from "../../../../../features/fields/buildFieldOverviewViewModel";
 
 export const dynamic = "force-dynamic";
@@ -83,7 +84,19 @@ export async function GET(
     }
 
     const { fieldId } = await context.params;
-    const preferredWorkspaceId = await resolvePreferredWorkspaceId(
+    const guestShareSession = await resolveGuestShareSessionFromRequest({
+      request,
+      runtime,
+    });
+
+    if (guestShareSession && guestShareSession.fieldId !== fieldId) {
+      return jsonError(
+        403,
+        "Shared guest access is limited to the linked field.",
+      );
+    }
+
+    const preferredWorkspaceId = guestShareSession?.workspaceId ?? await resolvePreferredWorkspaceId(
       runtime,
       request.headers.get("x-fieldpulse-workspace-id"),
     );
@@ -94,6 +107,7 @@ export async function GET(
     const viewModel = await buildFieldOverviewViewModel(fieldId, {
       preferredWorkspaceId,
       request: normalizedRequest,
+      guestShareSession,
     });
 
     if (viewModel.status === "unauthenticated") {

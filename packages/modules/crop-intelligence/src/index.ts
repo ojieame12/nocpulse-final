@@ -14,6 +14,13 @@ export { type FieldIntelligenceEvidence } from "./contracts/FieldIntelligenceEvi
 export {
   type FieldIntelligenceTrackedZoneReference,
 } from "./contracts/FieldIntelligenceEvidence";
+export {
+  FIELD_ACTION_CURATION_SOURCE_KEY,
+  buildFieldActionCurationVersion,
+  parseFieldActionCuration,
+  type FieldActionCuration,
+  type FieldActionCurationVersionInput,
+} from "./contracts/FieldActionCuration";
 export { type CropIntelligenceRun } from "./contracts/CropIntelligenceRun";
 export { type FieldIntelligenceFinding } from "./contracts/FieldIntelligenceFinding";
 export { type FieldIntelligenceZone } from "./contracts/FieldIntelligenceZone";

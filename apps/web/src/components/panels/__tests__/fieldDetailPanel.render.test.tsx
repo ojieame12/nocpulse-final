@@ -7,7 +7,7 @@ import { ThemeContext } from "../../layout/WorkspaceShell";
 import { FieldDetailPanel } from "../FieldDetailPanel";
 import { CropsSubPage } from "../fieldDetailCropsSubPage";
 import { ReportSubPage } from "../fieldDetailReportSubPage";
-import { LineSpark } from "../fieldDetailVisualizations";
+import { LineSpark, MultiLineSpark } from "../fieldDetailVisualizations";
 
 function renderWithDarkTheme(element: React.ReactElement) {
   return renderToStaticMarkup(
@@ -83,6 +83,8 @@ function createBasePanelProps() {
     action: {
       recommendation: "Scout the driest part of the field.",
       urgency: "Watch",
+      intelligenceSourceLabel: "Heuristic watchlist",
+      intelligenceFreshnessLabel: "Signals Mar 29",
     } as any,
     notes: {
       fieldId: "field-1",
@@ -142,6 +144,7 @@ test("FieldDetailPanel top fold renders outlook, field alerts, and terse market 
   assert.match(markup, /\+0\.00 CAD\/t/);
   assert.match(markup, /1 capture · 259\.0 ha/);
   assert.match(markup, /Yield N\/A · Price \$167\.31\/t · Basis \+0\.00 CAD\/t/);
+  assert.match(markup, /Heuristic watchlist · Signals Mar 29/);
 });
 
 test("FieldDetailPanel initialPage='notes' renders the canonical notes subpage", () => {
@@ -291,9 +294,96 @@ test("ReportSubPage renders alerts, findings, tracked zones, and provenance", ()
   assert.match(markup, /Sentinel-1/);
 });
 
+test("ReportSubPage renders truthful chart empty-state copy and multi-series labels", () => {
+  const markup = renderWithDarkTheme(
+    <ReportSubPage
+      ac="#f59e0b"
+      report={{
+        findings: [],
+        zones: [],
+        alerts: [],
+        readings: [],
+        cropParams: [],
+        sources: [],
+        provenanceText: "Derived from recent captures.",
+      } as any}
+      summary={{ updatedLabel: "Mar 29, 2026", rootMoisture: "38%" } as any}
+      crop={{ thresholdStageLabel: "Tillering" } as any}
+      mc={createModeData()}
+      contextOnlyOptical={false}
+      contextTone="#94a3b8"
+      contextToneSoft="rgba(148,163,184,0.12)"
+      hoveredAttentionLevel={null}
+      reportStatusTitle="Stable field signal"
+      reportStatusSub="No field-wide escalation."
+      reportReadings={[]}
+      reportForecast={[{ day: "Mon", temp: "-6/-8", precip: "70%" }]}
+      reportAlerts={[]}
+      vegetationChart={{
+        title: "VEGETATION HISTORY",
+        subtitle: "Preseason optical context",
+        emptyText: "Only one optical capture is stored so far.",
+        series: [
+          { label: "NDVI", color: "#16a34a", format: "index", points: [{ label: "Mar 27", value: 0.04 }] },
+          { label: "NDRE", color: "#14b8a6", format: "index", points: [{ label: "Mar 27", value: 0 }] },
+        ],
+      } as any}
+      moistureHistoryChart={{
+        title: "MOISTURE PROFILE HISTORY",
+        subtitle: "Root + surface moisture from raster",
+        emptyText: "Only one SAR-backed moisture capture is stored so far.",
+        series: [
+          { label: "Root", color: "#3b82f6", format: "percent", points: [{ label: "Mar 26", value: 27.6 }] },
+          { label: "Surface", color: "#0ea5e9", format: "percent", points: [{ label: "Mar 26", value: 11.0 }] },
+          { label: "Radar Wetness", color: "#06b6d4", format: "index", points: [{ label: "Mar 26", value: 0.42 }] },
+        ],
+      } as any}
+      temperatureChart={{
+        title: "TEMPERATURE WINDOW",
+        subtitle: "Latest observation + next forecast days",
+        series: [
+          { label: "High", color: "#f97316", format: "temperature", points: [{ label: "Now", value: -6 }, { label: "Tue", value: -3 }] },
+          { label: "Low", color: "#94a3b8", format: "temperature", points: [{ label: "Now", value: -8 }, { label: "Tue", value: -5 }] },
+        ],
+      } as any}
+      vegetationRange={{ start: "Mar 27", end: "Latest" }}
+      moistureHistoryRange={{ start: "Mar 26", end: "Latest" }}
+      temperatureRange={{ start: "Now", end: "Tue" }}
+      focusedZone={null}
+      focusedZoneJumpHint={null}
+      handleOpenFocusedZone={() => {}}
+      contextualNotesTarget={null}
+      handleOpenContextNotes={() => {}}
+      statusColor={() => "#f59e0b"}
+    />,
+  );
+
+  assert.match(markup, /Only one optical capture is stored so far/);
+  assert.match(markup, /Only one SAR-backed moisture capture is stored so far/);
+  assert.match(markup, /Radar Wetness 0.42/);
+  assert.match(markup, /High -3.0°C/);
+  assert.match(markup, /Low -5.0°C/);
+  assert.match(markup, />70%<\/span>/);
+});
+
 test("LineSpark renders a single-point series without NaN coordinates", () => {
   const markup = renderWithDarkTheme(<LineSpark data={[52]} color="#16a34a" height={48} />);
 
   assert.doesNotMatch(markup, /NaN/);
   assert.match(markup, /100,44/);
+});
+
+test("MultiLineSpark renders multi-series data without NaN coordinates", () => {
+  const markup = renderWithDarkTheme(
+    <MultiLineSpark
+      series={[
+        { data: [12, 18, 15], color: "#16a34a" },
+        { data: [9, 11, 10], color: "#0ea5e9" },
+      ]}
+      height={48}
+    />,
+  );
+
+  assert.doesNotMatch(markup, /NaN/);
+  assert.match(markup, /polyline/);
 });

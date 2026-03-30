@@ -1486,7 +1486,10 @@ export function FieldPageShell({
         }}
       />
     ) : panelView === "settings" ? (
-      <SettingsPanel onClose={() => setPanelView("detail")} />
+      <SettingsPanel
+        workspaceId={workspaceId}
+        onClose={() => setPanelView("detail")}
+      />
     ) : panelView === "addField" ? (
       <AddFieldPanel
         onFieldsChanged={handleFieldsChanged}

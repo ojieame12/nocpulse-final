@@ -24,26 +24,28 @@ type WeatherScheduleJob = {
   }>;
 };
 
-function createScheduleWeatherJob(): WeatherScheduleJob {
-  const job = jobs.find((entry) => entry.key === "weather.schedule-workspace-refresh");
-  assert.ok(job, "weather schedule job should be registered");
-  return job as WeatherScheduleJob;
+type SimpleWorkspaceScheduleJob = WeatherScheduleJob;
+
+function createWorkspaceScheduleJob(
+  key:
+    | "weather.schedule-workspace-refresh"
+    | "moisture.schedule-workspace-estimate-rebuild"
+    | "intelligence.schedule-workspace-moisture-stress"
+    | "intelligence.schedule-workspace-weather-risk",
+): SimpleWorkspaceScheduleJob {
+  const job = jobs.find((entry) => entry.key === key);
+  assert.ok(job, `${key} should be registered`);
+  return job as SimpleWorkspaceScheduleJob;
 }
 
-test("weather.schedule-workspace-refresh enqueues fields with bounded concurrency and preserves field order", async () => {
-  const scheduleJob = createScheduleWeatherJob();
-  const fields = Array.from(
-    { length: WORKSPACE_FIELD_SCHEDULE_CONCURRENCY + 3 },
-    (_, index) => ({
-      id: `field-${index + 1}`,
-      workspaceId: "workspace-1",
-      name: `Field ${index + 1}`,
-      areaHa: 64 + index,
-      legalLandDescription: null,
-      latestMoisture: null,
-    }),
-  );
-  const progressUpdates: number[] = [];
+function createMockContext(fields: readonly {
+  id: string;
+  workspaceId: string;
+  name: string;
+  areaHa: number;
+  legalLandDescription: string | null;
+  latestMoisture: null;
+}[]) {
   let inFlight = 0;
   let maxInFlight = 0;
 
@@ -75,6 +77,7 @@ test("weather.schedule-workspace-refresh enqueues fields with bounded concurrenc
         workspaceId?: string;
         fieldId?: string;
         forecastHours?: number;
+        observedAt?: string;
       };
     }) {
       inFlight += 1;
@@ -103,6 +106,30 @@ test("weather.schedule-workspace-refresh enqueues fields with bounded concurrenc
     },
   } as unknown as WorkerJobContext;
 
+  return {
+    context,
+    getMaxInFlight() {
+      return maxInFlight;
+    },
+  };
+}
+
+test("weather.schedule-workspace-refresh enqueues fields with bounded concurrency and preserves field order", async () => {
+  const scheduleJob = createWorkspaceScheduleJob("weather.schedule-workspace-refresh");
+  const fields = Array.from(
+    { length: WORKSPACE_FIELD_SCHEDULE_CONCURRENCY + 3 },
+    (_, index) => ({
+      id: `field-${index + 1}`,
+      workspaceId: "workspace-1",
+      name: `Field ${index + 1}`,
+      areaHa: 64 + index,
+      legalLandDescription: null,
+      latestMoisture: null,
+    }),
+  );
+  const progressUpdates: number[] = [];
+  const { context, getMaxInFlight } = createMockContext(fields);
+
   const execution: JobExecutionControls = {
     dispatchId: "dispatch-1",
     attempt: 1,
@@ -127,7 +154,7 @@ test("weather.schedule-workspace-refresh enqueues fields with bounded concurrenc
     execution,
   );
 
-  assert.equal(maxInFlight, WORKSPACE_FIELD_SCHEDULE_CONCURRENCY);
+  assert.equal(getMaxInFlight(), WORKSPACE_FIELD_SCHEDULE_CONCURRENCY);
   assert.equal(result.workspaceId, "workspace-1");
   assert.equal(result.fieldCount, fields.length);
   assert.equal(result.queuedCount, fields.length);
@@ -136,4 +163,101 @@ test("weather.schedule-workspace-refresh enqueues fields with bounded concurrenc
     fields.map((field) => `dispatch-${field.id}`),
   );
   assert.equal(progressUpdates.at(-1), 100);
+});
+
+test("moisture.schedule-workspace-estimate-rebuild enqueues estimate rebuilds with bounded concurrency and preserves field order", async () => {
+  const scheduleJob = createWorkspaceScheduleJob(
+    "moisture.schedule-workspace-estimate-rebuild",
+  );
+  const fields = Array.from(
+    { length: WORKSPACE_FIELD_SCHEDULE_CONCURRENCY + 2 },
+    (_, index) => ({
+      id: `field-${index + 1}`,
+      workspaceId: "workspace-1",
+      name: `Field ${index + 1}`,
+      areaHa: 64 + index,
+      legalLandDescription: null,
+      latestMoisture: null,
+    }),
+  );
+  const { context, getMaxInFlight } = createMockContext(fields);
+
+  const result = await scheduleJob.run(
+    context,
+    {
+      workspaceId: "workspace-1",
+      requestedAt: "2026-03-30T10:00:00.000Z",
+    },
+    {
+      dispatchId: "dispatch-estimate",
+      attempt: 1,
+      workerName: "test-worker",
+      async reportProgress() {},
+      async throwIfCancellationRequested() {
+        return;
+      },
+    },
+  );
+
+  assert.equal(getMaxInFlight(), WORKSPACE_FIELD_SCHEDULE_CONCURRENCY);
+  assert.equal(result.queuedCount, fields.length);
+  assert.deepEqual(
+    result.queuedDispatchIds,
+    fields.map((field) => `dispatch-${field.id}`),
+  );
+});
+
+test("intelligence.schedule-workspace-moisture-stress and intelligence.schedule-workspace-weather-risk preserve field order", async () => {
+  const moistureJob = createWorkspaceScheduleJob(
+    "intelligence.schedule-workspace-moisture-stress",
+  );
+  const weatherJob = createWorkspaceScheduleJob(
+    "intelligence.schedule-workspace-weather-risk",
+  );
+  const fields = Array.from({ length: 5 }, (_, index) => ({
+    id: `field-${index + 1}`,
+    workspaceId: "workspace-1",
+    name: `Field ${index + 1}`,
+    areaHa: 64 + index,
+    legalLandDescription: null,
+    latestMoisture: null,
+  }));
+  const { context } = createMockContext(fields);
+  const execution: JobExecutionControls = {
+    dispatchId: "dispatch-intelligence",
+    attempt: 1,
+    workerName: "test-worker",
+    async reportProgress() {},
+    async throwIfCancellationRequested() {
+      return;
+    },
+  };
+
+  const [moistureResult, weatherResult] = await Promise.all([
+    moistureJob.run(
+      context,
+      {
+        workspaceId: "workspace-1",
+        requestedAt: "2026-03-30T10:00:00.000Z",
+      },
+      execution,
+    ),
+    weatherJob.run(
+      context,
+      {
+        workspaceId: "workspace-1",
+        requestedAt: "2026-03-30T10:00:00.000Z",
+      },
+      execution,
+    ),
+  ]);
+
+  assert.deepEqual(
+    moistureResult.queuedDispatchIds,
+    fields.map((field) => `dispatch-${field.id}`),
+  );
+  assert.deepEqual(
+    weatherResult.queuedDispatchIds,
+    fields.map((field) => `dispatch-${field.id}`),
+  );
 });

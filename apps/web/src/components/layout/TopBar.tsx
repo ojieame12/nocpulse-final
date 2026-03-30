@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
+import type { ComponentPropsWithoutRef, CSSProperties } from "react";
 import { Bell, Moon, Plus, SunMedium } from "lucide-react";
 import type { AppTheme } from "./WorkspaceShell";
 
@@ -13,6 +13,19 @@ interface TopBarProps {
   onAddField?: () => void;
   theme?: AppTheme;
   onThemeToggle?: () => void;
+  showSettingsNav?: boolean;
+  showAddField?: boolean;
+  showAlertsBell?: boolean;
+  showAvatar?: boolean;
+  viewer?: {
+    displayName: string;
+    email: string | null;
+    initials: string;
+    workspaceRoleLabel: string;
+    workspaceName: string | null;
+  } | null;
+  guestBadgeLabel?: string | null;
+  guestCtaHref?: string | null;
 }
 
 function NocPulseLogo(props: ComponentPropsWithoutRef<"img">) {
@@ -26,8 +39,71 @@ function NocPulseLogo(props: ComponentPropsWithoutRef<"img">) {
   );
 }
 
-export function TopBar({ activeNav, onNavChange, onAlertsBell, onAddField, theme, onThemeToggle }: TopBarProps) {
+export function TopBar({
+  activeNav,
+  onNavChange,
+  onAlertsBell,
+  onAddField,
+  theme,
+  onThemeToggle,
+  showSettingsNav = true,
+  showAddField = true,
+  showAlertsBell = true,
+  showAvatar = true,
+  viewer = null,
+  guestBadgeLabel = null,
+  guestCtaHref = null,
+}: TopBarProps) {
   const isDark = theme === "dark";
+  const navItems = showSettingsNav
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((item) => item !== "Settings");
+  const guestBadgeStyle: CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 30,
+    padding: "0 12px",
+    borderRadius: 999,
+    background: isDark ? "rgba(245, 158, 11, 0.18)" : "rgba(245, 158, 11, 0.12)",
+    color: isDark ? "#fcd34d" : "var(--status-warning)",
+    fontFamily: "var(--font-body)",
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.01em",
+    whiteSpace: "nowrap",
+  };
+  const guestCtaStyle: CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 30,
+    padding: "0 14px",
+    borderRadius: 8,
+    background: isDark
+      ? "rgba(0, 71, 38, 0.95)"
+      : "var(--btn-fill-primary, var(--primary-green))",
+    color: "var(--btn-text-primary, #fff)",
+    fontFamily: "var(--font-body)",
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.01em",
+    textDecoration: "none",
+    whiteSpace: "nowrap",
+    boxShadow: "0 4px 0 #002a15",
+  };
+  const viewerMeta = viewer?.email
+    ? `${viewer.email} · ${viewer.workspaceRoleLabel}`
+    : viewer
+      ? [viewer.workspaceRoleLabel, viewer.workspaceName]
+          .filter(Boolean)
+          .join(" · ")
+      : null;
+  const viewerTitle = viewer
+    ? [viewer.displayName, viewer.email, viewer.workspaceRoleLabel, viewer.workspaceName]
+        .filter(Boolean)
+        .join(" · ")
+    : null;
 
   return (
     <header className="app-topbar">
@@ -41,7 +117,7 @@ export function TopBar({ activeNav, onNavChange, onAlertsBell, onAddField, theme
       </div>
 
       <nav className="app-topbar__center">
-        {NAV_ITEMS.map((item) => (
+        {navItems.map((item) => (
           <button
             key={item}
             className={`nav-link${activeNav === item ? " nav-link--active" : ""}`}
@@ -53,15 +129,25 @@ export function TopBar({ activeNav, onNavChange, onAlertsBell, onAddField, theme
       </nav>
 
       <div className="app-topbar__right">
-        <button
-          type="button"
-          className="app-topbar__add-field-btn"
-          onClick={onAddField}
-          aria-label="Add field"
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          <span>Add Field</span>
-        </button>
+        {guestBadgeLabel ? (
+          <span style={guestBadgeStyle}>{guestBadgeLabel}</span>
+        ) : null}
+        {guestCtaHref ? (
+          <a href={guestCtaHref} style={guestCtaStyle}>
+            Get full access
+          </a>
+        ) : null}
+        {showAddField ? (
+          <button
+            type="button"
+            className="app-topbar__add-field-btn"
+            onClick={onAddField}
+            aria-label="Add field"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            <span>Add Field</span>
+          </button>
+        ) : null}
         <button
           type="button"
           className="app-topbar__theme-btn"
@@ -70,15 +156,33 @@ export function TopBar({ activeNav, onNavChange, onAlertsBell, onAddField, theme
         >
           {isDark ? <SunMedium size={16} strokeWidth={2} /> : <Moon size={16} strokeWidth={2} />}
         </button>
-        <button
-          type="button"
-          className="app-topbar__bell-btn"
-          onClick={onAlertsBell}
-          aria-label="Alerts"
-        >
-          <Bell size={18} strokeWidth={2} />
-        </button>
-        <div className="app-topbar__avatar" />
+        {showAlertsBell ? (
+          <button
+            type="button"
+            className="app-topbar__bell-btn"
+            onClick={onAlertsBell}
+            aria-label="Alerts"
+          >
+            <Bell size={18} strokeWidth={2} />
+          </button>
+        ) : null}
+        {showAvatar ? (
+          viewer ? (
+            <div className="app-topbar__viewer" title={viewerTitle ?? undefined}>
+              <div className="app-topbar__avatar app-topbar__avatar--initials">
+                {viewer.initials}
+              </div>
+              <div className="app-topbar__viewer-copy">
+                <span className="app-topbar__viewer-name">{viewer.displayName}</span>
+                <span className="app-topbar__viewer-meta">
+                  {viewerMeta ?? viewer.workspaceRoleLabel}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="app-topbar__avatar" />
+          )
+        ) : null}
       </div>
     </header>
   );

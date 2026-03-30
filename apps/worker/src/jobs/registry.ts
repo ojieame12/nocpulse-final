@@ -77,6 +77,13 @@ type IntakeFieldOnboardingJobResult = {
         >
       >
     | null;
+  actionCuration:
+    | Awaited<
+        ReturnType<
+          WorkerJobContext["runtime"]["services"]["intelligence"]["curateFieldAction"]
+        >
+      >
+    | null;
 };
 
 type IntakeFieldOnboardingJobState = {
@@ -89,6 +96,7 @@ type IntakeFieldOnboardingJobState = {
   moistureStress: IntakeFieldOnboardingJobResult["moistureStress"];
   weatherRisk: IntakeFieldOnboardingJobResult["weatherRisk"];
   diseaseRisk: IntakeFieldOnboardingJobResult["diseaseRisk"];
+  actionCuration: IntakeFieldOnboardingJobResult["actionCuration"];
 };
 
 type ScheduleWorkspaceImageryProviderProbesInput = {
@@ -146,6 +154,21 @@ type ScheduleWorkspaceWeatherRefreshResult = {
   queuedDispatchIds: readonly string[];
 };
 
+type ScheduleWorkspaceMoistureEstimateRebuildInput = {
+  workspaceId: string;
+  fieldIds?: readonly string[];
+  limit?: number;
+  requestedAt?: string;
+};
+
+type ScheduleWorkspaceMoistureEstimateRebuildResult = {
+  workspaceId: string;
+  requestedAt: string;
+  fieldCount: number;
+  queuedCount: number;
+  queuedDispatchIds: readonly string[];
+};
+
 type ScheduleWorkspaceMoistureCellBackfillInput = {
   workspaceId: string;
   fieldIds?: readonly string[];
@@ -184,6 +207,36 @@ type ScheduleWorkspaceDiseaseRiskInput = {
 };
 
 type ScheduleWorkspaceDiseaseRiskResult = {
+  workspaceId: string;
+  requestedAt: string;
+  fieldCount: number;
+  queuedCount: number;
+  queuedDispatchIds: readonly string[];
+};
+
+type ScheduleWorkspaceMoistureStressInput = {
+  workspaceId: string;
+  fieldIds?: readonly string[];
+  limit?: number;
+  requestedAt?: string;
+};
+
+type ScheduleWorkspaceMoistureStressResult = {
+  workspaceId: string;
+  requestedAt: string;
+  fieldCount: number;
+  queuedCount: number;
+  queuedDispatchIds: readonly string[];
+};
+
+type ScheduleWorkspaceWeatherRiskInput = {
+  workspaceId: string;
+  fieldIds?: readonly string[];
+  limit?: number;
+  requestedAt?: string;
+};
+
+type ScheduleWorkspaceWeatherRiskResult = {
   workspaceId: string;
   requestedAt: string;
   fieldCount: number;
@@ -319,6 +372,7 @@ async function runIntakeFieldOnboardingJob(input: {
       moistureStress: null as IntakeFieldOnboardingJobResult["moistureStress"],
       weatherRisk: null as IntakeFieldOnboardingJobResult["weatherRisk"],
       diseaseRisk: null as IntakeFieldOnboardingJobResult["diseaseRisk"],
+      actionCuration: null as IntakeFieldOnboardingJobResult["actionCuration"],
     } satisfies IntakeFieldOnboardingJobState,
     phases: [
       {
@@ -503,6 +557,22 @@ async function runIntakeFieldOnboardingJob(input: {
                 };
               },
             },
+            {
+              key: "curate-field-action",
+              progressPct: 99,
+              progressMessage: "curating field action summary",
+              async run(currentState: IntakeFieldOnboardingJobState) {
+                return {
+                  ...currentState,
+                  actionCuration:
+                    await input.context.runtime.services.intelligence.curateFieldAction({
+                      workspaceId: input.payload.workspaceId,
+                      fieldId: input.payload.fieldId,
+                      requestedAt,
+                    }),
+                };
+              },
+            },
           ]),
       {
         key: "finalize-result",
@@ -533,6 +603,7 @@ async function runIntakeFieldOnboardingJob(input: {
     moistureStress: state.moistureStress,
     weatherRisk: state.weatherRisk,
     diseaseRisk: state.diseaseRisk,
+    actionCuration: state.actionCuration,
   };
 }
 
@@ -1158,7 +1229,21 @@ export const jobs = [
                   await context.runtime.services.intelligence.generateHailRiskFindings(
                     payload,
                   ),
-              };
+                };
+              },
+            },
+          {
+            key: "curate-field-action",
+            progressPct: 82,
+            progressMessage: "curating field action summary",
+            async run(currentState) {
+              await context.runtime.services.intelligence.curateFieldAction({
+                workspaceId: payload.workspaceId,
+                fieldId: payload.fieldId,
+                requestedAt: payload.requestedAt,
+              });
+
+              return currentState;
             },
           },
           {
@@ -1253,7 +1338,21 @@ export const jobs = [
                   await context.runtime.services.intelligence.generateMoistureStressFindings(
                     payload,
                   ),
-              };
+                };
+              },
+            },
+          {
+            key: "curate-field-action",
+            progressPct: 86,
+            progressMessage: "curating field action summary",
+            async run(currentState) {
+              await context.runtime.services.intelligence.curateFieldAction({
+                workspaceId: payload.workspaceId,
+                fieldId: payload.fieldId,
+                requestedAt: payload.requestedAt,
+              });
+
+              return currentState;
             },
           },
           {
@@ -1353,7 +1452,21 @@ export const jobs = [
                   await context.runtime.services.intelligence.generateWeatherRiskFindings(
                     payload,
                   ),
-              };
+                };
+              },
+            },
+          {
+            key: "curate-field-action",
+            progressPct: 86,
+            progressMessage: "curating field action summary",
+            async run(currentState) {
+              await context.runtime.services.intelligence.curateFieldAction({
+                workspaceId: payload.workspaceId,
+                fieldId: payload.fieldId,
+                requestedAt: payload.requestedAt,
+              });
+
+              return currentState;
             },
           },
           {
@@ -1376,6 +1489,196 @@ export const jobs = [
       return {
         weatherSignals: state.weatherSignals,
         intelligence: state.intelligence,
+      };
+    },
+  }),
+  createRegisteredJob<
+    WorkerJobContext,
+    ScheduleWorkspaceMoistureStressInput,
+    ScheduleWorkspaceMoistureStressResult
+  >({
+    key: "intelligence.schedule-workspace-moisture-stress",
+    description:
+      "Enumerate workspace fields and enqueue one moisture-stress generation job per field.",
+    async samplePayload(context: WorkerJobContext) {
+      const target = await context.resolveDefaultFieldTarget();
+      return {
+        workspaceId: target.workspaceId,
+        limit: 1,
+      };
+    },
+    async run(context: WorkerJobContext, payload, execution) {
+      const requestedAt = payload.requestedAt ?? new Date().toISOString();
+      const overview = await context.runtime.services.catalog.loadWorkspaceFieldOverview({
+        preferredWorkspaceId: payload.workspaceId,
+      });
+
+      if (!overview.selectedWorkspace || overview.selectedWorkspace.id !== payload.workspaceId) {
+        throw new Error(
+          `[worker] workspace ${payload.workspaceId} could not be resolved for moisture stress scheduling`,
+        );
+      }
+
+      const selectedFields = payload.fieldIds?.length
+        ? overview.fields.filter((field) => payload.fieldIds!.includes(field.id))
+        : overview.fields;
+      const fields = payload.limit
+        ? selectedFields.slice(0, Math.max(0, payload.limit))
+        : selectedFields;
+      const queuedDispatchIds: string[] = [];
+
+      await execution.reportProgress({
+        progressPct: 10,
+        progressMessage: "loaded workspace fields for moisture stress scheduling",
+        phaseKey: "load-workspace-fields",
+        phaseLabel: "load workspace fields",
+      });
+
+      if (fields.length === 0) {
+        await execution.reportProgress({
+          progressPct: 100,
+          progressMessage: "no workspace fields matched moisture stress schedule",
+          phaseKey: null,
+          phaseLabel: null,
+        });
+
+        return {
+          workspaceId: payload.workspaceId,
+          requestedAt,
+          fieldCount: 0,
+          queuedCount: 0,
+          queuedDispatchIds,
+        };
+      }
+
+      queuedDispatchIds.push(
+        ...await enqueueWorkspaceFieldJobs({
+          execution,
+          fields,
+          phaseKey: "enqueue-field-moisture-stress",
+          phaseLabel: "enqueue field moisture stress generation",
+          progressMessage: (completedCount, totalCount) =>
+            `queued moisture stress generation ${completedCount} of ${totalCount}`,
+          enqueue: (field) =>
+            context.enqueueJob({
+              key: "intelligence.generate-moisture-stress",
+              payload: {
+                workspaceId: payload.workspaceId,
+                fieldId: field.id,
+                requestedAt,
+              },
+            }),
+        }),
+      );
+
+      await execution.reportProgress({
+        progressPct: 100,
+        progressMessage: "workspace moisture stress generation jobs scheduled",
+        phaseKey: null,
+        phaseLabel: null,
+      });
+
+      return {
+        workspaceId: payload.workspaceId,
+        requestedAt,
+        fieldCount: selectedFields.length,
+        queuedCount: fields.length,
+        queuedDispatchIds,
+      };
+    },
+  }),
+  createRegisteredJob<
+    WorkerJobContext,
+    ScheduleWorkspaceWeatherRiskInput,
+    ScheduleWorkspaceWeatherRiskResult
+  >({
+    key: "intelligence.schedule-workspace-weather-risk",
+    description:
+      "Enumerate workspace fields and enqueue one weather-risk generation job per field.",
+    async samplePayload(context: WorkerJobContext) {
+      const target = await context.resolveDefaultFieldTarget();
+      return {
+        workspaceId: target.workspaceId,
+        limit: 1,
+      };
+    },
+    async run(context: WorkerJobContext, payload, execution) {
+      const requestedAt = payload.requestedAt ?? new Date().toISOString();
+      const overview = await context.runtime.services.catalog.loadWorkspaceFieldOverview({
+        preferredWorkspaceId: payload.workspaceId,
+      });
+
+      if (!overview.selectedWorkspace || overview.selectedWorkspace.id !== payload.workspaceId) {
+        throw new Error(
+          `[worker] workspace ${payload.workspaceId} could not be resolved for weather risk scheduling`,
+        );
+      }
+
+      const selectedFields = payload.fieldIds?.length
+        ? overview.fields.filter((field) => payload.fieldIds!.includes(field.id))
+        : overview.fields;
+      const fields = payload.limit
+        ? selectedFields.slice(0, Math.max(0, payload.limit))
+        : selectedFields;
+      const queuedDispatchIds: string[] = [];
+
+      await execution.reportProgress({
+        progressPct: 10,
+        progressMessage: "loaded workspace fields for weather risk scheduling",
+        phaseKey: "load-workspace-fields",
+        phaseLabel: "load workspace fields",
+      });
+
+      if (fields.length === 0) {
+        await execution.reportProgress({
+          progressPct: 100,
+          progressMessage: "no workspace fields matched weather risk schedule",
+          phaseKey: null,
+          phaseLabel: null,
+        });
+
+        return {
+          workspaceId: payload.workspaceId,
+          requestedAt,
+          fieldCount: 0,
+          queuedCount: 0,
+          queuedDispatchIds,
+        };
+      }
+
+      queuedDispatchIds.push(
+        ...await enqueueWorkspaceFieldJobs({
+          execution,
+          fields,
+          phaseKey: "enqueue-field-weather-risk",
+          phaseLabel: "enqueue field weather risk generation",
+          progressMessage: (completedCount, totalCount) =>
+            `queued weather risk generation ${completedCount} of ${totalCount}`,
+          enqueue: (field) =>
+            context.enqueueJob({
+              key: "intelligence.generate-weather-risk",
+              payload: {
+                workspaceId: payload.workspaceId,
+                fieldId: field.id,
+                requestedAt,
+              },
+            }),
+        }),
+      );
+
+      await execution.reportProgress({
+        progressPct: 100,
+        progressMessage: "workspace weather risk generation jobs scheduled",
+        phaseKey: null,
+        phaseLabel: null,
+      });
+
+      return {
+        workspaceId: payload.workspaceId,
+        requestedAt,
+        fieldCount: selectedFields.length,
+        queuedCount: fields.length,
+        queuedDispatchIds,
       };
     },
   }),
@@ -1453,7 +1756,21 @@ export const jobs = [
                   await context.runtime.services.intelligence.generateDiseaseRiskFindings(
                     payload,
                   ),
-              };
+                };
+              },
+            },
+          {
+            key: "curate-field-action",
+            progressPct: 86,
+            progressMessage: "curating field action summary",
+            async run(currentState) {
+              await context.runtime.services.intelligence.curateFieldAction({
+                workspaceId: payload.workspaceId,
+                fieldId: payload.fieldId,
+                requestedAt: payload.requestedAt,
+              });
+
+              return currentState;
             },
           },
           {
@@ -1753,6 +2070,101 @@ export const jobs = [
       await execution.reportProgress({
         progressPct: 100,
         progressMessage: "workspace weather refresh jobs scheduled",
+        phaseKey: null,
+        phaseLabel: null,
+      });
+
+      return {
+        workspaceId: payload.workspaceId,
+        requestedAt,
+        fieldCount: selectedFields.length,
+        queuedCount: fields.length,
+        queuedDispatchIds,
+      };
+    },
+  }),
+  createRegisteredJob<
+    WorkerJobContext,
+    ScheduleWorkspaceMoistureEstimateRebuildInput,
+    ScheduleWorkspaceMoistureEstimateRebuildResult
+  >({
+    key: "moisture.schedule-workspace-estimate-rebuild",
+    description:
+      "Enumerate workspace fields and enqueue one moisture estimate rebuild job per field.",
+    async samplePayload(context: WorkerJobContext) {
+      const target = await context.resolveDefaultFieldTarget();
+      return {
+        workspaceId: target.workspaceId,
+        limit: 1,
+      };
+    },
+    async run(context: WorkerJobContext, payload, execution) {
+      const requestedAt = payload.requestedAt ?? new Date().toISOString();
+      const overview = await context.runtime.services.catalog.loadWorkspaceFieldOverview({
+        preferredWorkspaceId: payload.workspaceId,
+      });
+
+      if (!overview.selectedWorkspace || overview.selectedWorkspace.id !== payload.workspaceId) {
+        throw new Error(
+          `[worker] workspace ${payload.workspaceId} could not be resolved for moisture estimate scheduling`,
+        );
+      }
+
+      const selectedFields = payload.fieldIds?.length
+        ? overview.fields.filter((field) => payload.fieldIds!.includes(field.id))
+        : overview.fields;
+      const fields = payload.limit
+        ? selectedFields.slice(0, Math.max(0, payload.limit))
+        : selectedFields;
+      const queuedDispatchIds: string[] = [];
+
+      await execution.reportProgress({
+        progressPct: 10,
+        progressMessage: "loaded workspace fields for moisture estimate scheduling",
+        phaseKey: "load-workspace-fields",
+        phaseLabel: "load workspace fields",
+      });
+
+      if (fields.length === 0) {
+        await execution.reportProgress({
+          progressPct: 100,
+          progressMessage: "no workspace fields matched moisture estimate schedule",
+          phaseKey: null,
+          phaseLabel: null,
+        });
+
+        return {
+          workspaceId: payload.workspaceId,
+          requestedAt,
+          fieldCount: 0,
+          queuedCount: 0,
+          queuedDispatchIds,
+        };
+      }
+
+      queuedDispatchIds.push(
+        ...await enqueueWorkspaceFieldJobs({
+          execution,
+          fields,
+          phaseKey: "enqueue-field-estimate-rebuilds",
+          phaseLabel: "enqueue field moisture estimate rebuilds",
+          progressMessage: (completedCount, totalCount) =>
+            `queued moisture estimate rebuild ${completedCount} of ${totalCount}`,
+          enqueue: (field) =>
+            context.enqueueJob({
+              key: "moisture.rebuild-field-estimate",
+              payload: {
+                workspaceId: payload.workspaceId,
+                fieldId: field.id,
+                observedAt: requestedAt,
+              },
+            }),
+        }),
+      );
+
+      await execution.reportProgress({
+        progressPct: 100,
+        progressMessage: "workspace moisture estimate rebuild jobs scheduled",
         phaseKey: null,
         phaseLabel: null,
       });

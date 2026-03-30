@@ -296,6 +296,14 @@ function createImageryProviderProbeRecord(input: {
 }
 
 class InMemoryRunRepository {
+  async listLatestByWorkspace(): Promise<readonly CropIntelligenceRun[]> {
+    return [];
+  }
+
+  async listRecentRuns(): Promise<readonly CropIntelligenceRun[]> {
+    return [];
+  }
+
   async upsertRun(input: UpsertCropIntelligenceRunInput): Promise<CropIntelligenceRun> {
     return createRun(input);
   }

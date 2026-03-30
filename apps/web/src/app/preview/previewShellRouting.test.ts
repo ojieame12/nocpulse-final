@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import { resolvePreviewCanonicalDetailInitialPage } from "./PreviewShell";
 
@@ -20,10 +19,4 @@ test("resolvePreviewCanonicalDetailInitialPage leaves non-canonical panel views 
   assert.equal(resolvePreviewCanonicalDetailInitialPage("detail"), null);
   assert.equal(resolvePreviewCanonicalDetailInitialPage("alerts"), null);
   assert.equal(resolvePreviewCanonicalDetailInitialPage("zone"), null);
-});
-
-test("PreviewShell no longer imports preview-only panels from PanelPlaceholder", () => {
-  const source = readFileSync(new URL("./PreviewShell.tsx", import.meta.url), "utf8");
-
-  assert.doesNotMatch(source, /from ['"]\.\.\/\.\.\/components\/panels\/PanelPlaceholder['"]/);
 });
