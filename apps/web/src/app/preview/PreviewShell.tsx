@@ -107,11 +107,24 @@ type PendingOnboardingWatch = {
   preferredFieldId?: string | null;
   fieldIds: string[];
   dispatchIds: string[];
+  /** Maps dispatchId → { fieldId, fieldLabel } for per-field progress derivation */
+  dispatchFieldMap: ReadonlyMap<string, { fieldId: string; fieldLabel: string }>;
 };
 
 type OnboardingDispatchSnapshot = {
   id: string;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  activePhaseLabel?: string | null;
+  progressPct?: number | null;
+  progressMessage?: string | null;
+  fieldId?: string | null;
+};
+
+/** Per-field onboarding progress derived from dispatch snapshots. */
+export type FieldOnboardingStatus = {
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  progressPct: number | null;
+  phaseLabel: string | null;
 };
 
 function isPlaceholderFieldId(fieldId?: string | null) {
@@ -372,6 +385,41 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
     new Map<string, { retryAfter: number; summary: string }>(),
   );
 
+  /* Onboarding dispatch statuses — owned here so they survive panel switches */
+  const [onboardingStatuses, setOnboardingStatuses] = useState<Map<string, OnboardingDispatchSnapshot>>(new Map());
+
+  /** Derived per-field progress for the field strip */
+  const fieldOnboardingProgress = useMemo(() => {
+    if (!pendingOnboardingWatch || onboardingStatuses.size === 0) return new Map<string, FieldOnboardingStatus>();
+    const map = pendingOnboardingWatch.dispatchFieldMap;
+    const byField = new Map<string, FieldOnboardingStatus>();
+    const STATUS_ORDER: Record<string, number> = { running: 0, queued: 1, failed: 2, cancelled: 3, completed: 4 };
+
+    for (const [dispatchId, info] of map) {
+      const snap = onboardingStatuses.get(dispatchId);
+      const status = snap?.status ?? 'queued';
+      const existing = byField.get(info.fieldId);
+      if (!existing) {
+        byField.set(info.fieldId, {
+          status,
+          progressPct: snap?.progressPct ?? null,
+          phaseLabel: snap?.activePhaseLabel ?? snap?.progressMessage ?? null,
+        });
+        continue;
+      }
+      if ((STATUS_ORDER[status] ?? 4) < (STATUS_ORDER[existing.status] ?? 4)) {
+        existing.status = status;
+        existing.phaseLabel = snap?.activePhaseLabel ?? snap?.progressMessage ?? existing.phaseLabel;
+      }
+      if (snap?.progressPct != null) {
+        existing.progressPct = existing.progressPct != null
+          ? Math.round((existing.progressPct + snap.progressPct) / 2)
+          : snap.progressPct;
+      }
+    }
+    return byField;
+  }, [pendingOnboardingWatch, onboardingStatuses]);
+
   /* UI state */
   const [activePanel, setActivePanel] = useState<PanelView>('detail');
   const [panelAnim, setPanelAnim] = useState<'entering' | 'exiting' | ''>('entering');
@@ -589,12 +637,21 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
     const revealedFieldId = preferredFieldId ?? result.fieldIds[0] ?? null;
     setRevealedFieldId(revealedFieldId);
 
+    /* When the current field is the empty placeholder (fresh workspace), pick
+       the best real field from the import result and switch to it. */
+    const shouldSwitchFromPlaceholder =
+      isPlaceholderFieldId(activeFieldId) && result.fieldIds.length > 0;
+    const switchTargetId =
+      shouldSwitchFromPlaceholder
+        ? (preferredFieldId ?? result.fieldIds[0]!)
+        : preferredFieldId;
+
     if (
-      preferredFieldId &&
-      result.fieldIds.length === 1 &&
-      preferredFieldId !== activeFieldId
+      switchTargetId &&
+      (result.fieldIds.length === 1 || shouldSwitchFromPlaceholder) &&
+      switchTargetId !== activeFieldId
     ) {
-      setActiveFieldId(preferredFieldId);
+      setActiveFieldId(switchTargetId);
       setActivePanel('detail');
       setPanelAnim('entering');
       const requestSequence = fieldRequestSequenceRef.current + 1;
@@ -603,7 +660,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
 
       void (async () => {
         try {
-          const nextField = await fetchFieldOverview(preferredFieldId, { force: true });
+          const nextField = await fetchFieldOverview(switchTargetId, { force: true });
           if (!nextField || fieldRequestSequenceRef.current !== requestSequence) {
             return;
           }
@@ -629,13 +686,48 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
     applyFieldData(nextField);
   }, [activeFieldId, applyFieldData, fetchFieldOverview]);
 
-  const handleOnboardingTracked = useCallback((watch: PendingOnboardingWatch) => {
-    if (watch.dispatchIds.length === 0) {
+  const handleOnboardingTracked = useCallback((result: {
+    preferredFieldId?: string | null;
+    fieldIds: string[];
+    dispatchIds: string[];
+    workspaceId?: string | null;
+    trackedJobs?: readonly { dispatchId: string; fieldId: string; fieldLabel: string }[];
+  }) => {
+    if (result.dispatchIds.length === 0) {
       setPendingOnboardingWatch(null);
       return;
     }
 
-    setPendingOnboardingWatch(watch);
+    const dispatchFieldMap = new Map(
+      (result.trackedJobs ?? []).map((job) => [
+        job.dispatchId,
+        { fieldId: job.fieldId, fieldLabel: job.fieldLabel },
+      ] as const),
+    );
+
+    setPendingOnboardingWatch((prev) => {
+      /* Merge with any existing watch so earlier imports aren't lost */
+      const merged = prev ? new Map(prev.dispatchFieldMap) : new Map<string, { fieldId: string; fieldLabel: string }>();
+      for (const [id, info] of dispatchFieldMap) {
+        merged.set(id, info);
+      }
+      const mergedDispatchIds = Array.from(new Set([
+        ...(prev?.dispatchIds ?? []),
+        ...result.dispatchIds,
+      ]));
+      const mergedFieldIds = Array.from(new Set([
+        ...(prev?.fieldIds ?? []),
+        ...result.fieldIds,
+      ]));
+
+      return {
+        workspaceId: result.workspaceId ?? prev?.workspaceId,
+        preferredFieldId: result.preferredFieldId ?? prev?.preferredFieldId,
+        fieldIds: mergedFieldIds,
+        dispatchIds: mergedDispatchIds,
+        dispatchFieldMap: merged,
+      };
+    });
   }, []);
 
   useEffect(() => {
@@ -667,17 +759,20 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
           throw new Error(payload.error?.message ?? 'Onboarding dispatch lookup failed.');
         }
 
+        const dispatches = payload.result?.dispatches ?? [];
         const dispatchById = new Map(
-          (payload.result?.dispatches ?? []).map((dispatch) => [dispatch.id, dispatch] as const),
+          dispatches.map((dispatch) => [dispatch.id, dispatch] as const),
         );
+
+        if (cancelled) return;
+
+        /* Update the shared status map so FieldStrip + AddFieldPanel can read it */
+        setOnboardingStatuses(dispatchById);
+
         const shouldContinue = pendingOnboardingWatch.dispatchIds.some((dispatchId) => {
           const status = dispatchById.get(dispatchId)?.status ?? 'queued';
           return status === 'queued' || status === 'running';
         });
-
-        if (cancelled) {
-          return;
-        }
 
         if (shouldContinue) {
           timeoutId = setTimeout(() => {
@@ -686,15 +781,22 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
           return;
         }
 
-        const nextField = await fetchFieldOverview(activeFieldId, { force: true });
-        if (cancelled) {
-          return;
-        }
+        /* All dispatches finished — refresh the active field and clean up. */
+        const refreshFieldId = isPlaceholderFieldId(activeFieldId)
+          ? (pendingOnboardingWatch.preferredFieldId ?? pendingOnboardingWatch.fieldIds[0] ?? activeFieldId)
+          : activeFieldId;
 
-        if (nextField && nextField.fieldId === activeFieldId) {
+        const nextField = await fetchFieldOverview(refreshFieldId, { force: true });
+        if (cancelled) return;
+
+        if (nextField) {
+          if (refreshFieldId !== activeFieldId) {
+            setActiveFieldId(refreshFieldId);
+          }
           applyFieldData(nextField);
         }
         setPendingOnboardingWatch(null);
+        setOnboardingStatuses(new Map());
       } catch {
         if (!cancelled) {
           timeoutId = setTimeout(() => {
@@ -1125,6 +1227,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
           <AddFieldPanel
             onFieldsChanged={handleFieldsChanged}
             onOnboardingTracked={handleOnboardingTracked}
+            jobStatuses={onboardingStatuses as never}
             workspaceId={fieldData.workspaceId}
             onClose={() => switchPanel('detail')}
           />
@@ -1189,6 +1292,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
               onFieldPrefetch={handleFieldPrefetch}
               onAddField={() => switchPanel(activePanel === 'add-field' ? 'detail' : 'add-field')}
               onSearchOpen={() => setPaletteOpen(true)}
+              onboardingProgress={fieldOnboardingProgress}
             />
 
             {/* Command palette — anchored above the field strip */}
