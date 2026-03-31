@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { deflateSync, inflateSync } from "node:zlib";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   PdfBrandLogo,
   PdfBinaryRenderResult,
@@ -9,39 +12,102 @@ import type {
   PdfTextStyle,
   RGB,
 } from "../contracts/PdfRender";
+import { parseTTF, generatePdfFontObjects, type EmbeddedFont } from "./ttfEmbed";
 
 /* ═══════════════════════════════════════════════════════════════════
    NocPulse PDF Renderer — Rich visual layout engine
    ═══════════════════════════════════════════════════════════════════ */
 
-type PdfFontRef = "F1" | "F2";
+/* ── Embedded fonts ──
+   Load Playfair Display TTF files for the editorial serif role.
+   These replace Times-Roman/Times-Bold (F3/F4) with a real
+   high-contrast display serif that matches the P22 Mackinac design intent.
+*/
+const FONTS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "fonts");
+
+let _serifRegular: EmbeddedFont | null = null;
+let _serifBold: EmbeddedFont | null = null;
+
+function getSerifRegular(): EmbeddedFont {
+  if (!_serifRegular) {
+    _serifRegular = parseTTF(readFileSync(join(FONTS_DIR, "PlayfairDisplay-Regular.ttf")));
+  }
+  return _serifRegular;
+}
+function getSerifBold(): EmbeddedFont {
+  if (!_serifBold) {
+    _serifBold = parseTTF(readFileSync(join(FONTS_DIR, "PlayfairDisplay-Bold.ttf")));
+  }
+  return _serifBold;
+}
+
+/* ── Font roles (maps to design system) ──
+   F1 = Helvetica              → body/UI (Sintony stand-in)
+   F2 = Helvetica-Bold         → body/UI bold
+   F3 = Playfair Display       → editorial serif (P22 Mackinac replacement)
+   F4 = Playfair Display Bold  → editorial serif bold
+   F5 = Courier                → data/mono (IBM Plex Mono stand-in)
+   F6 = Courier-Bold           → data/mono bold
+*/
+type PdfFontRef = "F1" | "F2" | "F3" | "F4" | "F5" | "F6";
 
 /* ── Constants ── */
 
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
-const ML = 54; // margin-left
-const MR = 54; // margin-right
-const CW = PAGE_WIDTH - ML - MR; // content width = 504
-const PAGE_TOP = 736;
-const PAGE_BOTTOM = 62;
+const ML = 48; // margin-left (aligned with design system 48px panel top padding)
+const MR = 48; // margin-right
+const CW = PAGE_WIDTH - ML - MR; // content width = 516
+const PAGE_TOP = 730;
+const PAGE_BOTTOM = 56;
 
-/* ── Brand colors ── */
+/* ── Spacing scale (from design system --space-* tokens) ── */
+const SP_XS = 4;
+const SP_SM = 8;
+const SP_MD = 12;
+const SP_LG = 16;
+const SP_XL = 24; // section gap — the design system's key rhythm
+const SP_2XL = 32;
 
-const BRAND_GREEN: RGB = [0.08, 0.24, 0.17]; // NocPulse forest green
-const BRAND_GREEN_LIGHT: RGB = [0.85, 0.93, 0.87]; // light green tint
-const TEXT_DARK: RGB = [0.12, 0.12, 0.12];
-const TEXT_BODY: RGB = [0.14, 0.14, 0.14];
-const TEXT_MUTED: RGB = [0.4, 0.4, 0.4];
-const TEXT_LIGHT: RGB = [0.55, 0.55, 0.55];
-const SEV_CRITICAL: RGB = [0.93, 0.27, 0.27]; // #ef4444
-const SEV_WARNING: RGB = [0.96, 0.62, 0.04]; // #f59e0b
-const SEV_INFO: RGB = [0.09, 0.64, 0.29]; // #16a34a
-const BG_STRIPE: RGB = [0.97, 0.98, 0.97]; // very light gray-green
-const BORDER_LIGHT: RGB = [0.90, 0.92, 0.91];
+/* ── Brand colors (from design system tokens) ── */
+
+const BRAND_GREEN: RGB = [0.0, 0.278, 0.145]; // #004726 (forest-900)
+const BRAND_GREEN_DARK: RGB = [0.0, 0.165, 0.082]; // #002a15 (forest-950)
+const BRAND_GREEN_LIGHT: RGB = [0.863, 0.941, 0.882]; // #dcf0e1 (forest-100)
+const BRAND_GREEN_SOFT: RGB = [0.086, 0.639, 0.29]; // #16a34a (status-positive)
+
+/* ── Text colors (from design system) ── */
+const TEXT_PRIMARY: RGB = [0.067, 0.067, 0.067]; // #111111
+const TEXT_BODY: RGB = [0.278, 0.298, 0.329]; // #474c54
+const TEXT_SECONDARY: RGB = [0.420, 0.443, 0.502]; // #6b7280
+const TEXT_MUTED: RGB = [0.541, 0.561, 0.596]; // #8a8f98
+const TEXT_LIGHT: RGB = [0.667, 0.682, 0.706]; // #aaaea
+
+/* ── Legacy aliases (used by report builders) ── */
+const TEXT_DARK = TEXT_PRIMARY;
+
+/* ── Status colors (semantic — from design system) ── */
+const SEV_CRITICAL: RGB = [0.937, 0.267, 0.267]; // #ef4444
+const SEV_WARNING: RGB = [0.961, 0.620, 0.043]; // #f59e0b
+const SEV_INFO: RGB = [0.086, 0.639, 0.290]; // #16a34a
+
+/* ── Status badge backgrounds ── */
+const BADGE_BG_POSITIVE: RGB = [0.863, 0.988, 0.906]; // #dcfce7
+const BADGE_BG_WARNING: RGB = [0.996, 0.953, 0.780]; // #fef3c7
+const BADGE_BG_DANGER: RGB = [0.996, 0.886, 0.886]; // #fee2e2
+const BADGE_BG_INFO: RGB = [0.859, 0.918, 0.996]; // #dbeafe
+const BADGE_TEXT_POSITIVE: RGB = [0.0, 0.278, 0.149]; // #004726
+const BADGE_TEXT_WARNING: RGB = [0.573, 0.251, 0.055]; // #92400e
+const BADGE_TEXT_DANGER: RGB = [0.600, 0.106, 0.106]; // #991b1b
+const BADGE_TEXT_INFO: RGB = [0.118, 0.251, 0.686]; // #1e40af
+
+/* ── Surface colors ── */
+const BG_STRIPE: RGB = [0.957, 0.965, 0.957]; // light gray-green chart bg
+const BG_SECTION: RGB = [0.973, 0.973, 0.976]; // #f8f8f9 slate-50 section bg
+const BORDER_LIGHT: RGB = [0.902, 0.918, 0.914];
 const WHITE: RGB = [1, 1, 1];
 
-/* ── Text style presets ── */
+/* ── Text style presets (mapped to design system type scale) ── */
 
 type LayoutStyle = {
   font: PdfFontRef;
@@ -54,56 +120,97 @@ type LayoutStyle = {
 
 const STYLES: Record<PdfTextStyle, LayoutStyle> = {
   title: {
-    font: "F2",
-    fontSize: 20,
-    lineHeight: 28,
+    font: "F4", // Serif bold — P22 Mackinac role (hero display)
+    fontSize: 22, // --text-xl
+    lineHeight: 26, // --leading-tight (1.2)
     marginTop: 0,
-    maxChars: 44,
-    color: BRAND_GREEN,
+    maxChars: 40,
+    color: BRAND_GREEN_DARK,
   },
   heading: {
-    font: "F2",
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 14,
-    maxChars: 70,
-    color: TEXT_DARK,
+    font: "F2", // Sans bold — Sintony role
+    fontSize: 14, // --text-base
+    lineHeight: 20, // --leading-snug (1.3)
+    marginTop: SP_LG,
+    maxChars: 66,
+    color: TEXT_PRIMARY,
   },
   subheading: {
-    font: "F2",
-    fontSize: 10.5,
-    lineHeight: 15,
-    marginTop: 8,
-    maxChars: 82,
-    color: [0.18, 0.18, 0.18],
+    font: "F1", // Sans regular
+    fontSize: 13, // --text-sm
+    lineHeight: 18, // --leading-snug
+    marginTop: SP_SM,
+    maxChars: 76,
+    color: TEXT_BODY,
   },
   body: {
     font: "F1",
-    fontSize: 10,
-    lineHeight: 13.5,
-    marginTop: 2,
-    maxChars: 94,
+    fontSize: 10.5,
+    lineHeight: 15, // --leading-normal (1.5 × 10)
+    marginTop: SP_XS,
+    maxChars: 90,
     color: TEXT_BODY,
   },
   caption: {
     font: "F1",
     fontSize: 9,
-    lineHeight: 12,
+    lineHeight: 13, // --leading-normal
     marginTop: 0,
-    maxChars: 102,
+    maxChars: 100,
     color: TEXT_MUTED,
   },
 };
 
 /* ── PDF graphics primitives ── */
 
+/**
+ * Map Unicode characters to WinAnsiEncoding byte values.
+ * Standard PDF Type 1 fonts use WinAnsiEncoding which supports
+ * Latin-1 supplement + common typographic characters at specific code points.
+ */
+const UNICODE_TO_WINANSI: Record<string, number> = {
+  "\u2013": 0x96, // en dash –
+  "\u2014": 0x97, // em dash —
+  "\u2018": 0x91, // left single quote '
+  "\u2019": 0x92, // right single quote '
+  "\u201C": 0x93, // left double quote "
+  "\u201D": 0x94, // right double quote "
+  "\u2022": 0x95, // bullet •
+  "\u2026": 0x85, // ellipsis …
+  "\u2020": 0x86, // dagger †
+  "\u2021": 0x87, // double dagger ‡
+  "\u2030": 0x89, // per mille ‰
+  "\u0152": 0x8C, // OE ligature Œ
+  "\u0153": 0x9C, // oe ligature œ
+  "\u2122": 0x99, // trademark ™
+  "\u00B0": 0xB0, // degree °
+};
+
 function escapePdfText(value: string) {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/\(/g, "\\(")
-    .replace(/\)/g, "\\)")
-    .replace(/\r/g, " ")
-    .replace(/\n/g, " ");
+  let result = "";
+  for (const ch of value) {
+    if (ch === "\\") result += "\\\\";
+    else if (ch === "(") result += "\\(";
+    else if (ch === ")") result += "\\)";
+    else if (ch === "\r" || ch === "\n") result += " ";
+    else if (UNICODE_TO_WINANSI[ch] !== undefined) {
+      // Emit as octal escape for WinAnsiEncoding
+      result += "\\" + UNICODE_TO_WINANSI[ch].toString(8).padStart(3, "0");
+    } else {
+      const code = ch.charCodeAt(0);
+      if (code > 0x7E && code < 0xA0) {
+        // Control range — skip or replace
+        result += " ";
+      } else if (code <= 0xFF) {
+        // Direct WinAnsi range
+        result += ch;
+      } else {
+        // Unmapped Unicode — replace with placeholder
+        result += "?";
+      }
+    }
+  }
+  return result;
 }
 
 function textCmd(
@@ -178,6 +285,129 @@ function polylineCmd(
   return cmds.join("\n");
 }
 
+/** Smooth polyline using cubic Bezier curves through data points */
+function smoothPolylineCmd(
+  points: readonly { x: number; y: number }[],
+  width: number,
+  color: RGB,
+) {
+  if (points.length < 2) return polylineCmd(points, width, color);
+  const [r, g, b] = color;
+  const cmds: string[] = [
+    "q",
+    `${width.toFixed(2)} w`,
+    "1 J", // round line cap
+    "1 j", // round line join
+    `${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} RG`,
+    `${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)} m`,
+  ];
+  // Catmull-Rom → Bezier conversion for smooth curves
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    const tension = 0.35;
+    const cp1x = p1.x + (p2.x - p0.x) * tension;
+    const cp1y = p1.y + (p2.y - p0.y) * tension;
+    const cp2x = p2.x - (p3.x - p1.x) * tension;
+    const cp2y = p2.y - (p3.y - p1.y) * tension;
+    cmds.push(
+      `${cp1x.toFixed(2)} ${cp1y.toFixed(2)} ${cp2x.toFixed(2)} ${cp2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)} c`,
+    );
+  }
+  cmds.push("S", "Q");
+  return cmds.join("\n");
+}
+
+/** Filled area under a smooth curve (for area charts) */
+function smoothAreaFillCmd(
+  points: readonly { x: number; y: number }[],
+  baselineY: number,
+  color: RGB,
+  opacity: number,
+) {
+  if (points.length < 2) return "";
+  const [r, g, b] = color;
+  const cmds: string[] = [
+    "q",
+    `/GS1 gs`, // use graphics state for opacity
+    `${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg`,
+    // Start at baseline under first point
+    `${points[0].x.toFixed(2)} ${baselineY.toFixed(2)} m`,
+    // Line up to first data point
+    `${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)} l`,
+  ];
+  // Smooth curve through data points (same Catmull-Rom → Bezier)
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    const tension = 0.35;
+    const cp1x = p1.x + (p2.x - p0.x) * tension;
+    const cp1y = p1.y + (p2.y - p0.y) * tension;
+    const cp2x = p2.x - (p3.x - p1.x) * tension;
+    const cp2y = p2.y - (p3.y - p1.y) * tension;
+    cmds.push(
+      `${cp1x.toFixed(2)} ${cp1y.toFixed(2)} ${cp2x.toFixed(2)} ${cp2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)} c`,
+    );
+  }
+  // Close back to baseline
+  const last = points[points.length - 1];
+  cmds.push(`${last.x.toFixed(2)} ${baselineY.toFixed(2)} l`);
+  cmds.push("f", "Q");
+  return cmds.join("\n");
+}
+
+/** Small filled circle (for data point markers) */
+function circleCmd(cx: number, cy: number, radius: number, color: RGB) {
+  const [r, g, b] = color;
+  // Approximate circle with 4 Bezier curves (kappa = 0.5523)
+  const k = radius * 0.5523;
+  return [
+    "q",
+    `${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg`,
+    `${(cx - radius).toFixed(2)} ${cy.toFixed(2)} m`,
+    `${(cx - radius).toFixed(2)} ${(cy + k).toFixed(2)} ${(cx - k).toFixed(2)} ${(cy + radius).toFixed(2)} ${cx.toFixed(2)} ${(cy + radius).toFixed(2)} c`,
+    `${(cx + k).toFixed(2)} ${(cy + radius).toFixed(2)} ${(cx + radius).toFixed(2)} ${(cy + k).toFixed(2)} ${(cx + radius).toFixed(2)} ${cy.toFixed(2)} c`,
+    `${(cx + radius).toFixed(2)} ${(cy - k).toFixed(2)} ${(cx + k).toFixed(2)} ${(cy - radius).toFixed(2)} ${cx.toFixed(2)} ${(cy - radius).toFixed(2)} c`,
+    `${(cx - k).toFixed(2)} ${(cy - radius).toFixed(2)} ${(cx - radius).toFixed(2)} ${(cy - k).toFixed(2)} ${(cx - radius).toFixed(2)} ${cy.toFixed(2)} c`,
+    "f",
+    "Q",
+  ].join("\n");
+}
+
+/** Dashed horizontal line for grid */
+function dashedLineCmd(
+  x1: number,
+  y: number,
+  x2: number,
+  width: number,
+  color: RGB,
+) {
+  const [r, g, b] = color;
+  return [
+    "q",
+    `${width.toFixed(2)} w`,
+    `[3 3] 0 d`, // 3pt dash, 3pt gap
+    `${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} RG`,
+    `${x1.toFixed(2)} ${y.toFixed(2)} m`,
+    `${x2.toFixed(2)} ${y.toFixed(2)} l`,
+    "S",
+    "Q",
+  ].join("\n");
+}
+
+/** Format a number for axis labels — compact and readable */
+function formatAxisValue(value: number): string {
+  if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(1)}k`;
+  if (Math.abs(value) >= 100) return `${Math.round(value)}`;
+  if (Math.abs(value) >= 10) return `${value.toFixed(1)}`;
+  if (Math.abs(value) >= 1) return `${value.toFixed(1)}`;
+  return `${value.toFixed(2)}`;
+}
+
 function imageCmd(
   x: number,
   y: number,
@@ -195,9 +425,15 @@ function imageCmd(
 
 /* ── Text width estimation (Helvetica approximation) ── */
 
-function estimateTextWidth(text: string, fontSize: number, bold = false) {
-  // Helvetica average char width: ~0.52 em regular, ~0.56 em bold
-  const avgCharWidth = bold ? 0.56 : 0.52;
+function estimateTextWidth(text: string, fontSize: number, font: PdfFontRef = "F1") {
+  // For embedded Playfair Display, use real glyph widths
+  if (font === "F3") return getSerifRegular().measureText(text, fontSize);
+  if (font === "F4") return getSerifBold().measureText(text, fontSize);
+  // Average character widths for built-in PDF fonts
+  const avgCharWidth =
+    font === "F5" || font === "F6" ? 0.60 // Courier (monospaced)
+      : font === "F2" ? 0.56 // Helvetica-Bold
+        : 0.52; // Helvetica
   return text.length * fontSize * avgCharWidth;
 }
 
@@ -433,29 +669,31 @@ function renderSectionHeader(
   label: string,
   meta: string | undefined,
   accentColor: RGB = BRAND_GREEN,
-  marginTop = 16,
+  marginTop = SP_XL,
 ) {
   advanceY(ctx, marginTop);
-  ensureSpace(ctx, 24);
+  ensureSpace(ctx, 28);
 
-  // Accent bar (3px tall)
-  curPage(ctx).push(rectCmd(ML, ctx.y - 1, CW, 3, accentColor));
-  advanceY(ctx, 10);
+  // Accent rule (1.5pt — refined, not heavy)
+  curPage(ctx).push(lineCmd(ML, ctx.y, ML + CW, ctx.y, 1.5, accentColor));
+  advanceY(ctx, SP_MD);
 
-  // Label
+  // Label — uppercase, small, tracked (design system section label pattern)
+  // PDF doesn't have letter-spacing, so we space chars manually for the editorial look
+  const upperLabel = label.toUpperCase();
   curPage(ctx).push(
-    textCmd(label.toUpperCase(), "F2", 9, ML, ctx.y, accentColor),
+    textCmd(upperLabel, "F2", 9, ML, ctx.y, accentColor),
   );
 
-  // Right-aligned meta
+  // Right-aligned meta in lighter weight
   if (meta) {
-    const metaW = estimateTextWidth(meta, 8);
+    const metaW = estimateTextWidth(meta, 8.5);
     curPage(ctx).push(
-      textCmd(meta, "F1", 8, ML + CW - metaW, ctx.y, TEXT_MUTED),
+      textCmd(meta, "F3", 8.5, ML + CW - metaW, ctx.y, TEXT_SECONDARY),
     );
   }
 
-  advanceY(ctx, 14);
+  advanceY(ctx, SP_LG);
 }
 
 function renderMetricStrip(
@@ -543,8 +781,10 @@ function renderMetricGrid(
       const cell = cells[idx];
       const cx = ML + col * (cellW + gap);
 
-      // Card background
-      curPage(ctx).push(rectCmd(cx, baseY - cellH, cellW, cellH, BG_STRIPE));
+      // Card background (white card on light surface)
+      curPage(ctx).push(rectCmd(cx, baseY - cellH, cellW, cellH, WHITE));
+      // Subtle border
+      curPage(ctx).push(lineCmd(cx, baseY - cellH, cx + cellW, baseY - cellH, 0.3, BORDER_LIGHT));
 
       // Optional accent left border
       if (cell.accentColor) {
@@ -553,29 +793,30 @@ function renderMetricGrid(
         );
       }
 
-      const textX = cx + (cell.accentColor ? 10 : 8);
+      const textX = cx + (cell.accentColor ? 12 : 10);
 
-      // Label
+      // Label (design system: Sintony 9px 700 uppercase, letter-spacing)
       curPage(ctx).push(
         textCmd(
-          truncate(cell.label.toUpperCase(), 24),
+          truncate(cell.label.toUpperCase(), 26),
           "F2",
-          7,
+          7.5,
           textX,
-          baseY - 13,
+          baseY - 14,
           TEXT_MUTED,
         ),
       );
 
-      // Value
+      // Value — use serif for hero feel (P22 Mackinac role)
+      const isNumeric = /^[\d.\-%°+,/kPa mhC]+$/.test(cell.value.trim());
       curPage(ctx).push(
         textCmd(
           truncate(cell.value, 18),
-          "F2",
-          13,
+          isNumeric ? "F5" : "F4", // mono for numbers, serif for text
+          isNumeric ? 14 : 13,
           textX,
-          baseY - 28,
-          cell.valueColor ?? TEXT_DARK,
+          baseY - 30,
+          cell.valueColor ?? TEXT_PRIMARY,
         ),
       );
 
@@ -632,9 +873,9 @@ function renderTable(
     const pos = colPositions[c];
     let tx = pos.x + 6;
     if (pos.align === "right") {
-      tx = pos.x + pos.w - estimateTextWidth(col.label, 8, true) - 6;
+      tx = pos.x + pos.w - estimateTextWidth(col.label, 8, "F2") - 6;
     } else if (pos.align === "center") {
-      tx = pos.x + (pos.w - estimateTextWidth(col.label, 8, true)) / 2;
+      tx = pos.x + (pos.w - estimateTextWidth(col.label, 8, "F2")) / 2;
     }
     curPage(ctx).push(
       textCmd(col.label.toUpperCase(), "F2", 8, tx, headerY - 14, WHITE),
@@ -666,9 +907,9 @@ function renderTable(
       const fontSize = 9;
       let tx = pos.x + 6;
       if (pos.align === "right") {
-        tx = pos.x + pos.w - estimateTextWidth(cellText, fontSize, row.bold) - 6;
+        tx = pos.x + pos.w - estimateTextWidth(cellText, fontSize, row.bold ? "F2" : "F1") - 6;
       } else if (pos.align === "center") {
-        tx = pos.x + (pos.w - estimateTextWidth(cellText, fontSize, row.bold)) / 2;
+        tx = pos.x + (pos.w - estimateTextWidth(cellText, fontSize, row.bold ? "F2" : "F1")) / 2;
       }
       curPage(ctx).push(
         textCmd(truncate(cellText, 40), font, fontSize, tx, rowY - 12, TEXT_BODY),
@@ -693,40 +934,55 @@ function renderProgressBar(
     marginTop?: number;
   },
 ) {
-  const barH = 6;
-  const totalH = 32 + (block.rangeLabels ? 12 : 0);
+  const barH = 8;
+  const totalH = 36 + (block.rangeLabels ? 12 : 0);
   advanceY(ctx, block.marginTop ?? 6);
   ensureSpace(ctx, totalH);
 
   const baseY = ctx.y;
+  const fillColor = block.fillColor ?? BRAND_GREEN;
 
   // Label + value on same line
   curPage(ctx).push(
     textCmd(block.label, "F2", 9, ML, baseY, TEXT_DARK),
   );
-  const valW = estimateTextWidth(block.value, 9, true);
+  const valW = estimateTextWidth(block.value, 9, "F2");
   curPage(ctx).push(
-    textCmd(block.value, "F2", 9, ML + CW - valW, baseY, block.fillColor ?? BRAND_GREEN),
+    textCmd(block.value, "F2", 9, ML + CW - valW, baseY, fillColor),
   );
-  advanceY(ctx, 14);
+  advanceY(ctx, 16);
 
-  // Track
-  const trackColor = block.trackColor ?? [0.93, 0.94, 0.93] as RGB;
-  const fillColor = block.fillColor ?? BRAND_GREEN;
+  // Track background (light rounded rectangle via overlapping rects)
+  const trackColor = block.trackColor ?? ([0.93, 0.94, 0.93] as RGB);
   const trackY = ctx.y;
   curPage(ctx).push(rectCmd(ML, trackY - barH, CW, barH, trackColor));
 
-  // Fill
-  const fillW = Math.max(0, Math.min(1, block.percent / 100)) * CW;
+  // Fill bar
+  const clampedPct = Math.max(0, Math.min(1, block.percent / 100));
+  const fillW = clampedPct * CW;
   if (fillW > 0) {
     curPage(ctx).push(rectCmd(ML, trackY - barH, fillW, barH, fillColor));
   }
+
+  // Percentage marker (small triangle/dot at the fill edge)
+  if (fillW > 2 && fillW < CW - 2) {
+    const markerX = ML + fillW;
+    const markerY = trackY - barH - 1;
+    curPage(ctx).push(circleCmd(markerX, markerY + barH / 2, 3.5, fillColor));
+    curPage(ctx).push(circleCmd(markerX, markerY + barH / 2, 2, WHITE));
+  }
+
   advanceY(ctx, barH + 4);
 
-  // Range labels
+  // Range labels + percentage
   if (block.rangeLabels) {
     const [lo, hi] = block.rangeLabels;
     curPage(ctx).push(textCmd(lo, "F1", 7, ML, ctx.y, TEXT_LIGHT));
+    const pctText = `${Math.round(block.percent)}%`;
+    const pctW = estimateTextWidth(pctText, 7, "F2");
+    curPage(ctx).push(
+      textCmd(pctText, "F2", 7, ML + (CW - pctW) / 2, ctx.y, TEXT_MUTED),
+    );
     const hiW = estimateTextWidth(hi, 7);
     curPage(ctx).push(textCmd(hi, "F1", 7, ML + CW - hiW, ctx.y, TEXT_LIGHT));
     advanceY(ctx, 12);
@@ -765,62 +1021,90 @@ function renderSeverityCard(
 
   const baseY = ctx.y;
 
-  // Card background
-  curPage(ctx).push(rectCmd(ML, baseY - cardH, CW, cardH, BG_STRIPE));
+  // Card background (white card)
+  curPage(ctx).push(rectCmd(ML, baseY - cardH, CW, cardH, WHITE));
+  // Bottom border
+  curPage(ctx).push(lineCmd(ML, baseY - cardH, ML + CW, baseY - cardH, 0.3, BORDER_LIGHT));
 
   // Accent left border (3px wide)
   curPage(ctx).push(rectCmd(ML, baseY - cardH, 3, cardH, accentColor));
 
-  // Severity badge
+  // Severity badge (design system: status badge pairs)
   const badgeText = block.severity.toUpperCase();
-  const badgeW = estimateTextWidth(badgeText, 7, true) + 10;
-  curPage(ctx).push(rectCmd(ML + CW - badgeW - 6, baseY - 14, badgeW, 11, accentColor));
+  const badgeBg =
+    block.severity === "critical" ? BADGE_BG_DANGER
+      : block.severity === "warning" ? BADGE_BG_WARNING
+        : BADGE_BG_POSITIVE;
+  const badgeFg =
+    block.severity === "critical" ? BADGE_TEXT_DANGER
+      : block.severity === "warning" ? BADGE_TEXT_WARNING
+        : BADGE_TEXT_POSITIVE;
+  const badgeW = estimateTextWidth(badgeText, 7, "F2") + 12;
+  curPage(ctx).push(rectCmd(ML + CW - badgeW - 8, baseY - 16, badgeW, 14, badgeBg));
   curPage(ctx).push(
-    textCmd(badgeText, "F2", 7, ML + CW - badgeW - 1, baseY - 12, WHITE),
+    textCmd(badgeText, "F2", 7, ML + CW - badgeW - 2, baseY - 13, badgeFg),
   );
 
   // Title
-  const textX = ML + 10;
-  curPage(ctx).push(textCmd(truncate(block.title, 70), "F2", 10, textX, baseY - 12, TEXT_DARK));
-  let lineY = baseY - 26;
+  const textX = ML + 12;
+  curPage(ctx).push(textCmd(truncate(block.title, 68), "F2", 10.5, textX, baseY - 13, TEXT_PRIMARY));
+  let lineY = baseY - 28;
 
   // Body
   for (const line of bodyLines) {
-    curPage(ctx).push(textCmd(line, "F1", 9, textX, lineY, TEXT_BODY));
-    lineY -= 12;
+    curPage(ctx).push(textCmd(line, "F1", 9.5, textX, lineY, TEXT_BODY));
+    lineY -= 13;
   }
 
   // Detail (muted)
   for (const line of detailLines) {
-    curPage(ctx).push(textCmd(line, "F1", 8.5, textX, lineY, TEXT_MUTED));
-    lineY -= 11;
+    curPage(ctx).push(textCmd(line, "F3", 8.5, textX, lineY, TEXT_SECONDARY));
+    lineY -= 12;
   }
 
-  // Action (bold)
+  // Action (bold, branded green)
   for (const line of actionLines) {
-    curPage(ctx).push(textCmd(line, "F2", 8.5, textX, lineY, BRAND_GREEN));
-    lineY -= 11;
+    curPage(ctx).push(textCmd(line, "F2", 9, textX, lineY, BRAND_GREEN));
+    lineY -= 12;
   }
 
-  advanceY(ctx, cardH + 4);
+  advanceY(ctx, cardH + SP_SM);
 }
 
 function renderStatusBadge(
   ctx: LayoutCtx,
   label: string,
   color: RGB,
-  textColor: RGB = WHITE,
-  marginTop = 6,
+  textColor: RGB | undefined,
+  marginTop = SP_SM,
 ) {
   advanceY(ctx, marginTop);
-  ensureSpace(ctx, 20);
+  ensureSpace(ctx, 24);
 
-  const badgeW = estimateTextWidth(label, 10, true) + 20;
-  const badgeH = 18;
-  curPage(ctx).push(rectCmd(ML, ctx.y - badgeH, badgeW, badgeH, color));
-  curPage(ctx).push(textCmd(label, "F2", 10, ML + 10, ctx.y - 13, textColor));
+  // Resolve badge bg/fg pair from design system
+  const isGreen = color[1] > 0.5 && color[0] < 0.2;
+  const isRed = color[0] > 0.8 && color[1] < 0.4;
+  const isAmber = color[0] > 0.8 && color[1] > 0.5 && color[2] < 0.2;
 
-  advanceY(ctx, badgeH + 6);
+  const bgColor = isGreen ? BADGE_BG_POSITIVE
+    : isRed ? BADGE_BG_DANGER
+      : isAmber ? BADGE_BG_WARNING
+        : BADGE_BG_INFO;
+
+  const fgColor = textColor ?? (
+    isGreen ? BADGE_TEXT_POSITIVE
+      : isRed ? BADGE_TEXT_DANGER
+        : isAmber ? BADGE_TEXT_WARNING
+          : BADGE_TEXT_INFO
+  );
+
+  const badgeW = estimateTextWidth(label, 11, "F2") + 24;
+  const badgeH = 22;
+  // Filled rounded rectangle (using rect — PDF rounded rects need more work)
+  curPage(ctx).push(rectCmd(ML, ctx.y - badgeH, badgeW, badgeH, bgColor));
+  curPage(ctx).push(textCmd(label, "F2", 11, ML + 12, ctx.y - 15, fgColor));
+
+  advanceY(ctx, badgeH + SP_SM);
 }
 
 function renderSparkline(
@@ -835,47 +1119,75 @@ function renderSparkline(
 ) {
   if (block.data.length < 2) return;
 
-  const sparkH = block.height ?? 32;
-  const totalH = sparkH + 18;
+  const sparkH = block.height ?? 48;
+  const axisW = 32; // space for Y-axis labels
+  const chartW = CW - axisW;
+  const totalH = sparkH + 24;
   advanceY(ctx, block.marginTop ?? 8);
   ensureSpace(ctx, totalH);
 
   const baseY = ctx.y;
-
-  // Label
-  curPage(ctx).push(textCmd(block.label, "F2", 8, ML, baseY, TEXT_MUTED));
-  advanceY(ctx, 14);
-
-  // Chart area
-  const chartY = ctx.y;
   const chartColor = block.color ?? BRAND_GREEN;
 
-  // Background
-  curPage(ctx).push(rectCmd(ML, chartY - sparkH, CW, sparkH, BG_STRIPE));
+  // Label
+  curPage(ctx).push(textCmd(block.label, "F2", 9, ML, baseY, TEXT_DARK));
+  advanceY(ctx, 16);
 
-  // Normalize data to chart area
+  const chartY = ctx.y;
+  const chartLeft = ML + axisW;
+  const chartBottom = chartY - sparkH;
+  const padding = 6;
+
+  // Background
+  curPage(ctx).push(rectCmd(chartLeft, chartBottom, chartW, sparkH, BG_STRIPE));
+
+  // Normalize data
   const minVal = Math.min(...block.data);
   const maxVal = Math.max(...block.data);
   const range = maxVal - minVal || 1;
-  const padding = 4;
 
+  // Horizontal grid lines (4 lines including top and bottom)
+  const GRID_COLOR: RGB = [0.88, 0.90, 0.89];
+  for (let i = 0; i <= 3; i++) {
+    const gy = chartBottom + (i / 3) * sparkH;
+    curPage(ctx).push(dashedLineCmd(chartLeft, gy, chartLeft + chartW, 0.3, GRID_COLOR));
+    // Y-axis labels
+    const val = minVal + (i / 3) * range;
+    curPage(ctx).push(
+      textCmd(formatAxisValue(val), "F1", 7, ML, gy - 3, TEXT_LIGHT),
+    );
+  }
+
+  // Data points
   const points = block.data.map((val, i) => ({
-    x: ML + padding + (i / (block.data.length - 1)) * (CW - padding * 2),
-    y:
-      chartY -
-      sparkH +
-      padding +
-      ((val - minVal) / range) * (sparkH - padding * 2),
+    x: chartLeft + padding + (i / (block.data.length - 1)) * (chartW - padding * 2),
+    y: chartBottom + padding + ((val - minVal) / range) * (sparkH - padding * 2),
   }));
 
-  // Draw the polyline
-  curPage(ctx).push(polylineCmd(points, 1.5, chartColor));
+  // Area fill under the curve
+  curPage(ctx).push(smoothAreaFillCmd(points, chartBottom, chartColor, 0.15));
 
-  // End dot
+  // Smooth curve
+  curPage(ctx).push(smoothPolylineCmd(points, 1.8, chartColor));
+
+  // Data point markers (at regular intervals, always show first and last)
+  const step = Math.max(1, Math.floor(points.length / 8));
+  for (let i = 0; i < points.length; i++) {
+    if (i === 0 || i === points.length - 1 || i % step === 0) {
+      curPage(ctx).push(circleCmd(points[i].x, points[i].y, 2.2, chartColor));
+      // White inner circle for hollow dot effect
+      curPage(ctx).push(circleCmd(points[i].x, points[i].y, 1.2, WHITE));
+    }
+  }
+
+  // Last value label
   const lastPt = points[points.length - 1];
-  curPage(ctx).push(rectCmd(lastPt.x - 2, lastPt.y - 2, 4, 4, chartColor));
+  const lastVal = block.data[block.data.length - 1];
+  curPage(ctx).push(
+    textCmd(formatAxisValue(lastVal), "F2", 8, lastPt.x + 4, lastPt.y - 3, chartColor),
+  );
 
-  advanceY(ctx, sparkH + 4);
+  advanceY(ctx, sparkH + 6);
 }
 
 function renderMultiSparkline(
@@ -890,51 +1202,93 @@ function renderMultiSparkline(
   const usableSeries = block.series.filter((series) => series.data.length >= 2);
   if (usableSeries.length === 0) return;
 
-  const sparkH = block.height ?? 42;
-  const totalH = sparkH + 30;
+  const sparkH = block.height ?? 56;
+  const axisW = 32;
+  const chartW = CW - axisW;
+  const totalH = sparkH + 36;
   advanceY(ctx, block.marginTop ?? 8);
   ensureSpace(ctx, totalH);
 
   const baseY = ctx.y;
-  curPage(ctx).push(textCmd(block.label, "F2", 8, ML, baseY, TEXT_MUTED));
 
+  // Title
+  curPage(ctx).push(textCmd(block.label, "F2", 9, ML, baseY, TEXT_DARK));
+
+  // Legend with colored line segments + dots
   let legendX = ML;
-  const legendY = baseY - 12;
+  const legendY = baseY - 14;
   for (const series of usableSeries) {
-    const legendText = `${series.label}`;
     const legendColor = series.color ?? BRAND_GREEN;
-    curPage(ctx).push(textCmd(legendText, "F2", 7, legendX, legendY, legendColor));
-    legendX += estimateTextWidth(legendText, 7, true) + 12;
+    // Small colored line segment
+    curPage(ctx).push(lineCmd(legendX, legendY + 3, legendX + 14, legendY + 3, 2, legendColor));
+    curPage(ctx).push(circleCmd(legendX + 7, legendY + 3, 2, legendColor));
+    legendX += 18;
+    // Label text
+    curPage(ctx).push(textCmd(series.label, "F1", 8, legendX, legendY, TEXT_MUTED));
+    legendX += estimateTextWidth(series.label, 8) + 14;
   }
 
-  advanceY(ctx, 18);
+  advanceY(ctx, 22);
   const chartY = ctx.y;
-  curPage(ctx).push(rectCmd(ML, chartY - sparkH, CW, sparkH, BG_STRIPE));
+  const chartLeft = ML + axisW;
+  const chartBottom = chartY - sparkH;
+  const padding = 6;
 
+  // Background
+  curPage(ctx).push(rectCmd(chartLeft, chartBottom, chartW, sparkH, BG_STRIPE));
+
+  // Shared Y-axis normalization
   const allValues = usableSeries.flatMap((series) => [...series.data]);
   const minVal = Math.min(...allValues);
   const maxVal = Math.max(...allValues);
   const range = maxVal - minVal || 1;
-  const padding = 4;
 
-  for (const series of usableSeries) {
-    const color = series.color ?? BRAND_GREEN;
-    const points = series.data.map((value, index) => ({
-      x: ML + padding + (index / (series.data.length - 1)) * (CW - padding * 2),
-      y:
-        chartY -
-        sparkH +
-        padding +
-        ((value - minVal) / range) * (sparkH - padding * 2),
-    }));
-
-    curPage(ctx).push(polylineCmd(points, 1.25, color));
-
-    const lastPt = points[points.length - 1];
-    curPage(ctx).push(rectCmd(lastPt.x - 2, lastPt.y - 2, 4, 4, color));
+  // Horizontal grid lines
+  const GRID_COLOR: RGB = [0.88, 0.90, 0.89];
+  for (let i = 0; i <= 3; i++) {
+    const gy = chartBottom + (i / 3) * sparkH;
+    curPage(ctx).push(dashedLineCmd(chartLeft, gy, chartLeft + chartW, 0.3, GRID_COLOR));
+    const val = minVal + (i / 3) * range;
+    curPage(ctx).push(
+      textCmd(formatAxisValue(val), "F1", 7, ML, gy - 3, TEXT_LIGHT),
+    );
   }
 
-  advanceY(ctx, sparkH + 4);
+  // Render each series
+  for (let si = 0; si < usableSeries.length; si++) {
+    const series = usableSeries[si];
+    const color = series.color ?? BRAND_GREEN;
+    const points = series.data.map((value, index) => ({
+      x: chartLeft + padding + (index / (series.data.length - 1)) * (chartW - padding * 2),
+      y: chartBottom + padding + ((value - minVal) / range) * (sparkH - padding * 2),
+    }));
+
+    // Area fill for first series only (to avoid overlap clutter)
+    if (si === 0) {
+      curPage(ctx).push(smoothAreaFillCmd(points, chartBottom, color, 0.15));
+    }
+
+    // Smooth curve
+    curPage(ctx).push(smoothPolylineCmd(points, 1.6, color));
+
+    // Markers at endpoints and regular intervals
+    const step = Math.max(1, Math.floor(points.length / 6));
+    for (let i = 0; i < points.length; i++) {
+      if (i === 0 || i === points.length - 1 || i % step === 0) {
+        curPage(ctx).push(circleCmd(points[i].x, points[i].y, 2, color));
+        curPage(ctx).push(circleCmd(points[i].x, points[i].y, 1, WHITE));
+      }
+    }
+
+    // Last value label
+    const lastPt = points[points.length - 1];
+    const lastVal = series.data[series.data.length - 1];
+    curPage(ctx).push(
+      textCmd(formatAxisValue(lastVal), "F2", 7, lastPt.x + 4, lastPt.y - 3, color),
+    );
+  }
+
+  advanceY(ctx, sparkH + 6);
 }
 
 function renderKeyValue(
@@ -1058,34 +1412,38 @@ function buildPageChrome(
   hasLogo: boolean,
 ): string[] {
   const cmds: string[] = [
-    // Top accent bar
-    rectCmd(0, PAGE_HEIGHT - 12, PAGE_WIDTH, 12, BRAND_GREEN),
-    // Header line
-    lineCmd(ML, 760, ML + CW, 760, 0.5, BRAND_GREEN_LIGHT),
-    // Footer line
-    lineCmd(ML, 44, ML + CW, 44, 0.5, BORDER_LIGHT),
-    // Page number (bottom right)
+    // Top accent bar (forest green, 6pt — thinner, more refined)
+    rectCmd(0, PAGE_HEIGHT - 6, PAGE_WIDTH, 6, BRAND_GREEN_DARK),
+    // Header separator line
+    lineCmd(ML, 756, ML + CW, 756, 0.5, BRAND_GREEN_LIGHT),
+    // Footer separator line
+    lineCmd(ML, 42, ML + CW, 42, 0.5, BORDER_LIGHT),
+    // Page number (bottom right, mono font)
     textCmd(
-      `Page ${pageNumber} of ${pageCount}`,
-      "F1",
-      8,
-      ML + CW - 60,
-      34,
+      `${pageNumber} / ${pageCount}`,
+      "F5",
+      7.5,
+      ML + CW - 28,
+      32,
       TEXT_MUTED,
     ),
-    // Confidential footer (bottom left)
-    textCmd("Confidential — generated by NocPulse", "F1", 7, ML, 34, TEXT_LIGHT),
+    // Generator credit (bottom left)
+    textCmd("NocPulse", "F2", 7.5, ML, 32, BRAND_GREEN),
+    textCmd("  Confidential", "F1", 7, ML + 48, 32, TEXT_LIGHT),
   ];
 
+  // Logo or author name
   if (hasLogo) {
-    cmds.push(imageCmd(ML, 764, 76, 12, "ImBrand"));
+    // Larger logo (100 × 16pt)
+    cmds.push(imageCmd(ML, 764, 100, 16, "ImBrand"));
   } else {
-    cmds.push(textCmd(author ?? "NocPulse", "F2", 9, ML, 768, BRAND_GREEN));
+    // Serif author name for editorial feel
+    cmds.push(textCmd(author ?? "NocPulse", "F4", 11, ML, 768, BRAND_GREEN_DARK));
   }
 
-  // Page 2+ title echo
+  // Page 2+ title echo (serif italic feel — lighter, not competing with content)
   if (pageNumber > 1) {
-    cmds.push(textCmd(title, "F2", 10, ML, 750, BRAND_GREEN));
+    cmds.push(textCmd(title, "F3", 9.5, ML, 748, TEXT_SECONDARY));
   }
 
   return cmds;
@@ -1100,8 +1458,20 @@ function buildPdfDocument(
   pageStreams: readonly string[],
 ): Uint8Array {
   let nextObject = 1;
-  const fontRegularObject = nextObject++;
-  const fontBoldObject = nextObject++;
+  const fontRegularObject = nextObject++;  // F1 Helvetica
+  const fontBoldObject = nextObject++;     // F2 Helvetica-Bold
+  // F3/F4: Embedded Playfair Display — reserve object numbers
+  const serifRegular = getSerifRegular();
+  const serifBold = getSerifBold();
+  const serifRegularObjs = generatePdfFontObjects(serifRegular, nextObject);
+  nextObject += serifRegularObjs.objectCount;
+  const serifBoldObjs = generatePdfFontObjects(serifBold, nextObject);
+  nextObject += serifBoldObjs.objectCount;
+  const fontSerifObject = serifRegularObjs.fontObjNum;
+  const fontSerifBoldObject = serifBoldObjs.fontObjNum;
+  const fontMonoObject = nextObject++;     // F5 Courier
+  const fontMonoBoldObject = nextObject++; // F6 Courier-Bold
+  const gsAlphaObject = nextObject++; // Graphics state for area fill opacity
   const logoImage = input.brandLogo ? decodePngLogo(input.brandLogo) : null;
   const logoImageObject = logoImage ? nextObject++ : null;
   const logoMaskObject = logoImage?.alphaHex ? nextObject++ : null;
@@ -1114,12 +1484,37 @@ function buildPdfDocument(
   const objects: string[] = [];
   objects[fontRegularObject] = [
     `${fontRegularObject} 0 obj`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     "endobj",
   ].join("\n");
   objects[fontBoldObject] = [
     `${fontBoldObject} 0 obj`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+    "endobj",
+  ].join("\n");
+  // F3: Playfair Display Regular (embedded TrueType)
+  for (const obj of serifRegularObjs.objects) {
+    objects[obj.objNum] = obj.content;
+  }
+  // F4: Playfair Display Bold (embedded TrueType)
+  for (const obj of serifBoldObjs.objects) {
+    objects[obj.objNum] = obj.content;
+  }
+  objects[fontMonoObject] = [
+    `${fontMonoObject} 0 obj`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>",
+    "endobj",
+  ].join("\n");
+  objects[fontMonoBoldObject] = [
+    `${fontMonoBoldObject} 0 obj`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>",
+    "endobj",
+  ].join("\n");
+
+  // Graphics state for semi-transparent area fills (0.15 opacity)
+  objects[gsAlphaObject] = [
+    `${gsAlphaObject} 0 obj`,
+    "<< /Type /ExtGState /ca 0.15 >>",
     "endobj",
   ].join("\n");
 
@@ -1189,7 +1584,7 @@ function buildPdfDocument(
       "/Type /Page",
       `/Parent ${pagesObject} 0 R`,
       `/MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}]`,
-      `/Resources << /Font << /F1 ${fontRegularObject} 0 R /F2 ${fontBoldObject} 0 R >>${xObjectSection} >>`,
+      `/Resources << /Font << /F1 ${fontRegularObject} 0 R /F2 ${fontBoldObject} 0 R /F3 ${fontSerifObject} 0 R /F4 ${fontSerifBoldObject} 0 R /F5 ${fontMonoObject} 0 R /F6 ${fontMonoBoldObject} 0 R >> /ExtGState << /GS1 ${gsAlphaObject} 0 R >>${xObjectSection} >>`,
       `/Contents ${contentObject} 0 R`,
       ">>",
       "endobj",

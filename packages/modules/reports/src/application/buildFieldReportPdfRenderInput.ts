@@ -452,6 +452,14 @@ export function buildFieldReportPdfRenderInput({
             ? fmtPct(f.precipitationProbabilityPct, 0)
             : "—",
         ],
+        accentColor:
+          f.airTemperatureMinC !== null && f.airTemperatureMinC <= 0
+            ? RED
+            : f.precipitationMm !== null && f.precipitationMm >= 10
+              ? ([0.23, 0.51, 0.85] as RGB)
+              : f.windSpeedKph !== null && f.windSpeedKph >= 40
+                ? AMBER
+                : undefined,
       })),
       marginTop: 6,
     });

@@ -26,6 +26,8 @@ export interface CropThresholdRow {
   optimal: string;
   optimalColor: string;
   max: string;
+  actual: string;
+  notes: string;
   status: ThresholdStatus;
   borderColor: string;
 }
@@ -59,6 +61,7 @@ export interface CropDiseaseRiskCard {
   pct: string;
   color: string;
   bg: string;
+  recommendedAction?: string;
 }
 
 export interface CropProvenanceRow {

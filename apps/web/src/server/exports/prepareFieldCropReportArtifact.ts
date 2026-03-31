@@ -38,6 +38,40 @@ function thresholdSeverity(status: string): "critical" | "warning" | "info" {
   return status === "danger" ? "critical" : status === "warn" ? "warning" : "info";
 }
 
+/** Derive a plain-language action for a disease risk card. */
+function inferDiseaseAction(
+  name: string,
+  sev: "critical" | "warning" | "info",
+): string | undefined {
+  const n = name.toLowerCase();
+  if (sev === "info") return undefined; // No action needed for low risk
+  if (n.includes("sclerotinia"))
+    return "Scout canopy for sclerotinia symptoms. Consult agronomist on fungicide timing if at petal stage.";
+  if (n.includes("fusarium"))
+    return "Monitor heads for fusarium symptoms. Consider fungicide if heading stage and conditions persist.";
+  if (n.includes("rust") || n.includes("stripe"))
+    return "Scout lower canopy for rust pustules. Apply foliar fungicide if spread is confirmed.";
+  if (n.includes("blackleg"))
+    return "Inspect stem bases for lesions. Plan resistant variety selection for next rotation.";
+  if (n.includes("clubroot"))
+    return "Avoid equipment movement from affected areas. Use resistant cultivars in future rotations.";
+  if (sev === "critical")
+    return "Scout affected areas immediately. Consult agronomist for treatment options.";
+  return "Monitor for symptoms. Scout during next field walk.";
+}
+
+/** Derive an action for crop alert severity cards. */
+function inferCropAlertAction(title: string): string | undefined {
+  const t = title.toLowerCase();
+  if (t.includes("frost")) return "Consider frost protection measures. Monitor overnight lows closely.";
+  if (t.includes("moisture stress")) return "Schedule irrigation check. Prioritize affected zones.";
+  if (t.includes("hail")) return "Review hail protection options. Check crop insurance coverage.";
+  if (t.includes("wind")) return "Assess wind damage risk. Delay spraying until conditions settle.";
+  if (t.includes("disease")) return "Scout affected areas. Consult agronomist for fungicide options.";
+  if (t.includes("vpd") || t.includes("atmospheric")) return "Monitor crop water demand. Consider irrigation timing.";
+  return undefined;
+}
+
 /* ── Export types ── */
 
 export type PrepareFieldCropReportArtifactInput = {
@@ -145,6 +179,22 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
       })),
       marginTop: 4,
     });
+
+    // GDD accumulation progress bar
+    if (c.accumulatedGddLabel && c.accumulatedGddLabel !== "—") {
+      const gddNum = parseFloat(c.accumulatedGddLabel);
+      // Typical crop GDD targets vary, but use a reasonable scale
+      const gddPct = !Number.isNaN(gddNum) ? Math.min(100, Math.max(0, (gddNum / 2000) * 100)) : 0;
+      blocks.push({
+        kind: "progress-bar",
+        label: `GDD Accumulation (${c.gddUnitLabel})`,
+        value: c.accumulatedGddLabel,
+        percent: gddPct,
+        fillColor: gddPct >= 80 ? AMBER : TEAL,
+        rangeLabels: ["0", "2000"],
+        marginTop: 6,
+      });
+    }
   }
 
   /* ━━ CROP SIGNAL SUMMARY ━━ */
@@ -229,21 +279,38 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
   if (c && c.thresholds.length > 0) {
     blocks.push({
       kind: "section-header",
-      label: "Crop Thresholds",
+      label: "Crop Thresholds — Expected vs Obtained",
       meta: c.thresholdStageLabel,
+    });
+
+    blocks.push({
+      kind: "text",
+      style: "caption",
+      text: "Comparing current measured values against the acceptable range for this crop and growth stage. Action notes provided for any parameters outside optimal bounds.",
     });
 
     blocks.push({
       kind: "table",
       columns: [
-        { label: "Parameter", width: 0.28 },
-        { label: "Min", width: 0.15, align: "center" },
-        { label: "Optimal", width: 0.22, align: "center" },
-        { label: "Max", width: 0.15, align: "center" },
-        { label: "Status", width: 0.20, align: "right" },
+        { label: "Parameter", width: 0.20 },
+        { label: "Min", width: 0.08, align: "center" },
+        { label: "Optimal", width: 0.14, align: "center" },
+        { label: "Max", width: 0.08, align: "center" },
+        { label: "Obtained", width: 0.12, align: "center" },
+        { label: "Status", width: 0.10, align: "center" },
+        { label: "Notes", width: 0.28 },
       ],
+      headerBg: GREEN,
       rows: c.thresholds.map((t) => ({
-        cells: [t.param, t.min, t.optimal, t.max, t.status.toUpperCase()],
+        cells: [
+          t.param,
+          t.min,
+          t.optimal,
+          t.max,
+          t.actual,
+          t.status.toUpperCase(),
+          t.notes,
+        ],
         accentColor:
           t.status === "danger" ? RED : t.status === "warn" ? AMBER : undefined,
       })),
@@ -291,11 +358,17 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
             ? "warning"
             : "info";
 
+      // Derive action text: prefer explicit recommendedAction, fall back to heuristic
+      const action =
+        risk.recommendedAction ??
+        inferDiseaseAction(risk.name, sev);
+
       blocks.push({
         kind: "severity-card",
         severity: sev,
         title: `${risk.name} — ${risk.pct}`,
         body: risk.desc,
+        action,
         marginTop: 4,
       });
     }
@@ -326,11 +399,14 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
             ? "warning"
             : "info";
 
+      const action = inferCropAlertAction(alert.title);
+
       blocks.push({
         kind: "severity-card",
         severity: sev,
         title: alert.title,
         body: alert.desc,
+        action,
         marginTop: 4,
       });
     }

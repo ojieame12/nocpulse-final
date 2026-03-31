@@ -83,6 +83,25 @@ function alertActionText(alert: ReportAlertItem): string | undefined {
   return undefined;
 }
 
+/** Determine row accent color from forecast data. */
+function forecastRowColor(temp: string, precip: string): RGB | undefined {
+  // Parse lowest temperature from strings like "-3°C / 5°C" or "Low: -2°C"
+  const tempNums = temp.match(/-?\d+\.?\d*/g);
+  const precipNums = precip.match(/\d+\.?\d*/g);
+  if (tempNums) {
+    const minTemp = Math.min(...tempNums.map(Number));
+    if (minTemp <= 0) return RED; // Frost risk — red
+  }
+  if (precipNums) {
+    const precipVal = Math.max(...precipNums.map(Number));
+    if (precipVal >= 10) return [0.23, 0.51, 0.85]; // Heavy rain — blue
+    if (precipVal >= 2) return [0.40, 0.65, 0.90]; // Light rain — soft blue
+  }
+  // Check for wind keywords
+  if (/wind|gust/i.test(temp) || /wind|gust/i.test(precip)) return AMBER;
+  return undefined;
+}
+
 /** Derive a plain-language action from a finding. */
 function findingActionText(finding: ReportFindingItem): string | undefined {
   const title = finding.title.toLowerCase();
@@ -374,6 +393,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
       headerBg: GREEN,
       rows: r.forecast.map((day) => ({
         cells: [day.day, day.temp, day.precip],
+        accentColor: forecastRowColor(day.temp, day.precip),
       })),
       marginTop: 6,
     });
@@ -397,7 +417,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
           kind: "multi-sparkline",
           label: `${chart.title}  ·  ${chart.subtitle}`,
           series,
-          height: 60,
+          height: 72,
           marginTop: 10,
         });
       } else if (chart.emptyText) {

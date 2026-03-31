@@ -125,6 +125,15 @@ export function buildCropProps(rm: any): FieldCropProps {
       optimal: `${resolvedRules.moistureStress.rootZoneMonitorPct}–70`,
       optimalColor: "#16a34a",
       max: "85",
+      actual: rootZoneAvgPct != null ? `${rootZoneAvgPct.toFixed(1)}%` : "—",
+      notes:
+        rootZoneAvgPct == null
+          ? "No sensor data available"
+          : rootZoneAvgPct <= resolvedRules.moistureStress.rootZoneCriticalPct
+            ? "Below critical threshold — irrigation recommended"
+            : rootZoneAvgPct <= resolvedRules.moistureStress.rootZoneMonitorPct
+              ? "Below monitor level — watch closely"
+              : "Within optimal range",
       status:
         rootZoneAvgPct == null
           ? "warn"
@@ -148,6 +157,15 @@ export function buildCropProps(rm: any): FieldCropProps {
       optimal: `${resolvedRules.moistureStress.cellMonitorPct}–60`,
       optimalColor: "#16a34a",
       max: "80",
+      actual: surfaceAvgPct != null ? `${surfaceAvgPct.toFixed(1)}%` : "—",
+      notes:
+        surfaceAvgPct == null
+          ? "No sensor data available"
+          : surfaceAvgPct <= resolvedRules.moistureStress.cellCriticalPct
+            ? "Below critical threshold — check topsoil conditions"
+            : surfaceAvgPct <= resolvedRules.moistureStress.cellMonitorPct
+              ? "Below monitor level — surface drying"
+              : "Within optimal range",
       status:
         surfaceAvgPct == null
           ? "warn"
@@ -171,6 +189,15 @@ export function buildCropProps(rm: any): FieldCropProps {
       optimal: `>${resolvedRules.weatherRisk.frost.damageTempC}`,
       optimalColor: "#16a34a",
       max: "10",
+      actual: frostMinTemp != null ? `${frostMinTemp.toFixed(1)}°C` : "—",
+      notes:
+        frostMinTemp == null
+          ? "No forecast data available"
+          : frostMinTemp <= resolvedRules.weatherRisk.frost.killTempC
+            ? "Kill temperature forecast — protect crop immediately"
+            : frostMinTemp <= resolvedRules.weatherRisk.frost.damageTempC
+              ? "Damage risk — monitor overnight lows"
+              : "Above frost damage threshold",
       status:
         frostMinTemp == null
           ? "warn"
@@ -194,6 +221,15 @@ export function buildCropProps(rm: any): FieldCropProps {
       optimal: `<${resolvedRules.weatherRisk.atmosphericDemand.elevatedVpdKpa.toFixed(1)}`,
       optimalColor: "#16a34a",
       max: `${resolvedRules.weatherRisk.atmosphericDemand.severeVpdKpa.toFixed(1)}`,
+      actual: peakVpd != null ? `${peakVpd.toFixed(2)} kPa` : "—",
+      notes:
+        peakVpd == null
+          ? "No VPD forecast available"
+          : peakVpd >= resolvedRules.weatherRisk.atmosphericDemand.severeVpdKpa
+            ? "Severe atmospheric demand — high transpiration stress"
+            : peakVpd >= resolvedRules.weatherRisk.atmosphericDemand.elevatedVpdKpa
+              ? "Elevated VPD — monitor crop water demand"
+              : "Atmospheric demand within normal range",
       status:
         peakVpd == null
           ? "warn"
@@ -217,6 +253,15 @@ export function buildCropProps(rm: any): FieldCropProps {
       optimal: `>${resolvedRules.weatherRisk.atmosphericDemand.monitorWaterBalance24hMm}`,
       optimalColor: "#16a34a",
       max: "20",
+      actual: waterBalance24h != null ? `${waterBalance24h.toFixed(1)} mm` : "—",
+      notes:
+        waterBalance24h == null
+          ? "No water balance data available"
+          : waterBalance24h <= resolvedRules.weatherRisk.atmosphericDemand.severeWaterBalance24hMm
+            ? "Severe deficit — crop losing more water than received"
+            : waterBalance24h <= resolvedRules.weatherRisk.atmosphericDemand.monitorWaterBalance24hMm
+              ? "Mild deficit — monitor soil moisture trend"
+              : "Positive water balance",
       status:
         waterBalance24h == null
           ? "warn"
@@ -303,6 +348,7 @@ export function buildCropProps(rm: any): FieldCropProps {
               : "LOW",
         color: tone.valueColor,
         bg: tone.bg,
+        recommendedAction: finding.recommendedAction ?? undefined,
       };
     });
 

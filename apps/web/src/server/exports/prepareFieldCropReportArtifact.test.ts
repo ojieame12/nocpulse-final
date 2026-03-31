@@ -22,6 +22,8 @@ test("prepareFieldCropReportArtifact renders a branded crop PDF artifact", () =>
         optimal: "35-70",
         optimalColor: "#16a34a",
         max: "85",
+        actual: "28.4%",
+        notes: "Below monitor level — watch closely",
         status: "warn",
         borderColor: "#f59e0b44",
       },
