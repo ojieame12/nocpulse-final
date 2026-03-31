@@ -1,4 +1,3 @@
-import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import { jsonError, jsonOk, readJsonObject } from "../../../server/http/json";
 import { getAppOrigin } from "../../../server/auth/getAppOrigin";
 import {
@@ -12,6 +11,7 @@ import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../server/runtime/resolveRequestContext";
+import { createServerDatabaseClient } from "../../../server/runtime/createServerDatabaseClient";
 
 function readRequestedWorkspaceId(
   request: Request,
@@ -117,10 +117,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const client = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
+    const client = createServerDatabaseClient(runtime);
     const activeShare = await getActiveWorkspaceShare({
       client,
       workspaceId: actor.workspaceId,
@@ -182,10 +179,7 @@ export async function POST(request: Request) {
       return jsonError(404, `Field ${fieldId} was not found.`);
     }
 
-    const client = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
+    const client = createServerDatabaseClient(runtime);
     const created = await createWorkspaceShareToken({
       client,
       workspaceId: fieldSelection.selectedWorkspace.id,
@@ -250,10 +244,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const client = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
+    const client = createServerDatabaseClient(runtime);
     const revokedShare = await revokeWorkspaceShareById({
       client,
       workspaceId: actor.workspaceId,

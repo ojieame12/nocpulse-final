@@ -11,7 +11,7 @@ import {
 import { sanitizeNextPath } from "../../../../server/auth/sanitizeNextPath";
 import { resolveEmailSignInPolicy } from "../../../../server/auth/emailSignInEligibility";
 import { readAppEnv } from "@fieldpulse/platform-config";
-import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
+import { createServerDatabaseClient } from "../../../../server/runtime/createServerDatabaseClient";
 
 const AUTH_EMAIL_IP_RATE_LIMIT = {
   scope: "auth-email:ip",
@@ -68,9 +68,9 @@ export async function POST(request: Request) {
     return jsonError(500, "Email sign-in is not configured.");
   }
 
-  const databaseClient = createSupabaseDatabaseClient({
+  const databaseClient = createServerDatabaseClient({
     url: env.supabase.url,
-    serviceKey: env.supabase.serviceRoleKey,
+    serviceRoleKey: env.supabase.serviceRoleKey,
   });
   const ipRateLimit = await consumeRateLimit({
     client: databaseClient,

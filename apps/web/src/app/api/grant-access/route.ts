@@ -1,4 +1,3 @@
-import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import {
   createSupabaseWorkspaceMembershipRepository,
   createSupabaseWorkspaceRepository,
@@ -18,6 +17,12 @@ import {
   type GrantAccessTokenPayload,
 } from "../../../server/auth/grantAccessToken";
 import { resolveUniqueWorkspaceSlug } from "../../../server/auth/workspaceProvisioning";
+import {
+  hasWorkspaceGrantAuthority,
+  loadRequestAccessRecord,
+  markRequestAccessRecordContacted,
+} from "../../../server/auth/requestAccessRepository";
+import { createServerDatabaseClient } from "../../../server/runtime/createServerDatabaseClient";
 
 export const dynamic = "force-dynamic";
 
@@ -250,52 +255,15 @@ async function loadVerifiedPayload(request: Request) {
   };
 }
 
-async function loadRequestRecord(input: {
-  databaseClient: ReturnType<typeof createSupabaseDatabaseClient>;
-  requestId: string;
-}) {
-  const requestResult = await input.databaseClient
-    .from("request_access_requests")
-    .select("*")
-    .eq("id", input.requestId)
-    .maybeSingle();
-
-  if (requestResult.error) {
-    throw requestResult.error;
-  }
-
-  return requestResult.data;
-}
-
-async function ensureGrantAuthority(input: {
-  databaseClient: ReturnType<typeof createSupabaseDatabaseClient>;
-  workspaceId: string;
-  grantedByUserId: string;
-}) {
-  const membershipResult = await input.databaseClient
-    .from("workspace_memberships")
-    .select("role")
-    .eq("workspace_id", input.workspaceId)
-    .eq("user_id", input.grantedByUserId)
-    .maybeSingle();
-
-  if (membershipResult.error) {
-    throw membershipResult.error;
-  }
-
-  return membershipResult.data?.role === "owner" ||
-    membershipResult.data?.role === "manager";
-}
-
 async function createDedicatedWorkspaceForRequest(input: {
-  databaseClient: ReturnType<typeof createSupabaseDatabaseClient>;
+  client: ReturnType<typeof createServerDatabaseClient>;
   grantedByUserId: string;
   requestRecord: {
     farm_name: string;
   };
 }) {
   const workspaceRepository = createSupabaseWorkspaceRepository(
-    input.databaseClient,
+    input.client,
   );
   const workspaces = await workspaceRepository.listAll();
   const { slug } = resolveUniqueWorkspaceSlug(
@@ -311,7 +279,6 @@ async function createDedicatedWorkspaceForRequest(input: {
     input.grantedByUserId,
   );
 }
-
 export async function GET(request: Request) {
   try {
     const { runtime, token, verification } = await loadVerifiedPayload(request);
@@ -328,12 +295,9 @@ export async function GET(request: Request) {
       );
     }
 
-    const databaseClient = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
-    const requestRecord = await loadRequestRecord({
-      databaseClient,
+    const databaseClient = createServerDatabaseClient(runtime);
+    const requestRecord = await loadRequestAccessRecord({
+      client: databaseClient,
       requestId: verification.payload.requestId,
     });
 
@@ -404,12 +368,9 @@ export async function POST(request: Request) {
     }
 
     const payload = verification.payload;
-    const databaseClient = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
-    const requestRecord = await loadRequestRecord({
-      databaseClient,
+    const databaseClient = createServerDatabaseClient(runtime);
+    const requestRecord = await loadRequestAccessRecord({
+      client: databaseClient,
       requestId: payload.requestId,
     });
 
@@ -434,8 +395,8 @@ export async function POST(request: Request) {
       });
     }
 
-    if (!await ensureGrantAuthority({
-      databaseClient,
+    if (!await hasWorkspaceGrantAuthority({
+      client: databaseClient,
       workspaceId: payload.workspaceId,
       grantedByUserId: payload.grantedByUserId,
     })) {
@@ -457,7 +418,7 @@ export async function POST(request: Request) {
     );
 
     const createdWorkspace = await createDedicatedWorkspaceForRequest({
-      databaseClient,
+      client: databaseClient,
       grantedByUserId: payload.grantedByUserId,
       requestRecord,
     });
@@ -497,10 +458,13 @@ export async function POST(request: Request) {
           ? "They already have a NocPulse account and now own this dedicated workspace."
           : "They already have a NocPulse account and can open the app immediately.";
     } else {
-      const existingProvision = (await listWorkspaceEmailProvisionsByEmail(
+      const existingProvisions = await listWorkspaceEmailProvisionsByEmail(
         databaseClient,
         payload.requestEmail,
-      )).find((provision) => provision.workspace_id === createdWorkspace.id);
+      ) as Array<{ workspace_id: string; claimed_at: string | null }>;
+      const existingProvision = existingProvisions.find(
+        (provision) => provision.workspace_id === createdWorkspace.id,
+      );
 
       if (!existingProvision || existingProvision.claimed_at == null) {
         await upsertWorkspaceEmailProvision({
@@ -516,17 +480,10 @@ export async function POST(request: Request) {
         "They do not have a NocPulse account yet. Access has been provisioned and will attach automatically on first sign-in.";
     }
 
-    const updateResult = await databaseClient
-      .from("request_access_requests")
-      .update({ status: "contacted" })
-      .eq("id", payload.requestId)
-      .neq("status", "archived")
-      .select("id, status")
-      .maybeSingle();
-
-    if (updateResult.error) {
-      throw updateResult.error;
-    }
+    const updatedRequestRecord = await markRequestAccessRecordContacted({
+      client: databaseClient,
+      requestId: payload.requestId,
+    });
 
     return htmlPage({
       title: "Access Granted",
@@ -538,7 +495,7 @@ export async function POST(request: Request) {
           <div class="label">Workspace ID</div><div class="value mono">${escapeHtml(createdWorkspace.id)}</div>
           <div class="label">Workspace Slug</div><div class="value mono">${escapeHtml(createdWorkspace.slug)}</div>
           <div class="label">Role</div><div class="value">${escapeHtml(payload.role)}</div>
-          <div class="label">Request Status</div><div class="value">${escapeHtml(updateResult.data?.status ?? "contacted")}</div>
+          <div class="label">Request Status</div><div class="value">${escapeHtml(updatedRequestRecord?.status ?? "contacted")}</div>
         </div>
         <p>${escapeHtml(detailMessage)}</p>
       </div>`,
