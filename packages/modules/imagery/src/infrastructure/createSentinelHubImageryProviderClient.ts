@@ -50,8 +50,11 @@ type SentinelHubStatisticsResponse = {
 const SENTINEL_HUB_STATS_ENDPOINT = "/api/v1/statistics";
 const EPSG_4326_CRS = "http://www.opengis.net/def/crs/EPSG/0/4326";
 const TEN_METERS_IN_DEGREES = 0.00009;
-const MATERIALIZATION_CONCURRENCY = 6;
-const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const MATERIALIZATION_CONCURRENCY = 4;
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+const DEFAULT_REQUEST_RETRIES = 4;
+const DEFAULT_RETRY_DELAY_MS = 750;
+const TOKEN_REQUEST_RETRIES = 2;
 
 function isStabilityDebugEnabled(): boolean {
   return process.env.NODE_ENV !== "production" && process.env.FIELDPULSE_DEBUG_STABILITY === "1";
@@ -305,30 +308,82 @@ async function sleep(milliseconds: number) {
   });
 }
 
+function readRetryAfterDelayMilliseconds(response: Response): number | null {
+  const retryAfter = response.headers.get("retry-after");
+  if (!retryAfter) {
+    return null;
+  }
+
+  const seconds = Number.parseInt(retryAfter, 10);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return seconds * 1000;
+  }
+
+  const timestamp = Date.parse(retryAfter);
+  if (Number.isNaN(timestamp)) {
+    return null;
+  }
+
+  return Math.max(0, timestamp - Date.now());
+}
+
+function computeRetryDelayMilliseconds(response: Response | null, attempt: number): number {
+  const headerDelay = response ? readRetryAfterDelayMilliseconds(response) : null;
+  if (headerDelay !== null) {
+    return headerDelay;
+  }
+
+  const exponentialBackoff = DEFAULT_RETRY_DELAY_MS * 2 ** Math.max(0, attempt - 1);
+  const jitter = Math.floor(Math.random() * 250);
+  return exponentialBackoff + jitter;
+}
+
 async function postJsonWithRetry(
   url: string,
   init: RequestInit,
-  retries = 1,
+  retries = DEFAULT_REQUEST_RETRIES,
 ): Promise<Response> {
   let attempt = 0;
 
   while (true) {
-    const response = await fetch(url, init);
+    try {
+      const response = await fetch(url, init);
 
-    if (response.ok || attempt >= retries || !RETRYABLE_STATUS_CODES.has(response.status)) {
-      return response;
-    }
+      if (
+        response.ok ||
+        attempt >= retries ||
+        !RETRYABLE_STATUS_CODES.has(response.status)
+      ) {
+        return response;
+      }
 
-    attempt += 1;
-    if (isStabilityDebugEnabled()) {
-      console.debug("[stability][imagery] retrying-request", {
-        url,
-        attempt,
-        retries,
-        status: response.status,
-      });
+      attempt += 1;
+      if (isStabilityDebugEnabled()) {
+        console.debug("[stability][imagery] retrying-request", {
+          url,
+          attempt,
+          retries,
+          status: response.status,
+        });
+      }
+      await sleep(computeRetryDelayMilliseconds(response, attempt));
+    } catch (error) {
+      if (attempt >= retries) {
+        throw error;
+      }
+
+      attempt += 1;
+      if (isStabilityDebugEnabled()) {
+        console.debug("[stability][imagery] retrying-request", {
+          url,
+          attempt,
+          retries,
+          status: "network-error",
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+      await sleep(computeRetryDelayMilliseconds(null, attempt));
     }
-    await sleep(250 * attempt);
   }
 }
 
@@ -422,7 +477,7 @@ async function fetchSentinel2CellMeasurements({
         },
       }),
     },
-    1,
+    DEFAULT_REQUEST_RETRIES,
   );
 
   if (!response.ok) {
@@ -560,7 +615,7 @@ async function fetchSentinel2SceneConditionMetrics({
         },
       }),
     },
-    1,
+    DEFAULT_REQUEST_RETRIES,
   );
 
   if (!response.ok) {
@@ -642,7 +697,7 @@ async function fetchSentinel1CellMeasurements({
         },
       }),
     },
-    1,
+    DEFAULT_REQUEST_RETRIES,
   );
 
   if (!response.ok) {
@@ -734,13 +789,37 @@ async function fetchAccessToken(
     client_id: clientId,
     client_secret: clientSecret,
   });
-  const response = await fetch(tokenUrl, {
-    method: "POST",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
+  let attempt = 0;
+  let response: Response;
+
+  while (true) {
+    response = await fetch(tokenUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body,
+    });
+
+    if (
+      response.ok ||
+      attempt >= TOKEN_REQUEST_RETRIES ||
+      !RETRYABLE_STATUS_CODES.has(response.status)
+    ) {
+      break;
+    }
+
+    attempt += 1;
+    if (isStabilityDebugEnabled()) {
+      console.debug("[stability][imagery] retrying-token-request", {
+        tokenUrl,
+        attempt,
+        retries: TOKEN_REQUEST_RETRIES,
+        status: response.status,
+      });
+    }
+    await sleep(computeRetryDelayMilliseconds(response, attempt));
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
@@ -826,19 +905,23 @@ export function createSentinelHubImageryProviderClient({
     async discoverLatestScene(input: DiscoverLatestImagerySceneInput) {
       const startedAt = isStabilityDebugEnabled() ? performance.now() : 0;
       const accessToken = await fetchAccessToken(tokenUrl, clientId, clientSecret);
-      const response = await fetch(`${baseUrl}/api/v1/catalog/1.0.0/search`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${accessToken}`,
-          "content-type": "application/json",
+      const response = await postJsonWithRetry(
+        `${baseUrl}/api/v1/catalog/1.0.0/search`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            bbox: deriveBoundingBox(input.boundary),
+            datetime: `${toStartDate(input.requestedAt)}/${input.requestedAt}`,
+            collections: [toCollection(provider)],
+            limit: 12,
+          }),
         },
-        body: JSON.stringify({
-          bbox: deriveBoundingBox(input.boundary),
-          datetime: `${toStartDate(input.requestedAt)}/${input.requestedAt}`,
-          collections: [toCollection(provider)],
-          limit: 12,
-        }),
-      });
+        DEFAULT_REQUEST_RETRIES,
+      );
 
       if (!response.ok) {
         throw new Error(
