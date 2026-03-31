@@ -1,4 +1,4 @@
-import { jsonError, jsonOk, jsonServerError } from "../../../../../server/http/json";
+import { jsonError, jsonOk } from "../../../../../server/http/json";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 import { logServerError } from "../../../../../server/runtime/installServerCrashLogging";
 import { resolveGuestShareSessionFromRequest } from "../../../../../server/auth/guestShareSession";
@@ -99,12 +99,23 @@ export async function GET(
       cellInspector: viewModel.cellInspector,
     });
   } catch (error: unknown) {
-    return jsonServerError(error, {
-      event: "field-overview-route",
-      message: "Field overview could not be loaded right now.",
-      context: {
-        route: "/api/fields/[fieldId]/overview",
-      },
+    logServerError("field-overview-route", error, {
+      route: "/api/fields/[fieldId]/overview",
     });
+
+    const errorDetail =
+      error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack?.split("\n").slice(0, 6).join("\n") }
+        : { message: String(error) };
+
+    return Response.json(
+      {
+        error: {
+          message: "Field overview could not be loaded right now.",
+          debug: errorDetail,
+        },
+      },
+      { status: 500 },
+    );
   }
 }
