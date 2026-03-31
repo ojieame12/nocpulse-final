@@ -1,6 +1,5 @@
-import { jsonError, jsonOk } from "../../../../../server/http/json";
+import { jsonError, jsonOk, jsonServerError } from "../../../../../server/http/json";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
-import { logServerError } from "../../../../../server/runtime/installServerCrashLogging";
 import { buildFieldOverviewViewModel } from "../../../../../features/fields/buildFieldOverviewViewModel";
 import { resolvePreferredWorkspaceId } from "../../../../../server/fields/resolvePreferredWorkspaceId";
 
@@ -85,11 +84,12 @@ export async function GET(
       cellInspector: viewModel.cellInspector,
     });
   } catch (error: unknown) {
-    logServerError("field-overview-route", error, {
-      route: "/api/fields/[fieldId]/overview",
+    return jsonServerError(error, {
+      event: "field-overview-route",
+      message: "Field overview could not be loaded right now.",
+      context: {
+        route: "/api/fields/[fieldId]/overview",
+      },
     });
-    const message =
-      error instanceof Error ? error.message : "Unknown server error";
-    return jsonError(500, message);
   }
 }

@@ -1,4 +1,9 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../../server/http/json";
 import { createAdminSupabaseClient } from "../../../../server/auth/createAdminSupabaseClient";
 import { renderMagicLinkEmail } from "../../../../server/auth/magicLinkEmail";
 import { getAppOrigin } from "../../../../server/auth/getAppOrigin";
@@ -167,10 +172,10 @@ export async function POST(request: Request) {
       return jsonOk({ ok: true, email, next: nextPath, provider: "resend" });
     } catch (error) {
       console.error("[auth/email] Custom pipeline error:", error);
-      return jsonError(
-        500,
-        error instanceof Error ? error.message : "Email sign-in failed.",
-      );
+      return jsonServerError(error, {
+        event: "auth-email-custom-pipeline-route",
+        message: "Email sign-in failed.",
+      });
     }
   }
 
@@ -206,9 +211,9 @@ export async function POST(request: Request) {
 
     return jsonOk({ ok: true, email, next: nextPath, provider: "supabase" });
   } catch (error) {
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Email sign-in failed.",
-    );
+    return jsonServerError(error, {
+      event: "auth-email-supabase-route",
+      message: "Email sign-in failed.",
+    });
   }
 }

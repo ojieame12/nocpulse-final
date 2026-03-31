@@ -1,31 +1,66 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../../../server/auth/routeRateLimit";
+import { logAuditEvent } from "../../../../../server/audit/logAuditEvent";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../server/runtime/resolveRequestContext";
+import {
+  nullableTrimmedText,
+  optionalFiniteNumberInput,
+  optionalTrimmedText,
+  optionalYearInput,
+  parseWithSchema,
+  z,
+} from "../../../../../server/http/validation";
 
-function readOptionalSeasonYear(value: unknown) {
-  if (value == null || value === "") {
-    return undefined;
-  }
+const FIELD_BASIS_RATE_LIMIT = {
+  scope: "field-basis-assumption:actor",
+  maxAttempts: 40,
+  windowSeconds: 5 * 60,
+} as const;
 
-  const parsed =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(value.trim())
-        : Number.NaN;
+const FIELD_BASIS_IP_RATE_LIMIT = {
+  scope: "field-basis-assumption:ip",
+  maxAttempts: 80,
+  windowSeconds: 5 * 60,
+} as const;
 
-  if (!Number.isInteger(parsed) || parsed < 1900 || parsed > 3000) {
-    throw new RequestContextError(
-      400,
+const BasisAssumptionBodySchema = z
+  .object({
+    basisCadPerTonne: optionalFiniteNumberInput(
+      "[basis-assumption] basisCadPerTonne must be a number.",
+    ),
+    basis: optionalFiniteNumberInput(
+      "[basis-assumption] basisCadPerTonne must be a number.",
+    ),
+    seasonYear: optionalYearInput(
       "[basis-assumption] seasonYear must be a valid integer year.",
-    );
-  }
-
-  return parsed;
-}
+    ),
+    cropSymbol: nullableTrimmedText(),
+    sourceKey: optionalTrimmedText(),
+    source: optionalTrimmedText(),
+    noteText: nullableTrimmedText(),
+    assumedAt: optionalTrimmedText(),
+  })
+  .refine(
+    (value) =>
+      value.basisCadPerTonne !== undefined || value.basis !== undefined,
+    {
+      message: "[basis-assumption] basisCadPerTonne must be a number.",
+      path: ["basisCadPerTonne"],
+    },
+  );
 
 export async function GET(
   request: Request,
@@ -38,10 +73,17 @@ export async function GET(
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
+    });
     const { fieldId } = await context.params;
     const { searchParams } = new URL(request.url);
-    const seasonYear = readOptionalSeasonYear(searchParams.get("seasonYear"));
+    const seasonYear = parseWithSchema(
+      optionalYearInput(
+        "[basis-assumption] seasonYear must be a valid integer year.",
+      ),
+      searchParams.get("seasonYear"),
+    );
     const cropSymbol = searchParams.get("cropSymbol")?.trim().toUpperCase() || undefined;
     const assumption = await runtime.services.market.latestFieldBasisAssumption({
       workspaceId: actor.workspaceId,
@@ -56,12 +98,10 @@ export async function GET(
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error
-        ? error.message
-        : "Field basis assumption lookup failed.",
-    );
+    return jsonServerError(error, {
+      event: "field-basis-assumption-get-route",
+      message: "Field basis assumption lookup failed.",
+    });
   }
 }
 
@@ -76,56 +116,67 @@ export async function POST(
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
+    });
     const { fieldId } = await context.params;
     const body = await readJsonObject(request);
 
     if (!body) {
       return jsonError(400, "Expected a JSON request body.");
     }
+    const payload = parseWithSchema(BasisAssumptionBodySchema, body);
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...FIELD_BASIS_IP_RATE_LIMIT,
+          message: "Too many basis assumption updates.",
+        }),
+        {
+          ...FIELD_BASIS_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+            resourceId: fieldId,
+          }),
+          message: "Too many basis assumption updates.",
+        },
+      ],
+    });
 
-    const basisCadPerTonne =
-      typeof body.basisCadPerTonne === "number"
-        ? body.basisCadPerTonne
-        : typeof body.basis === "number"
-          ? body.basis
-          : null;
-    const seasonYear = readOptionalSeasonYear(body.seasonYear);
-    const cropSymbol =
-      typeof body.cropSymbol === "string" && body.cropSymbol.trim().length > 0
-        ? body.cropSymbol.trim().toUpperCase()
-        : null;
-    const sourceKey =
-      typeof body.sourceKey === "string" && body.sourceKey.trim().length > 0
-        ? body.sourceKey.trim()
-        : typeof body.source === "string" && body.source.trim().length > 0
-          ? body.source.trim()
-          : "manual-admin";
-    const noteText =
-      typeof body.noteText === "string" && body.noteText.trim().length > 0
-        ? body.noteText.trim()
-        : null;
-    const assumedAt =
-      typeof body.assumedAt === "string" && body.assumedAt.trim().length > 0
-        ? body.assumedAt.trim()
-        : undefined;
-
-    if (basisCadPerTonne == null || !Number.isFinite(basisCadPerTonne)) {
-      return jsonError(
-        400,
-        "[basis-assumption] basisCadPerTonne must be a number.",
-      );
+    if (rateLimitResponse) {
+      return rateLimitResponse;
     }
+
+    const basisCadPerTonne = payload.basisCadPerTonne ?? payload.basis;
 
     const assumption = await runtime.services.market.upsertFieldBasisAssumption({
       workspaceId: actor.workspaceId,
       fieldId,
-      seasonYear,
-      cropSymbol,
-      basisCadPerTonne,
-      sourceKey,
-      noteText,
-      assumedAt,
+      seasonYear: payload.seasonYear,
+      cropSymbol: payload.cropSymbol?.toUpperCase() ?? null,
+      basisCadPerTonne: basisCadPerTonne!,
+      sourceKey: payload.sourceKey ?? payload.source ?? "manual-admin",
+      noteText: payload.noteText ?? null,
+      assumedAt: payload.assumedAt,
+    });
+
+    await logAuditEvent({
+      runtime,
+      action: "field.basis_assumption_upserted",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "field-basis-assumption",
+      resourceId: assumption.id,
+      route: "/api/fields/[fieldId]/basis-assumption",
+      metadata: {
+        fieldId,
+        seasonYear: assumption.seasonYear,
+        cropSymbol: assumption.cropSymbol,
+        basisCadPerTonne: assumption.basisCadPerTonne,
+      },
     });
 
     return jsonOk({ assumption }, { status: 201 });
@@ -134,11 +185,9 @@ export async function POST(
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error
-        ? error.message
-        : "Field basis assumption upsert failed.",
-    );
+    return jsonServerError(error, {
+      event: "field-basis-assumption-post-route",
+      message: "Field basis assumption upsert failed.",
+    });
   }
 }

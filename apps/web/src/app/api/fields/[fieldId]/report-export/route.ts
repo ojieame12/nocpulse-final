@@ -1,4 +1,4 @@
-import { jsonError } from "../../../../../server/http/json";
+import { jsonError, jsonServerError } from "../../../../../server/http/json";
 import { buildFieldOverviewViewModel } from "../../../../../features/fields/buildFieldOverviewViewModel";
 import { prepareFieldDetailReportArtifact } from "../../../../../server/exports/prepareFieldDetailReportArtifact";
 
@@ -43,9 +43,9 @@ export async function GET(
       },
     });
   } catch (error) {
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Field report export failed.",
-    );
+    return jsonServerError(error, {
+      event: "field-report-export-route",
+      message: "Field report export failed.",
+    });
   }
 }

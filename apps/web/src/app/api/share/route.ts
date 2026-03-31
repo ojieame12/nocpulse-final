@@ -1,4 +1,15 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../server/auth/routeRateLimit";
+import { logAuditEvent } from "../../../server/audit/logAuditEvent";
 import { getAppOrigin } from "../../../server/auth/getAppOrigin";
 import {
   createWorkspaceShareToken,
@@ -12,6 +23,46 @@ import {
   resolveRequestActor,
 } from "../../../server/runtime/resolveRequestContext";
 import { createServerDatabaseClient } from "../../../server/runtime/createServerDatabaseClient";
+import {
+  nullableTrimmedText,
+  parseWithSchema,
+  requiredTrimmedString,
+  z,
+} from "../../../server/http/validation";
+
+const SHARE_LOOKUP_ACTOR_RATE_LIMIT = {
+  scope: "share-get:actor",
+  maxAttempts: 120,
+  windowSeconds: 5 * 60,
+} as const;
+
+const SHARE_LOOKUP_IP_RATE_LIMIT = {
+  scope: "share-get:ip",
+  maxAttempts: 200,
+  windowSeconds: 5 * 60,
+} as const;
+
+const SHARE_MUTATION_ACTOR_RATE_LIMIT = {
+  scope: "share-mutation:actor",
+  maxAttempts: 20,
+  windowSeconds: 5 * 60,
+} as const;
+
+const SHARE_MUTATION_IP_RATE_LIMIT = {
+  scope: "share-mutation:ip",
+  maxAttempts: 40,
+  windowSeconds: 5 * 60,
+} as const;
+
+const ShareCreateBodySchema = z.object({
+  workspaceId: nullableTrimmedText(),
+  fieldId: requiredTrimmedString("A field identifier is required."),
+});
+
+const ShareDeleteBodySchema = z.object({
+  workspaceId: nullableTrimmedText(),
+  shareId: requiredTrimmedString("A share identifier is required."),
+});
 
 function readRequestedWorkspaceId(
   request: Request,
@@ -30,16 +81,6 @@ function readRequestedWorkspaceId(
   return bodyWorkspaceId || null;
 }
 
-function readFieldId(body: Record<string, unknown>) {
-  const fieldId = typeof body.fieldId === "string" ? body.fieldId.trim() : "";
-
-  if (!fieldId) {
-    throw new RequestContextError(400, "A field identifier is required.");
-  }
-
-  return fieldId;
-}
-
 function readFieldIdFromRequest(
   request: Request,
   body?: Record<string, unknown> | null,
@@ -55,16 +96,6 @@ function readFieldIdFromRequest(
     typeof body?.fieldId === "string" ? body.fieldId.trim() : "";
 
   return bodyFieldId || null;
-}
-
-function readShareId(body: Record<string, unknown>) {
-  const shareId = typeof body.shareId === "string" ? body.shareId.trim() : "";
-
-  if (!shareId) {
-    throw new RequestContextError(400, "A share identifier is required.");
-  }
-
-  return shareId;
 }
 
 function canCreateWorkspaceShare(role: string) {
@@ -109,6 +140,29 @@ export async function GET(request: Request) {
       allowDevelopmentFallback: false,
       preferredWorkspaceId: requestedWorkspaceId,
     });
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...SHARE_LOOKUP_IP_RATE_LIMIT,
+          message: "Too many workspace share lookup requests.",
+        }),
+        {
+          ...SHARE_LOOKUP_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+            resourceId: fieldId,
+          }),
+          message: "Too many workspace share lookup requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
 
     if (!canCreateWorkspaceShare(actor.role)) {
       return jsonError(
@@ -134,10 +188,10 @@ export async function GET(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Workspace share lookup failed.",
-    );
+    return jsonServerError(error, {
+      event: "share-get-route",
+      message: "Workspace share lookup failed.",
+    });
   }
 }
 
@@ -149,6 +203,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    const payload = parseWithSchema(ShareCreateBodySchema, body);
     const runtime = getWebServerRuntime();
 
     if (runtime.mode !== "supabase") {
@@ -158,8 +213,31 @@ export async function POST(request: Request) {
     const requestedWorkspaceId = readRequestedWorkspaceId(request, body);
     const actor = await resolveRequestActor(request, runtime, {
       allowDevelopmentFallback: false,
-      preferredWorkspaceId: requestedWorkspaceId,
+      preferredWorkspaceId: payload.workspaceId ?? requestedWorkspaceId,
     });
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...SHARE_MUTATION_IP_RATE_LIMIT,
+          message: "Too many workspace share mutation requests.",
+        }),
+        {
+          ...SHARE_MUTATION_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+            resourceId: payload.fieldId,
+          }),
+          message: "Too many workspace share mutation requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
 
     if (!canCreateWorkspaceShare(actor.role)) {
       return jsonError(
@@ -168,15 +246,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const fieldId = readFieldId(body);
     const fieldSelection = await runtime.services.catalog.loadWorkspaceFieldDetail({
       actorUserId: actor.userId,
       preferredWorkspaceId: actor.workspaceId,
-      fieldId,
+      fieldId: payload.fieldId,
     });
 
     if (!fieldSelection.selectedWorkspace || !fieldSelection.field) {
-      return jsonError(404, `Field ${fieldId} was not found.`);
+      return jsonError(404, `Field ${payload.fieldId} was not found.`);
     }
 
     const client = createServerDatabaseClient(runtime);
@@ -191,6 +268,21 @@ export async function POST(request: Request) {
       workspaceId: fieldSelection.selectedWorkspace.id,
       fieldId: fieldSelection.field.detail.id,
       excludedShareId: created.share.id,
+    });
+
+    await logAuditEvent({
+      runtime,
+      action: "workspace.share_created",
+      actorUserId: actor.userId,
+      workspaceId: fieldSelection.selectedWorkspace.id,
+      resourceType: "workspace-share",
+      resourceId: created.share.id,
+      route: "/api/share",
+      metadata: {
+        fieldId: fieldSelection.field.detail.id,
+        fieldName: fieldSelection.field.detail.name,
+        expiresAt: created.share.expiresAt,
+      },
     });
 
     return jsonOk(
@@ -210,10 +302,10 @@ export async function POST(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Workspace share could not be created.",
-    );
+    return jsonServerError(error, {
+      event: "share-post-route",
+      message: "Workspace share could not be created.",
+    });
   }
 }
 
@@ -225,6 +317,7 @@ export async function DELETE(request: Request) {
   }
 
   try {
+    const payload = parseWithSchema(ShareDeleteBodySchema, body);
     const runtime = getWebServerRuntime();
 
     if (runtime.mode !== "supabase") {
@@ -234,8 +327,31 @@ export async function DELETE(request: Request) {
     const requestedWorkspaceId = readRequestedWorkspaceId(request, body);
     const actor = await resolveRequestActor(request, runtime, {
       allowDevelopmentFallback: false,
-      preferredWorkspaceId: requestedWorkspaceId,
+      preferredWorkspaceId: payload.workspaceId ?? requestedWorkspaceId,
     });
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...SHARE_MUTATION_IP_RATE_LIMIT,
+          message: "Too many workspace share mutation requests.",
+        }),
+        {
+          ...SHARE_MUTATION_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+            resourceId: payload.shareId,
+          }),
+          message: "Too many workspace share mutation requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
 
     if (!canCreateWorkspaceShare(actor.role)) {
       return jsonError(
@@ -248,12 +364,25 @@ export async function DELETE(request: Request) {
     const revokedShare = await revokeWorkspaceShareById({
       client,
       workspaceId: actor.workspaceId,
-      shareId: readShareId(body),
+      shareId: payload.shareId,
     });
 
     if (!revokedShare) {
       return jsonError(404, "This shared link is no longer active.");
     }
+
+    await logAuditEvent({
+      runtime,
+      action: "workspace.share_revoked",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "workspace-share",
+      resourceId: revokedShare.id,
+      route: "/api/share",
+      metadata: {
+        revokedAt: revokedShare.revokedAt,
+      },
+    });
 
     return jsonOk({
       result: {
@@ -266,9 +395,9 @@ export async function DELETE(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Workspace share could not be revoked.",
-    );
+    return jsonServerError(error, {
+      event: "share-delete-route",
+      message: "Workspace share could not be revoked.",
+    });
   }
 }

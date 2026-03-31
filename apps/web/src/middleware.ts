@@ -1,9 +1,60 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
+  createDevelopmentFallbackToken,
+  DEVELOPMENT_FALLBACK_COOKIE_NAME,
+  DEVELOPMENT_FALLBACK_HEADER,
+  isDevelopmentFallbackRequestAllowed,
+} from "./server/auth/developmentFallback";
+import {
   GUEST_SHARE_COOKIE_NAME,
   hasActiveGuestShareCookie,
 } from "./server/auth/guestShareSession";
 import { updateSupabaseSession } from "./server/auth/updateSupabaseSession";
+
+async function buildDevelopmentFallbackResponse(
+  request: NextRequest,
+  baseResponse?: NextResponse,
+) {
+  if (
+    !isDevelopmentFallbackRequestAllowed({
+      nodeEnv: process.env.NODE_ENV,
+      request,
+    })
+  ) {
+    return null;
+  }
+
+  const token = await createDevelopmentFallbackToken({
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    devActorUserId: process.env.DEV_ACTOR_USER_ID,
+  });
+
+  if (!token) {
+    return null;
+  }
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(DEVELOPMENT_FALLBACK_HEADER, token);
+
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+
+  for (const cookie of baseResponse?.cookies.getAll() ?? []) {
+    response.cookies.set(cookie);
+  }
+
+  response.cookies.set(DEVELOPMENT_FALLBACK_COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
+
+  return response;
+}
 
 /**
  * NocPulse auth middleware.
@@ -31,12 +82,20 @@ export async function middleware(request: NextRequest) {
     response = session.response;
     hasValidSession = session.hasValidSession;
   } catch {
-    // Supabase not configured — pass through without auth check (dev mode)
-    return NextResponse.next();
+    return (await buildDevelopmentFallbackResponse(request)) ?? NextResponse.next();
   }
 
   if (hasValidSession || hasActiveGuestShareSession) {
     return response;
+  }
+
+  const developmentFallbackResponse = await buildDevelopmentFallbackResponse(
+    request,
+    response,
+  );
+
+  if (developmentFallbackResponse) {
+    return developmentFallbackResponse;
   }
 
   // 3. No valid session — redirect to sign-in, preserving the intended path.

@@ -22,20 +22,66 @@ function isRecord(value: JsonValue): value is Record<string, JsonValue> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function readString(
+  value: Record<string, JsonValue>,
+  key: string,
+): string | undefined {
+  return typeof value[key] === "string" ? (value[key] as string) : undefined;
+}
+
+function readBoolean(
+  value: Record<string, JsonValue>,
+  key: string,
+): boolean | undefined {
+  return typeof value[key] === "boolean" ? (value[key] as boolean) : undefined;
+}
+
+function readNumber(
+  value: Record<string, JsonValue>,
+  key: string,
+): number | undefined {
+  return typeof value[key] === "number" && Number.isFinite(value[key])
+    ? (value[key] as number)
+    : undefined;
+}
+
 function toMoistureInputProvenance(value: JsonValue): MoistureInputProvenance {
   if (!isRecord(value)) {
     return {};
   }
 
   return {
-    forecastModel:
-      typeof value.forecastModel === "string" ? value.forecastModel : undefined,
-    radarDataset:
-      typeof value.radarDataset === "string" ? value.radarDataset : undefined,
-    sarDataset:
-      typeof value.sarDataset === "string" ? value.sarDataset : undefined,
-    soilDataset:
-      typeof value.soilDataset === "string" ? value.soilDataset : undefined,
+    forecastModel: readString(value, "forecastModel"),
+    radarDataset: readString(value, "radarDataset"),
+    sarDataset: readString(value, "sarDataset"),
+    soilDataset: readString(value, "soilDataset"),
+    baselineDataset: readString(value, "baselineDataset"),
+    rasterSourceKey: readString(value, "rasterSourceKey"),
+    weatherSourceKey: readString(value, "weatherSourceKey"),
+    moistureModelVersion: readString(value, "moistureModelVersion"),
+    derivationMode:
+      value.derivationMode === "source-backed" || value.derivationMode === "seeded-range"
+        ? value.derivationMode
+        : undefined,
+    rasterMode:
+      value.rasterMode === "provider" ||
+      value.rasterMode === "synthetic" ||
+      value.rasterMode === "none"
+        ? value.rasterMode
+        : undefined,
+    signalBlend:
+      value.signalBlend === "raster+weather" ||
+      value.signalBlend === "raster-only" ||
+      value.signalBlend === "weather-only" ||
+      value.signalBlend === "seeded"
+        ? value.signalBlend
+        : undefined,
+    usedOptical: readBoolean(value, "usedOptical"),
+    usedSar: readBoolean(value, "usedSar"),
+    usedWeather: readBoolean(value, "usedWeather"),
+    usedWeatherSoilMoisture: readBoolean(value, "usedWeatherSoilMoisture"),
+    confidenceScore: readNumber(value, "confidenceScore"),
+    confidenceReason: readString(value, "confidenceReason"),
   };
 }
 

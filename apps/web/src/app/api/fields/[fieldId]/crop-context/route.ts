@@ -1,93 +1,70 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../../../server/auth/routeRateLimit";
+import { logAuditEvent } from "../../../../../server/audit/logAuditEvent";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
+import {
+  nullableTrimmedText,
+  optionalTrimmedText,
+  optionalYearInput,
+  parseWithSchema,
+  z,
+} from "../../../../../server/http/validation";
 import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../server/runtime/resolveRequestContext";
 import type { JsonValue } from "@fieldpulse/platform-db";
 
-function hasBodyKey(body: Record<string, unknown>, key: string) {
-  return Object.prototype.hasOwnProperty.call(body, key);
-}
+const FIELD_CROP_CONTEXT_RATE_LIMIT = {
+  scope: "field-crop-context:actor",
+  maxAttempts: 30,
+  windowSeconds: 5 * 60,
+} as const;
+
+const FIELD_CROP_CONTEXT_IP_RATE_LIMIT = {
+  scope: "field-crop-context:ip",
+  maxAttempts: 60,
+  windowSeconds: 5 * 60,
+} as const;
+
+const CropContextBodySchema = z
+  .object({
+    cropType: nullableTrimmedText(),
+    cropName: nullableTrimmedText(),
+    variety: nullableTrimmedText(),
+    seedingDate: nullableTrimmedText(),
+    seasonYear: optionalYearInput(
+      "[crop-context] seasonYear must be a valid integer year.",
+    ),
+    sourceKey: optionalTrimmedText(),
+  })
+  .refine(
+    (value) => (value.cropType ?? value.cropName ?? null) != null,
+    {
+      message: "[crop-context] cropType must be a non-empty string.",
+      path: ["cropType"],
+    },
+  )
+  .refine(
+    (value) =>
+      value.seedingDate == null || /^\d{4}-\d{2}-\d{2}$/.test(value.seedingDate),
+    {
+      message: "[crop-context] seedingDate must use YYYY-MM-DD format.",
+      path: ["seedingDate"],
+    },
+  );
 
 function isRecord(value: unknown): value is Record<string, JsonValue> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readRequiredCropType(body: Record<string, unknown>) {
-  const raw =
-    typeof body.cropType === "string"
-      ? body.cropType
-      : typeof body.cropName === "string"
-        ? body.cropName
-        : "";
-  const value = raw.trim();
-
-  if (!value) {
-    throw new RequestContextError(
-      400,
-      "[crop-context] cropType must be a non-empty string.",
-    );
-  }
-
-  return value;
-}
-
-function readOptionalNullableString(value: unknown, label: string) {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (value === null) {
-    return null;
-  }
-
-  if (typeof value !== "string") {
-    throw new RequestContextError(
-      400,
-      `[crop-context] ${label} must be a string or null.`,
-    );
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function readOptionalSeasonYear(value: unknown) {
-  if (value == null || value === "") {
-    return undefined;
-  }
-
-  const parsed =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(value.trim())
-        : Number.NaN;
-
-  if (!Number.isInteger(parsed) || parsed < 1900 || parsed > 3000) {
-    throw new RequestContextError(
-      400,
-      "[crop-context] seasonYear must be a valid integer year.",
-    );
-  }
-
-  return parsed;
-}
-
-function validateSeedingDate(value: string | null) {
-  if (value == null) {
-    return value;
-  }
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new RequestContextError(
-      400,
-      "[crop-context] seedingDate must use YYYY-MM-DD format.",
-    );
-  }
-
-  return value;
 }
 
 function resolveSeasonYear(
@@ -121,12 +98,38 @@ export async function PATCH(
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
+    });
     const { fieldId } = await context.params;
     const body = await readJsonObject(request);
 
     if (!body) {
       return jsonError(400, "Expected a JSON request body.");
+    }
+    const payload = parseWithSchema(CropContextBodySchema, body);
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...FIELD_CROP_CONTEXT_IP_RATE_LIMIT,
+          message: "Too many crop context updates.",
+        }),
+        {
+          ...FIELD_CROP_CONTEXT_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+            resourceId: fieldId,
+          }),
+          message: "Too many crop context updates.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
     }
 
     const current = await runtime.services.fieldCropContext.loadFieldContext({
@@ -134,24 +137,20 @@ export async function PATCH(
       fieldId,
     });
     const currentMetadata = isRecord(current?.metadata) ? current.metadata : {};
-    const nextVariety = hasBodyKey(body, "variety")
-      ? readOptionalNullableString(body.variety, "variety")
+    const nextVariety = body.variety !== undefined
+      ? payload.variety ?? null
       : (typeof currentMetadata.variety === "string"
           ? currentMetadata.variety
           : null);
-    const nextSeedingDate = validateSeedingDate(
-      hasBodyKey(body, "seedingDate")
-        ? readOptionalNullableString(body.seedingDate, "seedingDate") ?? null
+    const nextSeedingDate =
+      body.seedingDate !== undefined
+        ? payload.seedingDate ?? null
         : (typeof currentMetadata.seedingDate === "string"
             ? currentMetadata.seedingDate
-            : null),
-    );
-    const sourceKey =
-      typeof body.sourceKey === "string" && body.sourceKey.trim().length > 0
-        ? body.sourceKey.trim()
-        : current?.sourceKey ?? "manual-admin";
+            : null);
+    const sourceKey = payload.sourceKey ?? current?.sourceKey ?? "manual-admin";
     const seasonYear = resolveSeasonYear(
-      readOptionalSeasonYear(body.seasonYear),
+      payload.seasonYear,
       nextSeedingDate,
       current?.seasonYear,
     );
@@ -160,7 +159,7 @@ export async function PATCH(
       workspaceId: actor.workspaceId,
       fieldId,
       seasonYear,
-      cropType: readRequiredCropType(body),
+      cropType: payload.cropType ?? payload.cropName ?? "",
       growthStage: current?.growthStage ?? null,
       growthStageSource: current?.growthStageSource ?? "manual",
       accumulatedGdd: current?.accumulatedGdd ?? 0,
@@ -176,15 +175,32 @@ export async function PATCH(
       },
     });
 
+    await logAuditEvent({
+      runtime,
+      action: "field.crop_context_updated",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "field",
+      resourceId: fieldId,
+      route: "/api/fields/[fieldId]/crop-context",
+      metadata: {
+        cropType: cropContext.cropType,
+        seasonYear: cropContext.seasonYear,
+        sourceKey,
+        hasVariety: nextVariety !== null,
+        hasSeedingDate: nextSeedingDate !== null,
+      },
+    });
+
     return jsonOk({ cropContext });
   } catch (error) {
     if (error instanceof RequestContextError) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Crop context update failed.",
-    );
+    return jsonServerError(error, {
+      event: "field-crop-context-route",
+      message: "Crop context update failed.",
+    });
   }
 }

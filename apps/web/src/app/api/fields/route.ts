@@ -1,42 +1,57 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../server/auth/routeRateLimit";
+import { logAuditEvent } from "../../../server/audit/logAuditEvent";
 import { createDraftField } from "../../../server/fields/createDraftField";
 import { buildManualFieldDraft } from "../../../server/fields/manualFieldDraft";
+import {
+  finiteNumberInput,
+  nullableTrimmedText,
+  parseWithSchema,
+  positiveNumberInput,
+  requiredTrimmedString,
+  z,
+} from "../../../server/http/validation";
 import { getWebServerRuntime } from "../../../server/runtime/getWebServerRuntime";
 import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../server/runtime/resolveRequestContext";
 
-function readRequiredString(body: Record<string, unknown>, key: string) {
-  const value = typeof body[key] === "string" ? body[key].trim() : "";
+const FIELD_CREATE_ACTOR_RATE_LIMIT = {
+  scope: "fields-create:actor",
+  maxAttempts: 12,
+  windowSeconds: 15 * 60,
+} as const;
 
-  if (!value) {
-    throw new RequestContextError(400, `Field \`${key}\` is required.`);
-  }
+const FIELD_CREATE_IP_RATE_LIMIT = {
+  scope: "fields-create:ip",
+  maxAttempts: 20,
+  windowSeconds: 15 * 60,
+} as const;
 
-  return value;
-}
-
-function readOptionalString(body: Record<string, unknown>, key: string) {
-  const value = typeof body[key] === "string" ? body[key].trim() : "";
-  return value.length > 0 ? value : null;
-}
-
-function readRequiredNumber(body: Record<string, unknown>, key: string) {
-  const raw = body[key];
-  const value =
-    typeof raw === "number"
-      ? raw
-      : typeof raw === "string" && raw.trim().length > 0
-        ? Number(raw.trim())
-        : Number.NaN;
-
-  if (!Number.isFinite(value)) {
-    throw new RequestContextError(400, `Field \`${key}\` must be a valid number.`);
-  }
-
-  return value;
-}
+const CreateFieldBodySchema = z.object({
+  workspaceId: nullableTrimmedText(),
+  name: requiredTrimmedString("Field `name` is required."),
+  latitude: finiteNumberInput("Field `latitude` must be a valid number."),
+  longitude: finiteNumberInput("Field `longitude` must be a valid number."),
+  areaHa: positiveNumberInput("Field `areaHa` must be a positive number."),
+  cropType: nullableTrimmedText(),
+  variety: nullableTrimmedText(),
+  seedingDate: nullableTrimmedText().refine(
+    (value) => value == null || /^\d{4}-\d{2}-\d{2}$/.test(value),
+    "Field `seedingDate` must use YYYY-MM-DD format.",
+  ),
+  legalLandDescription: nullableTrimmedText(),
+});
 
 export async function POST(request: Request) {
   const body = await readJsonObject(request);
@@ -45,18 +60,8 @@ export async function POST(request: Request) {
     return jsonError(400, "Expected a JSON request body.");
   }
 
-  const requestedWorkspaceId =
-    typeof body.workspaceId === "string" ? body.workspaceId.trim() : null;
-
   try {
-    const name = readRequiredString(body, "name");
-    const latitude = readRequiredNumber(body, "latitude");
-    const longitude = readRequiredNumber(body, "longitude");
-    const areaHa = readRequiredNumber(body, "areaHa");
-    const cropType = readOptionalString(body, "cropType");
-    const variety = readOptionalString(body, "variety");
-    const seedingDate = readOptionalString(body, "seedingDate");
-    const legalLandDescription = readOptionalString(body, "legalLandDescription");
+    const payload = parseWithSchema(CreateFieldBodySchema, body);
 
     const runtime = getWebServerRuntime({
       jobDispatcher: "persistent",
@@ -67,31 +72,72 @@ export async function POST(request: Request) {
     }
 
     const actor = await resolveRequestActor(request, runtime, {
-      preferredWorkspaceId: requestedWorkspaceId,
+      allowDevelopmentFallback: true,
+      preferredWorkspaceId: payload.workspaceId ?? null,
     });
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...FIELD_CREATE_IP_RATE_LIMIT,
+          message: "Too many field create requests.",
+        }),
+        {
+          ...FIELD_CREATE_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+          }),
+          message: "Too many field create requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
     const manualDraft = buildManualFieldDraft({
-      latitude,
-      longitude,
-      areaHa,
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      areaHa: payload.areaHa,
     });
     const result = await createDraftField({
       runtime,
       actor,
-      name,
+      name: payload.name,
       boundary: manualDraft.boundary,
       areaHa: manualDraft.areaHa,
-      legalLandDescription,
-      cropType,
-      variety,
-      seedingDate,
+      legalLandDescription: payload.legalLandDescription ?? null,
+      cropType: payload.cropType ?? null,
+      variety: payload.variety ?? null,
+      seedingDate: payload.seedingDate ?? null,
       sourceKey: "manual-entry",
       metadata: {
         enteredPoint: {
-          latitude,
-          longitude,
+          latitude: payload.latitude,
+          longitude: payload.longitude,
         },
       },
       dispatchOnboarding: true,
+    });
+
+    await logAuditEvent({
+      runtime,
+      action: result.action === "created" ? "field.created" : "field.reused",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "field",
+      resourceId: result.field.id,
+      route: "/api/fields",
+      metadata: {
+        source: "manual-entry",
+        name: result.field.name,
+        areaHa: result.field.areaHa,
+        hasCropContext: result.cropContext !== null,
+        onboardingDispatchCount: result.onboardingDispatches.length,
+      },
     });
 
     return jsonOk(
@@ -107,9 +153,10 @@ export async function POST(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      400,
-      error instanceof Error ? error.message : "Field create request failed.",
-    );
+    return jsonServerError(error, {
+      status: 400,
+      event: "fields-create-route",
+      message: "Field create request failed.",
+    });
   }
 }

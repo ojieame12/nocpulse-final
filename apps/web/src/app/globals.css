@@ -1855,7 +1855,7 @@ img {
   align-items: center;
   gap: 0;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   flex: 1;
   min-width: 0;
   padding: 4px 8px 4px 4px;
@@ -2106,7 +2106,7 @@ img {
 
 .field-strip__kebab-menu {
   position: absolute;
-  top: calc(100% + 6px);
+  bottom: calc(100% + 6px);
   right: 0;
   min-width: 160px;
   padding: 4px;
@@ -2114,13 +2114,13 @@ img {
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(16, 22, 18, 0.96);
   backdrop-filter: blur(12px);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.4), 0 -2px 8px rgba(0, 0, 0, 0.2);
   z-index: 800;
   animation: kebabMenuIn 120ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes kebabMenuIn {
-  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+  from { opacity: 0; transform: translateY(4px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -2463,7 +2463,7 @@ img {
 [data-theme="light"] .field-strip__kebab-menu {
   border-color: rgba(0, 0, 0, 0.1);
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.12), 0 -2px 8px rgba(0, 0, 0, 0.06);
 }
 
 [data-theme="light"] .field-strip__kebab-item {
@@ -3675,6 +3675,59 @@ img {
   font-size: 10px;
   font-weight: 700;
   color: var(--text-muted);
+}
+
+/* ── Confidence Ring (wraps donut chart) ── */
+
+.donut-confidence-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.donut-confidence-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 2px solid var(--ring-color, var(--text-muted, #8a8f98));
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity 300ms ease, border-color 300ms ease;
+}
+
+.donut-confidence-ring--high {
+  opacity: 0.55;
+  border-style: solid;
+}
+
+.donut-confidence-ring--medium {
+  opacity: 0.50;
+  border-style: dashed;
+}
+
+.donut-confidence-ring--low {
+  opacity: 0.50;
+  border-style: dashed;
+  border-width: 1.5px;
+}
+
+.donut-confidence-ring--unknown {
+  opacity: 0.25;
+  border-style: dotted;
+  border-width: 1.5px;
+}
+
+/* Confidence dot inline with text value */
+.confidence-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 4px;
+  flex-shrink: 0;
+  vertical-align: middle;
 }
 
 /* ── Donut Info Column ── */

@@ -10,6 +10,19 @@ export type MoistureInputProvenance = {
   radarDataset?: string;
   sarDataset?: string;
   soilDataset?: string;
+  baselineDataset?: string;
+  rasterSourceKey?: string;
+  weatherSourceKey?: string;
+  moistureModelVersion?: string;
+  derivationMode?: "source-backed" | "seeded-range";
+  rasterMode?: "provider" | "synthetic" | "none";
+  signalBlend?: "raster+weather" | "raster-only" | "weather-only" | "seeded";
+  usedOptical?: boolean;
+  usedSar?: boolean;
+  usedWeather?: boolean;
+  usedWeatherSoilMoisture?: boolean;
+  confidenceScore?: number;
+  confidenceReason?: string;
 };
 
 export type FieldMoistureSnapshot = WorkspaceScoped &

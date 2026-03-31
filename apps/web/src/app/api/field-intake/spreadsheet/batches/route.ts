@@ -1,9 +1,41 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../../../server/auth/routeRateLimit";
+import {
+  nullableTrimmedText,
+  parseWithSchema,
+  z,
+} from "../../../../../server/http/validation";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../server/runtime/resolveRequestContext";
+
+const FIELD_INTAKE_SPREADSHEET_PREVIEW_ACTOR_RATE_LIMIT = {
+  scope: "field-intake-spreadsheet-preview:actor",
+  maxAttempts: 20,
+  windowSeconds: 10 * 60,
+} as const;
+
+const FIELD_INTAKE_SPREADSHEET_PREVIEW_IP_RATE_LIMIT = {
+  scope: "field-intake-spreadsheet-preview:ip",
+  maxAttempts: 30,
+  windowSeconds: 10 * 60,
+} as const;
+
+const SpreadsheetBatchBodySchema = z.object({
+  workspaceId: nullableTrimmedText(),
+  preview: z.record(z.unknown()),
+});
 
 export async function POST(request: Request) {
   const body = await readJsonObject(request);
@@ -12,18 +44,8 @@ export async function POST(request: Request) {
     return jsonError(400, "Expected a JSON request body.");
   }
 
-  const requestedWorkspaceId =
-    typeof body.workspaceId === "string" ? body.workspaceId : null;
-  const preview =
-    typeof body.preview === "object" && body.preview !== null
-      ? body.preview
-      : null;
-
-  if (!preview) {
-    return jsonError(400, "Field `preview` is required.");
-  }
-
   try {
+    const payload = parseWithSchema(SpreadsheetBatchBodySchema, body);
     const runtime = getWebServerRuntime();
 
     if (runtime.mode !== "supabase") {
@@ -31,12 +53,36 @@ export async function POST(request: Request) {
     }
 
     const actor = await resolveRequestActor(request, runtime, {
-      preferredWorkspaceId: requestedWorkspaceId,
+      allowDevelopmentFallback: true,
+      preferredWorkspaceId: payload.workspaceId ?? null,
     });
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...FIELD_INTAKE_SPREADSHEET_PREVIEW_IP_RATE_LIMIT,
+          message: "Too many spreadsheet preview save requests.",
+        }),
+        {
+          ...FIELD_INTAKE_SPREADSHEET_PREVIEW_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+          }),
+          message: "Too many spreadsheet preview save requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
     const result = await runtime.services.fieldIntake.saveSpreadsheetImportPreview({
       actorUserId: actor.userId,
       workspaceId: actor.workspaceId,
-      preview: preview as Parameters<
+      preview: payload.preview as Parameters<
         typeof runtime.services.fieldIntake.saveSpreadsheetImportPreview
       >[0]["preview"],
     });
@@ -54,9 +100,10 @@ export async function POST(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      400,
-      error instanceof Error ? error.message : "Import batch save failed.",
-    );
+    return jsonServerError(error, {
+      status: 400,
+      event: "field-intake-spreadsheet-batches-route",
+      message: "Import batch save failed.",
+    });
   }
 }

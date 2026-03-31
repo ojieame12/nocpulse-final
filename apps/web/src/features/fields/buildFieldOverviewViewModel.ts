@@ -864,6 +864,8 @@ export async function buildFieldOverviewViewModel(
       : "Insufficient data",
     confidence: confidence === "unknown" ? "—" : confidence.charAt(0).toUpperCase() + confidence.slice(1),
     confidenceSub: latestMoisture?.sourceKey ?? "No source",
+    moistureConfidenceLevel: confidence === "high" || confidence === "medium" || confidence === "low" ? confidence : "unknown",
+    moistureDerivationMode: (latestMoisture as any)?.inputs?.derivationMode ?? "unknown",
     precipitation: latestObservation?.precipitationMm != null
       ? `${latestObservation.precipitationMm.toFixed(1)} mm`
       : "—",

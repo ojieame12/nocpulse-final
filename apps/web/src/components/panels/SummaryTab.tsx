@@ -35,6 +35,9 @@ export interface SummaryOutlookDay {
   precip: string;
 }
 
+/** Semantic moisture confidence tier for UI styling. */
+export type MoistureConfidenceLevel = 'high' | 'medium' | 'low' | 'unknown';
+
 export interface FieldSummaryProps {
   name: string;
   lld: string;
@@ -56,6 +59,10 @@ export interface FieldSummaryProps {
   spreadSub: string;
   confidence: string;
   confidenceSub: string;
+  /** Semantic confidence tier for ring indicator. */
+  moistureConfidenceLevel: MoistureConfidenceLevel;
+  /** How moisture was derived: source-backed, seeded-range, or unknown. */
+  moistureDerivationMode: string;
   precipitation: string;
   precipitationSub: string;
   nextRain: string;
@@ -104,12 +111,21 @@ function LayerPills({ active, onChange }: { active: Layer; onChange: (l: Layer) 
 
 /* ── Component ── */
 
+/* ── Confidence styling map ── */
+const CONFIDENCE_RING: Record<MoistureConfidenceLevel, { color: string; label: string }> = {
+  high:    { color: 'var(--status-positive, #16a34a)', label: 'High confidence' },
+  medium:  { color: 'var(--status-warning, #f59e0b)',  label: 'Moderate confidence' },
+  low:     { color: 'var(--status-danger, #ef4444)',   label: 'Low confidence' },
+  unknown: { color: 'var(--text-muted, #8a8f98)',      label: 'Unassessed' },
+};
+
 export function SummaryTab({ field }: { field: FieldSummaryProps }) {
   const [activeLayer, setActiveLayer] = useState<Layer>('NDVI');
   const moistureColor = field.moisture < 0.3 ? '#ef4444' : '#16a34a';
   const contextLabel = field.contextLabel ?? 'Field overview';
   const conditionsMeta = field.conditionsMeta ?? 'Field average';
   const updatedLabel = field.updatedLabel ?? 'UPDATED MAR 27, 2026, 11:34 AM';
+  const ring = CONFIDENCE_RING[field.moistureConfidenceLevel ?? 'unknown'];
 
   return (
     <div className="panel__body">
@@ -131,12 +147,18 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
           <span className="donut-container__label-text">{contextLabel}</span>
         </div>
         <div className="donut-container">
-          <DonutChart
-            value={field.moisture}
-            size={120}
-            color={moistureColor}
-            caption="Root moisture"
-          />
+          <div className="donut-confidence-wrap" title={ring.label}>
+            <div
+              className={`donut-confidence-ring donut-confidence-ring--${field.moistureConfidenceLevel ?? 'unknown'}`}
+              style={{ '--ring-color': ring.color } as React.CSSProperties}
+            />
+            <DonutChart
+              value={field.moisture}
+              size={120}
+              color={moistureColor}
+              caption="Root moisture"
+            />
+          </div>
           <div className="donut-info">
             <div className="donut-info__row">
               <Cloud size={12} className="donut-info__icon" />
@@ -202,7 +224,10 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
                 <ShieldCheck size={12} />
                 <span className="panel__data-cell-label">Confidence</span>
               </div>
-              <span className="panel__data-cell-value panel__data-cell-value--text" style={{ color: '#f59e0b' }}>{field.confidence}</span>
+              <span className="panel__data-cell-value panel__data-cell-value--text" style={{ color: ring.color }}>
+                <span className="confidence-dot" style={{ background: ring.color }} />
+                {field.confidence}
+              </span>
               <span className="panel__data-cell-sub">{field.confidenceSub}</span>
             </div>
           </div>

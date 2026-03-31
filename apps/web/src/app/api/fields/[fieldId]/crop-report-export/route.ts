@@ -1,4 +1,4 @@
-import { jsonError } from "../../../../../server/http/json";
+import { jsonError, jsonServerError } from "../../../../../server/http/json";
 import { buildFieldOverviewViewModel } from "../../../../../features/fields/buildFieldOverviewViewModel";
 import { prepareFieldCropReportArtifact } from "../../../../../server/exports/prepareFieldCropReportArtifact";
 
@@ -43,9 +43,9 @@ export async function GET(
       },
     });
   } catch (error) {
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Crop report export failed.",
-    );
+    return jsonServerError(error, {
+      event: "crop-report-export-route",
+      message: "Crop report export failed.",
+    });
   }
 }

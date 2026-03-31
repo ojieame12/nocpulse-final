@@ -1,4 +1,9 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../../../server/http/json";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 import {
   RequestContextError,
@@ -27,7 +32,9 @@ export async function GET(request: Request) {
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: false,
+    });
     const { searchParams } = new URL(request.url);
     const fieldId = readRequiredFieldId(request);
     const limitValue = searchParams.get("limit")?.trim();
@@ -54,12 +61,10 @@ export async function GET(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error
-        ? error.message
-        : "Imagery provider probe history lookup failed.",
-    );
+    return jsonServerError(error, {
+      event: "imagery-provider-probes-get-route",
+      message: "Imagery provider probe history lookup failed.",
+    });
   }
 }
 
@@ -71,7 +76,9 @@ export async function POST(request: Request) {
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: false,
+    });
     const fieldId = readRequiredFieldId(request);
     const body = await readJsonObject(request);
     const requestedAtValue = body?.requestedAt;
@@ -99,11 +106,9 @@ export async function POST(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error
-        ? error.message
-        : "Imagery provider probe history record failed.",
-    );
+    return jsonServerError(error, {
+      event: "imagery-provider-probes-post-route",
+      message: "Imagery provider probe history record failed.",
+    });
   }
 }

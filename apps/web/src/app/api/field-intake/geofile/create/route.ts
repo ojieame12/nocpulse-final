@@ -1,10 +1,52 @@
-import { jsonError, jsonOk } from "../../../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+} from "../../../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../../../server/auth/routeRateLimit";
+import { logAuditEvent } from "../../../../../server/audit/logAuditEvent";
+import {
+  nullableTrimmedText,
+  parseWithSchema,
+  z,
+} from "../../../../../server/http/validation";
+import {
+  MAX_BOUNDARY_UPLOAD_BYTES,
+  readUploadedFile,
+} from "../../../../../server/http/uploads";
 import { createDraftField } from "../../../../../server/fields/createDraftField";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../server/runtime/resolveRequestContext";
+
+const FIELD_INTAKE_GEOFILE_ACTOR_RATE_LIMIT = {
+  scope: "field-intake-geofile-create:actor",
+  maxAttempts: 12,
+  windowSeconds: 15 * 60,
+} as const;
+
+const FIELD_INTAKE_GEOFILE_IP_RATE_LIMIT = {
+  scope: "field-intake-geofile-create:ip",
+  maxAttempts: 20,
+  windowSeconds: 15 * 60,
+} as const;
+
+const GeofileCreateFormSchema = z.object({
+  workspaceId: nullableTrimmedText(),
+  suggestedFieldName: nullableTrimmedText(),
+  cropType: nullableTrimmedText(),
+  variety: nullableTrimmedText(),
+  seedingDate: nullableTrimmedText().refine(
+    (value) => value == null || /^\d{4}-\d{2}-\d{2}$/.test(value),
+    "Field `seedingDate` must use YYYY-MM-DD format.",
+  ),
+});
 
 export async function POST(request: Request) {
   let formData: FormData;
@@ -15,39 +57,17 @@ export async function POST(request: Request) {
     return jsonError(400, "Expected multipart form data.");
   }
 
-  const file = formData.get("file");
-
-  if (!(file instanceof File)) {
-    return jsonError(400, "Form field `file` is required.");
-  }
-
-  const requestedWorkspaceIdValue = formData.get("workspaceId");
-  const requestedWorkspaceId =
-    typeof requestedWorkspaceIdValue === "string" && requestedWorkspaceIdValue.trim()
-      ? requestedWorkspaceIdValue.trim()
-      : null;
-  const suggestedFieldNameValue = formData.get("suggestedFieldName");
-  const suggestedFieldName =
-    typeof suggestedFieldNameValue === "string" && suggestedFieldNameValue.trim()
-      ? suggestedFieldNameValue.trim()
-      : undefined;
-  const cropTypeValue = formData.get("cropType");
-  const cropType =
-    typeof cropTypeValue === "string" && cropTypeValue.trim()
-      ? cropTypeValue.trim()
-      : null;
-  const varietyValue = formData.get("variety");
-  const variety =
-    typeof varietyValue === "string" && varietyValue.trim()
-      ? varietyValue.trim()
-      : null;
-  const seedingDateValue = formData.get("seedingDate");
-  const seedingDate =
-    typeof seedingDateValue === "string" && seedingDateValue.trim()
-      ? seedingDateValue.trim()
-      : null;
-
   try {
+    const file = readUploadedFile(formData, "file", {
+      maxBytes: MAX_BOUNDARY_UPLOAD_BYTES,
+    });
+    const payload = parseWithSchema(GeofileCreateFormSchema, {
+      workspaceId: formData.get("workspaceId"),
+      suggestedFieldName: formData.get("suggestedFieldName"),
+      cropType: formData.get("cropType"),
+      variety: formData.get("variety"),
+      seedingDate: formData.get("seedingDate"),
+    });
     const runtime = getWebServerRuntime({
       jobDispatcher: "persistent",
     });
@@ -57,13 +77,37 @@ export async function POST(request: Request) {
     }
 
     const actor = await resolveRequestActor(request, runtime, {
-      preferredWorkspaceId: requestedWorkspaceId,
+      allowDevelopmentFallback: true,
+      preferredWorkspaceId: payload.workspaceId ?? null,
     });
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...FIELD_INTAKE_GEOFILE_IP_RATE_LIMIT,
+          message: "Too many geofile field create requests.",
+        }),
+        {
+          ...FIELD_INTAKE_GEOFILE_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+          }),
+          message: "Too many geofile field create requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
     const parsed = await runtime.services.fieldIntake.parseBoundaryFile({
       content: await file.text(),
       fileName: file.name,
       mimeType: file.type || undefined,
-      suggestedFieldName,
+      suggestedFieldName: payload.suggestedFieldName ?? undefined,
     });
     const result = await createDraftField({
       runtime,
@@ -72,9 +116,9 @@ export async function POST(request: Request) {
       boundary: parsed.draft.boundary,
       areaHa: parsed.draft.areaHa,
       legalLandDescription: null,
-      cropType,
-      variety,
-      seedingDate,
+      cropType: payload.cropType ?? null,
+      variety: payload.variety ?? null,
+      seedingDate: payload.seedingDate ?? null,
       sourceKey: "field-intake:geofile-create",
       metadata: {
         intakeMethod: "geofile",
@@ -83,6 +127,23 @@ export async function POST(request: Request) {
         format: parsed.format,
       },
       dispatchOnboarding: true,
+    });
+
+    await logAuditEvent({
+      runtime,
+      action: result.action === "created" ? "field.created" : "field.reused",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "field",
+      resourceId: result.field.id,
+      route: "/api/field-intake/geofile/create",
+      metadata: {
+        source: "field-intake:geofile-create",
+        format: parsed.format,
+        fileName: file.name,
+        hasCropContext: result.cropContext !== null,
+        onboardingDispatchCount: result.onboardingDispatches.length,
+      },
     });
 
     return jsonOk(
@@ -98,9 +159,10 @@ export async function POST(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      400,
-      error instanceof Error ? error.message : "Geofile field create failed.",
-    );
+    return jsonServerError(error, {
+      status: 400,
+      event: "field-intake-geofile-create-route",
+      message: "Geofile field create failed.",
+    });
   }
 }

@@ -131,6 +131,41 @@ export type DatabaseSchema = {
         }>;
         Relationships: [];
       };
+      audit_events: {
+        Row: {
+          id: string;
+          action: string;
+          actor_user_id: string;
+          workspace_id: string | null;
+          resource_type: string;
+          resource_id: string | null;
+          route: string;
+          metadata: JsonValue;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          action: string;
+          actor_user_id: string;
+          workspace_id?: string | null;
+          resource_type: string;
+          resource_id?: string | null;
+          route: string;
+          metadata?: JsonValue;
+          created_at?: string;
+        };
+        Update: Partial<{
+          action: string;
+          actor_user_id: string;
+          workspace_id: string | null;
+          resource_type: string;
+          resource_id: string | null;
+          route: string;
+          metadata: JsonValue;
+          created_at: string;
+        }>;
+        Relationships: [];
+      };
       workspace_share_tokens: {
         Row: {
           id: string;

@@ -20,6 +20,7 @@ import {
   markRequestAccessRecordContacted,
 } from "../../../server/auth/requestAccessRepository";
 import { createServerDatabaseClient } from "../../../server/runtime/createServerDatabaseClient";
+import { logServerError } from "../../../server/runtime/installServerCrashLogging";
 
 export const dynamic = "force-dynamic";
 
@@ -301,10 +302,10 @@ export async function GET(request: Request) {
       requestRecord,
     });
   } catch (error) {
-    console.error("[grant-access] review error:", error);
+    logServerError("grant-access-review-route", error);
     return htmlPage({
       title: "Access Review Failed",
-      body: `<div class="stack"><p class="error">${escapeHtml(error instanceof Error ? error.message : "Access review failed.")}</p></div>`,
+      body: `<div class="stack"><p class="error">Access review failed.</p></div>`,
       status: 500,
     });
   }
@@ -450,10 +451,10 @@ export async function POST(request: Request) {
       </div>`,
     });
   } catch (error) {
-    console.error("[grant-access] consume error:", error);
+    logServerError("grant-access-consume-route", error);
     return htmlPage({
       title: "Grant Access Failed",
-      body: `<div class="stack"><p class="error">${escapeHtml(error instanceof Error ? error.message : "Grant access failed.")}</p></div>`,
+      body: `<div class="stack"><p class="error">Grant access failed.</p></div>`,
       status: 500,
     });
   }

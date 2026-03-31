@@ -1,4 +1,4 @@
-import { jsonError, jsonOk } from "../../../../server/http/json";
+import { jsonError, jsonOk, jsonServerError } from "../../../../server/http/json";
 import { resolveRequestAuthViewer } from "../../../../server/auth/resolveAuthViewer";
 import { getWebServerRuntime } from "../../../../server/runtime/getWebServerRuntime";
 import {
@@ -27,9 +27,9 @@ export async function GET(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Actor resolution failed.",
-    );
+    return jsonServerError(error, {
+      event: "auth-actor-route",
+      message: "Actor resolution failed.",
+    });
   }
 }

@@ -1,4 +1,20 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../server/auth/routeRateLimit";
+import { logAuditEvent } from "../../../server/audit/logAuditEvent";
+import {
+  nullableTrimmedText,
+  parseWithSchema,
+  z,
+} from "../../../server/http/validation";
 import { getWebServerRuntime } from "../../../server/runtime/getWebServerRuntime";
 import {
   RequestContextError,
@@ -14,6 +30,25 @@ import {
   loadWorkspaceSettingsState,
   saveWorkspaceSettingsState,
 } from "../../../server/settings/workspaceUserSettings";
+
+const SETTINGS_SAVE_ACTOR_RATE_LIMIT = {
+  scope: "settings-save:actor",
+  maxAttempts: 40,
+  windowSeconds: 5 * 60,
+} as const;
+
+const SETTINGS_SAVE_IP_RATE_LIMIT = {
+  scope: "settings-save:ip",
+  maxAttempts: 80,
+  windowSeconds: 5 * 60,
+} as const;
+
+const SettingsBodySchema = z
+  .object({
+    workspaceId: nullableTrimmedText(),
+    settings: z.record(z.unknown()).optional(),
+  })
+  .passthrough();
 
 function readRequestedWorkspaceId(request: Request, body?: Record<string, unknown> | null) {
   const { searchParams } = new URL(request.url);
@@ -39,6 +74,7 @@ export async function GET(request: Request) {
 
     const requestedWorkspaceId = readRequestedWorkspaceId(request);
     const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
       preferredWorkspaceId: requestedWorkspaceId,
     });
     const client = createServerDatabaseClient(runtime);
@@ -65,10 +101,10 @@ export async function GET(request: Request) {
       );
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Settings lookup failed.",
-    );
+    return jsonServerError(error, {
+      event: "settings-get-route",
+      message: "Settings lookup failed.",
+    });
   }
 }
 
@@ -80,6 +116,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    const payload = parseWithSchema(SettingsBodySchema, body);
     const runtime = getWebServerRuntime();
 
     if (runtime.mode !== "supabase") {
@@ -88,25 +125,66 @@ export async function POST(request: Request) {
 
     const requestedWorkspaceId = readRequestedWorkspaceId(request, body);
     const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
       preferredWorkspaceId: requestedWorkspaceId,
     });
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...SETTINGS_SAVE_IP_RATE_LIMIT,
+          message: "Too many settings save requests.",
+        }),
+        {
+          ...SETTINGS_SAVE_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+          }),
+          message: "Too many settings save requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
     const settings = normalizeWorkspaceSettings(
-      (typeof body.settings === "object" && body.settings !== null
-        ? body.settings
-        : body) as Partial<WorkspaceSettingsState>,
+      (payload.settings ?? payload) as Partial<WorkspaceSettingsState>,
     );
     const client = createServerDatabaseClient(runtime);
+    const savedSettings = await saveWorkspaceSettingsState({
+      client,
+      workspaceId: actor.workspaceId,
+      userId: actor.userId,
+      settings,
+    });
+
+    await logAuditEvent({
+      runtime,
+      action: "workspace.settings_updated",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "workspace-settings",
+      resourceId: actor.workspaceId,
+      route: "/api/settings",
+      metadata: {
+        emailAlerts: savedSettings.emailAlerts,
+        healthWarnings: savedSettings.healthWarnings,
+        sprayWindows: savedSettings.sprayWindows,
+        weeklyDigest: savedSettings.weeklyDigest,
+        units: savedSettings.units,
+        tempUnit: savedSettings.tempUnit,
+      },
+    });
 
     return jsonOk(
       {
         result: {
           workspaceId: actor.workspaceId,
-          settings: await saveWorkspaceSettingsState({
-            client,
-            workspaceId: actor.workspaceId,
-            userId: actor.userId,
-            settings,
-          }),
+          settings: savedSettings,
         },
       },
       {
@@ -125,9 +203,9 @@ export async function POST(request: Request) {
       );
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Settings save failed.",
-    );
+    return jsonServerError(error, {
+      event: "settings-post-route",
+      message: "Settings save failed.",
+    });
   }
 }

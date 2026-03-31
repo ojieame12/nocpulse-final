@@ -1,10 +1,51 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../../../server/auth/routeRateLimit";
+import { logAuditEvent } from "../../../../../server/audit/logAuditEvent";
+import {
+  nullableTrimmedText,
+  parseWithSchema,
+  requiredTrimmedString,
+  z,
+} from "../../../../../server/http/validation";
 import { createDraftField } from "../../../../../server/fields/createDraftField";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../server/runtime/resolveRequestContext";
+
+const FIELD_INTAKE_LLD_ACTOR_RATE_LIMIT = {
+  scope: "field-intake-lld-create:actor",
+  maxAttempts: 12,
+  windowSeconds: 15 * 60,
+} as const;
+
+const FIELD_INTAKE_LLD_IP_RATE_LIMIT = {
+  scope: "field-intake-lld-create:ip",
+  maxAttempts: 20,
+  windowSeconds: 15 * 60,
+} as const;
+
+const LldCreateBodySchema = z.object({
+  workspaceId: nullableTrimmedText(),
+  code: requiredTrimmedString("Field `code` is required."),
+  suggestedFieldName: nullableTrimmedText(),
+  cropType: nullableTrimmedText(),
+  variety: nullableTrimmedText(),
+  seedingDate: nullableTrimmedText().refine(
+    (value) => value == null || /^\d{4}-\d{2}-\d{2}$/.test(value),
+    "Field `seedingDate` must use YYYY-MM-DD format.",
+  ),
+});
 
 export async function POST(request: Request) {
   const body = await readJsonObject(request);
@@ -13,21 +54,8 @@ export async function POST(request: Request) {
     return jsonError(400, "Expected a JSON request body.");
   }
 
-  const requestedWorkspaceId =
-    typeof body.workspaceId === "string" ? body.workspaceId.trim() : null;
-  const code = typeof body.code === "string" ? body.code.trim() : "";
-  const suggestedFieldName =
-    typeof body.suggestedFieldName === "string" ? body.suggestedFieldName.trim() : "";
-  const cropType = typeof body.cropType === "string" ? body.cropType.trim() : "";
-  const variety = typeof body.variety === "string" ? body.variety.trim() : "";
-  const seedingDate =
-    typeof body.seedingDate === "string" ? body.seedingDate.trim() : "";
-
-  if (!code) {
-    return jsonError(400, "Field `code` is required.");
-  }
-
   try {
+    const payload = parseWithSchema(LldCreateBodySchema, body);
     const runtime = getWebServerRuntime({
       jobDispatcher: "persistent",
     });
@@ -37,11 +65,35 @@ export async function POST(request: Request) {
     }
 
     const actor = await resolveRequestActor(request, runtime, {
-      preferredWorkspaceId: requestedWorkspaceId,
+      allowDevelopmentFallback: true,
+      preferredWorkspaceId: payload.workspaceId ?? null,
     });
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...FIELD_INTAKE_LLD_IP_RATE_LIMIT,
+          message: "Too many LLD field create requests.",
+        }),
+        {
+          ...FIELD_INTAKE_LLD_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+          }),
+          message: "Too many LLD field create requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
     const lookup = await runtime.services.fieldIntake.lookupLldBoundary({
-      code,
-      suggestedFieldName: suggestedFieldName || undefined,
+      code: payload.code,
+      suggestedFieldName: payload.suggestedFieldName ?? undefined,
     });
     const result = await createDraftField({
       runtime,
@@ -50,9 +102,9 @@ export async function POST(request: Request) {
       boundary: lookup.draft.boundary,
       areaHa: lookup.draft.areaHa,
       legalLandDescription: lookup.parsed.normalized,
-      cropType: cropType || null,
-      variety: variety || null,
-      seedingDate: seedingDate || null,
+      cropType: payload.cropType ?? null,
+      variety: payload.variety ?? null,
+      seedingDate: payload.seedingDate ?? null,
       sourceKey: "field-intake:lld-create",
       metadata: {
         intakeMethod: "lld",
@@ -60,6 +112,23 @@ export async function POST(request: Request) {
         lldResolution: lookup.resolution,
       },
       dispatchOnboarding: true,
+    });
+
+    await logAuditEvent({
+      runtime,
+      action: result.action === "created" ? "field.created" : "field.reused",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "field",
+      resourceId: result.field.id,
+      route: "/api/field-intake/lld/create",
+      metadata: {
+        source: "field-intake:lld-create",
+        resolution: lookup.resolution,
+        lldCode: lookup.parsed.normalized,
+        hasCropContext: result.cropContext !== null,
+        onboardingDispatchCount: result.onboardingDispatches.length,
+      },
     });
 
     return jsonOk(
@@ -85,9 +154,10 @@ export async function POST(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      400,
-      error instanceof Error ? error.message : "LLD field create failed.",
-    );
+    return jsonServerError(error, {
+      status: 400,
+      event: "field-intake-lld-create-route",
+      message: "LLD field create failed.",
+    });
   }
 }

@@ -1,5 +1,6 @@
 import type { EntityId, WorkspaceId } from "@fieldpulse/platform-db";
 import type { FieldMoistureSnapshot } from "../contracts/FieldMoistureSnapshot";
+import type { MoistureInputProvenance } from "../contracts/FieldMoistureSnapshot";
 import type { RebuildFieldMoistureEstimateInput } from "../contracts/RebuildFieldMoistureEstimateInput";
 import type { RebuildFieldMoistureEstimateResult } from "../contracts/RebuildFieldMoistureEstimateResult";
 import { ensureFieldMoistureSnapshot } from "./ensureFieldMoistureSnapshot";
@@ -95,6 +96,16 @@ function isSyntheticRasterSource(sourceKey: string | null | undefined) {
   );
 }
 
+function isSarRasterSource(sourceKey: string | null | undefined) {
+  const normalized = sourceKey?.toLowerCase() ?? "";
+  return normalized.includes("sentinel-1") || normalized.includes("sar");
+}
+
+function isOpticalRasterSource(sourceKey: string | null | undefined) {
+  const normalized = sourceKey?.toLowerCase() ?? "";
+  return normalized.includes("sentinel-2") || normalized.includes("planet");
+}
+
 function deriveSourceBackedEstimate(
   sources: RebuildFieldMoistureEstimateSources,
 ) {
@@ -118,6 +129,8 @@ function deriveSourceBackedEstimate(
   const precipitationMm = weatherObservation?.precipitationMm ?? 0;
   const evapotranspirationMm = weatherObservation?.evapotranspirationMm ?? 0;
   const relativeHumidityPct = weatherObservation?.relativeHumidityPct ?? null;
+  const rasterSourceKey = rasterObservation?.sourceKey ?? null;
+  const weatherSourceKey = weatherObservation?.sourceKey ?? null;
 
   const hasRasterSignal =
     moistureSignal !== null ||
@@ -192,10 +205,57 @@ function deriveSourceBackedEstimate(
         ? "medium"
         : "low";
 
+  const rasterMode =
+    rasterObservation == null
+      ? "none"
+      : isSyntheticRasterSource(rasterSourceKey)
+        ? "synthetic"
+        : "provider";
+  const signalBlend =
+    hasRasterSignal && hasWeatherSignal
+      ? "raster+weather"
+      : hasRasterSignal
+        ? "raster-only"
+        : "weather-only";
+  const confidenceReasonParts: string[] = [];
+
+  if (hasRasterSignal) {
+    confidenceReasonParts.push(
+      rasterMode === "provider" ? "provider raster signal" : "synthetic raster signal",
+    );
+  }
+
+  if (weatherSoilMoisture !== null) {
+    confidenceReasonParts.push("weather soil moisture");
+  } else if (hasWeatherSignal) {
+    confidenceReasonParts.push("weather pulse");
+  }
+
+  if (precipitationMm > 0 || evapotranspirationMm > 0) {
+    confidenceReasonParts.push("precipitation/evapotranspiration");
+  }
+
   return {
     rootZonePct: Number(rootZonePct.toFixed(1)),
     surfacePct: Number(surfacePct.toFixed(1)),
     confidence,
+    confidenceScore: Number(confidenceScore.toFixed(2)),
+    provenance: {
+      moistureModelVersion: "derived-moisture-v1",
+      derivationMode: "source-backed",
+      rasterSourceKey: rasterSourceKey ?? undefined,
+      weatherSourceKey: weatherSourceKey ?? undefined,
+      rasterMode,
+      signalBlend,
+      usedOptical: isOpticalRasterSource(rasterSourceKey),
+      usedSar: isSarRasterSource(rasterSourceKey),
+      usedWeather: hasWeatherSignal,
+      usedWeatherSoilMoisture: weatherSoilMoisture !== null,
+      confidenceReason:
+        confidenceReasonParts.length > 0
+          ? confidenceReasonParts.join(" + ")
+          : "derived inputs unavailable",
+    } satisfies Partial<MoistureInputProvenance>,
   } as const;
 }
 
@@ -217,6 +277,24 @@ export async function rebuildFieldMoistureEstimate(input: {
   const confidence =
     sourceBackedEstimate?.confidence ??
     (rootZonePct >= 55 ? "high" : rootZonePct >= 40 ? "medium" : "low");
+  const derivedInputs: MoistureInputProvenance = sourceBackedEstimate
+    ? {
+        ...input.estimate.inputs,
+        ...sourceBackedEstimate.provenance,
+        confidenceScore: sourceBackedEstimate.confidenceScore,
+      }
+    : {
+        ...input.estimate.inputs,
+        moistureModelVersion: "derived-moisture-v1",
+        derivationMode: "seeded-range",
+        rasterMode: "none",
+        signalBlend: "seeded",
+        usedOptical: false,
+        usedSar: false,
+        usedWeather: false,
+        usedWeatherSoilMoisture: false,
+        confidenceReason: "seeded fallback range",
+      };
 
   return ensureFieldMoistureSnapshot({
     repository: input.repository,
@@ -225,6 +303,7 @@ export async function rebuildFieldMoistureEstimate(input: {
       rootZonePct,
       surfacePct,
       confidence,
+      inputs: derivedInputs,
     },
   });
 }

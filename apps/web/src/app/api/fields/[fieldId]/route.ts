@@ -1,41 +1,54 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../../server/auth/routeRateLimit";
+import { logAuditEvent } from "../../../../server/audit/logAuditEvent";
 import { getWebServerRuntime } from "../../../../server/runtime/getWebServerRuntime";
+import {
+  nullableTrimmedText,
+  parseWithSchema,
+  requiredTrimmedString,
+  z,
+} from "../../../../server/http/validation";
 import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../server/runtime/resolveRequestContext";
 
-function hasBodyKey(body: Record<string, unknown>, key: string) {
-  return Object.prototype.hasOwnProperty.call(body, key);
-}
+const FIELD_MUTATION_ACTOR_RATE_LIMIT = {
+  scope: "field-mutation:actor",
+  maxAttempts: 40,
+  windowSeconds: 5 * 60,
+} as const;
 
-function readRequiredName(body: Record<string, unknown>) {
-  const value = typeof body.name === "string" ? body.name.trim() : "";
+const FIELD_MUTATION_IP_RATE_LIMIT = {
+  scope: "field-mutation:ip",
+  maxAttempts: 80,
+  windowSeconds: 5 * 60,
+} as const;
 
-  if (!value) {
-    throw new RequestContextError(400, "[fields] name must be a non-empty string.");
-  }
-
-  return value;
-}
-
-function readOptionalLegalLandDescription(body: Record<string, unknown>) {
-  const value = body.legalLandDescription;
-
-  if (value == null) {
-    return null;
-  }
-
-  if (typeof value !== "string") {
-    throw new RequestContextError(
-      400,
-      "[fields] legalLandDescription must be a string or null.",
-    );
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
+const FieldPatchBodySchema = z
+  .object({
+    name: z.union([
+      requiredTrimmedString("[fields] name must be a non-empty string."),
+      z.undefined(),
+    ]),
+    legalLandDescription: nullableTrimmedText(),
+  })
+  .refine(
+    (value) =>
+      value.name !== undefined || value.legalLandDescription !== undefined,
+    {
+      message: "[fields] expected at least one mutable field in the request body.",
+    },
+  );
 
 export async function PATCH(
   request: Request,
@@ -48,39 +61,79 @@ export async function PATCH(
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
+    });
     const { fieldId } = await context.params;
     const body = await readJsonObject(request);
 
     if (!body) {
       return jsonError(400, "Expected a JSON request body.");
     }
+    const payload = parseWithSchema(FieldPatchBodySchema, body);
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...FIELD_MUTATION_IP_RATE_LIMIT,
+          message: "Too many field update requests.",
+        }),
+        {
+          ...FIELD_MUTATION_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+            resourceId: fieldId,
+          }),
+          message: "Too many field update requests.",
+        },
+      ],
+    });
 
-    const hasName = hasBodyKey(body, "name");
-    const hasLegalLandDescription = hasBodyKey(body, "legalLandDescription");
-
-    if (!hasName && !hasLegalLandDescription) {
-      return jsonError(
-        400,
-        "[fields] expected at least one mutable field in the request body.",
-      );
+    if (rateLimitResponse) {
+      return rateLimitResponse;
     }
 
     let detail = null;
 
-    if (hasName) {
+    if (payload.name !== undefined) {
       detail = await runtime.services.fields.renameField({
         workspaceId: actor.workspaceId,
         fieldId,
-        name: readRequiredName(body),
+        name: payload.name,
+      });
+      await logAuditEvent({
+        runtime,
+        action: "field.renamed",
+        actorUserId: actor.userId,
+        workspaceId: actor.workspaceId,
+        resourceType: "field",
+        resourceId: fieldId,
+        route: "/api/fields/[fieldId]",
+        metadata: {
+          name: detail.name,
+        },
       });
     }
 
-    if (hasLegalLandDescription) {
+    if (payload.legalLandDescription !== undefined) {
       detail = await runtime.services.fields.setLegalLandDescription({
         workspaceId: actor.workspaceId,
         fieldId,
-        legalLandDescription: readOptionalLegalLandDescription(body),
+        legalLandDescription: payload.legalLandDescription ?? null,
+      });
+      await logAuditEvent({
+        runtime,
+        action: "field.legal_land_description_updated",
+        actorUserId: actor.userId,
+        workspaceId: actor.workspaceId,
+        resourceType: "field",
+        resourceId: fieldId,
+        route: "/api/fields/[fieldId]",
+        metadata: {
+          hasLegalLandDescription: detail.legalLandDescription !== null,
+        },
       });
     }
 
@@ -90,10 +143,10 @@ export async function PATCH(
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Field update failed.",
-    );
+    return jsonServerError(error, {
+      event: "field-update-route",
+      message: "Field update failed.",
+    });
   }
 }
 
@@ -108,12 +161,46 @@ export async function DELETE(
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
+    });
     const { fieldId } = await context.params;
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...FIELD_MUTATION_IP_RATE_LIMIT,
+          message: "Too many field deletion requests.",
+        }),
+        {
+          ...FIELD_MUTATION_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+            resourceId: fieldId,
+          }),
+          message: "Too many field deletion requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
 
     await runtime.services.fields.deleteField({
       workspaceId: actor.workspaceId,
       fieldId,
+    });
+    await logAuditEvent({
+      runtime,
+      action: "field.deleted",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "field",
+      resourceId: fieldId,
+      route: "/api/fields/[fieldId]",
     });
 
     return jsonOk({ deleted: true });
@@ -122,9 +209,9 @@ export async function DELETE(
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Field deletion failed.",
-    );
+    return jsonServerError(error, {
+      event: "field-delete-route",
+      message: "Field deletion failed.",
+    });
   }
 }

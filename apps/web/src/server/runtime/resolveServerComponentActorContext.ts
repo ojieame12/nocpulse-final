@@ -27,6 +27,7 @@ export async function resolveServerComponentActorContext(
       }),
     );
   const actor = await resolveRequestActor(request, runtime, {
+    allowDevelopmentFallback: true,
     preferredWorkspaceId: options.preferredWorkspaceId,
   });
 

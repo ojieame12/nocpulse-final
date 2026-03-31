@@ -1,3 +1,5 @@
+import { logServerError } from "../runtime/installServerCrashLogging";
+
 export function jsonOk(body: unknown, init?: ResponseInit) {
   return Response.json(body, init);
 }
@@ -25,4 +27,18 @@ export async function readJsonObject(request: Request) {
   } catch {
     return null;
   }
+}
+
+export function jsonServerError(
+  error: unknown,
+  input: {
+    message: string;
+    status?: number;
+    event: string;
+    context?: Record<string, unknown>;
+  },
+) {
+  logServerError(input.event, error, input.context);
+
+  return jsonError(input.status ?? 500, input.message);
 }

@@ -1,5 +1,23 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../../../server/auth/routeRateLimit";
+import { logAuditEvent } from "../../../../../server/audit/logAuditEvent";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
+import {
+  nullableTrimmedText,
+  optionalTrimmedText,
+  parseWithSchema,
+  requiredTrimmedString,
+  z,
+} from "../../../../../server/http/validation";
 import {
   RequestContextError,
   resolveRequestActor,
@@ -18,6 +36,32 @@ function isValidOutcome(value: string): value is ValidOutcome {
   return (VALID_OUTCOMES as readonly string[]).includes(value);
 }
 
+const FIELD_NOTES_RATE_LIMIT = {
+  scope: "field-notes:actor",
+  maxAttempts: 60,
+  windowSeconds: 5 * 60,
+} as const;
+
+const FIELD_NOTES_IP_RATE_LIMIT = {
+  scope: "field-notes:ip",
+  maxAttempts: 120,
+  windowSeconds: 5 * 60,
+} as const;
+
+const FieldNoteBodySchema = z.object({
+  outcome: requiredTrimmedString(
+    "[notes] outcome must be one of confirmed, not_confirmed, resolved, or monitor.",
+  ).refine(
+    (value) => isValidOutcome(value),
+    "[notes] outcome must be one of confirmed, not_confirmed, resolved, or monitor.",
+  ),
+  noteText: requiredTrimmedString("[notes] noteText is required."),
+  findingId: nullableTrimmedText(),
+  zoneId: nullableTrimmedText(),
+  cellKey: nullableTrimmedText(),
+  observedAt: optionalTrimmedText(),
+});
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ fieldId: string }> },
@@ -29,7 +73,9 @@ export async function GET(
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
+    });
     const { fieldId } = await context.params;
     const { searchParams } = new URL(request.url);
     const limitValue = searchParams.get("limit")?.trim();
@@ -54,10 +100,10 @@ export async function GET(
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Scout note lookup failed.",
-    );
+    return jsonServerError(error, {
+      event: "field-notes-get-route",
+      message: "Scout note lookup failed.",
+    });
   }
 }
 
@@ -72,39 +118,67 @@ export async function POST(
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
+    });
     const { fieldId } = await context.params;
     const body = await readJsonObject(request);
 
     if (!body) {
       return jsonError(400, "Expected a JSON request body.");
     }
+    const payload = parseWithSchema(FieldNoteBodySchema, body);
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...FIELD_NOTES_IP_RATE_LIMIT,
+          message: "Too many note updates.",
+        }),
+        {
+          ...FIELD_NOTES_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+            resourceId: fieldId,
+          }),
+          message: "Too many note updates.",
+        },
+      ],
+    });
 
-    const outcome = typeof body.outcome === "string" ? body.outcome.trim() : null;
-    const noteText = typeof body.noteText === "string" ? body.noteText.trim() : null;
-    const findingId = typeof body.findingId === "string" ? body.findingId.trim() : null;
-    const zoneId = typeof body.zoneId === "string" ? body.zoneId.trim() : null;
-    const cellKey = typeof body.cellKey === "string" ? body.cellKey.trim() : null;
-    const observedAt = typeof body.observedAt === "string" ? body.observedAt.trim() : undefined;
-
-    if (!outcome || !isValidOutcome(outcome)) {
-      return jsonError(400, "[notes] outcome must be one of confirmed, not_confirmed, resolved, or monitor.");
-    }
-
-    if (!noteText) {
-      return jsonError(400, "[notes] noteText is required.");
+    if (rateLimitResponse) {
+      return rateLimitResponse;
     }
 
     const note = await runtime.services.scouting.createFieldNote({
       workspaceId: actor.workspaceId,
       fieldId,
-      findingId,
-      zoneId,
-      cellKey,
-      outcome,
-      noteText,
-      observedAt,
+      findingId: payload.findingId ?? null,
+      zoneId: payload.zoneId ?? null,
+      cellKey: payload.cellKey ?? null,
+      outcome: payload.outcome,
+      noteText: payload.noteText,
+      observedAt: payload.observedAt,
       createdByUserId: actor.userId,
+    });
+
+    await logAuditEvent({
+      runtime,
+      action: "field.note_created",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "field-note",
+      resourceId: note.id,
+      route: "/api/fields/[fieldId]/notes",
+      metadata: {
+        fieldId,
+        outcome: note.outcome,
+        hasFindingId: note.findingId !== null,
+        hasZoneId: note.zoneId !== null,
+        hasCellKey: note.cellKey !== null,
+      },
     });
 
     return jsonOk({ note }, { status: 201 });
@@ -113,9 +187,9 @@ export async function POST(
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Scout note creation failed.",
-    );
+    return jsonServerError(error, {
+      event: "field-notes-post-route",
+      message: "Scout note creation failed.",
+    });
   }
 }

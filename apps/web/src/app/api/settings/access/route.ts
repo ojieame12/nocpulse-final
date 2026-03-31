@@ -13,7 +13,25 @@ import {
   normalizeWorkspaceMemberRoleChange,
   normalizeWorkspaceInviteRole,
 } from "../../../../features/settings/workspaceAccess";
-import { jsonError, jsonOk, readJsonObject } from "../../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../../server/auth/routeRateLimit";
+import { logAuditEvent } from "../../../../server/audit/logAuditEvent";
+import {
+  nullableTrimmedText,
+  optionalTrimmedText,
+  parseWithSchema,
+  requiredTrimmedString,
+  z,
+} from "../../../../server/http/validation";
 import { getWebServerRuntime } from "../../../../server/runtime/getWebServerRuntime";
 import {
   RequestContextError,
@@ -26,6 +44,44 @@ import {
 } from "../../../../server/auth/workspaceAccessProvisioning";
 import { upsertWorkspaceEmailProvision } from "../../../../server/auth/workspaceEmailProvisioning";
 import { createServerDatabaseClient } from "../../../../server/runtime/createServerDatabaseClient";
+
+const SETTINGS_ACCESS_INVITE_ACTOR_RATE_LIMIT = {
+  scope: "settings-access-invite:actor",
+  maxAttempts: 20,
+  windowSeconds: 5 * 60,
+} as const;
+
+const SETTINGS_ACCESS_INVITE_IP_RATE_LIMIT = {
+  scope: "settings-access-invite:ip",
+  maxAttempts: 40,
+  windowSeconds: 5 * 60,
+} as const;
+
+const SETTINGS_ACCESS_MEMBER_ACTOR_RATE_LIMIT = {
+  scope: "settings-access-member-mutation:actor",
+  maxAttempts: 30,
+  windowSeconds: 5 * 60,
+} as const;
+
+const SETTINGS_ACCESS_MEMBER_IP_RATE_LIMIT = {
+  scope: "settings-access-member-mutation:ip",
+  maxAttempts: 60,
+  windowSeconds: 5 * 60,
+} as const;
+
+const WorkspaceAccessInviteBodySchema = z.object({
+  workspaceId: nullableTrimmedText(),
+  email: requiredTrimmedString("An email address is required.")
+    .transform((value) => normalizeWorkspaceAccessEmail(value))
+    .refine(isValidWorkspaceAccessEmail, "Enter a valid email address."),
+  role: optionalTrimmedText(),
+});
+
+const WorkspaceAccessMemberBodySchema = z.object({
+  workspaceId: nullableTrimmedText(),
+  userId: requiredTrimmedString("A member identifier is required."),
+  role: optionalTrimmedText(),
+});
 
 function readRequestedWorkspaceId(
   request: Request,
@@ -42,30 +98,6 @@ function readRequestedWorkspaceId(
     typeof body?.workspaceId === "string" ? body.workspaceId.trim() : "";
 
   return bodyWorkspaceId || null;
-}
-
-function readInviteEmail(body: Record<string, unknown>) {
-  const email = normalizeWorkspaceAccessEmail(body.email);
-
-  if (!email) {
-    throw new RequestContextError(400, "An email address is required.");
-  }
-
-  if (!isValidWorkspaceAccessEmail(email)) {
-    throw new RequestContextError(400, "Enter a valid email address.");
-  }
-
-  return email;
-}
-
-function readMemberUserId(body: Record<string, unknown>) {
-  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
-
-  if (!userId) {
-    throw new RequestContextError(400, "A member identifier is required.");
-  }
-
-  return userId;
 }
 
 async function loadWorkspaceAccessState(input: {
@@ -138,6 +170,7 @@ export async function GET(request: Request) {
 
     const requestedWorkspaceId = readRequestedWorkspaceId(request);
     const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
       preferredWorkspaceId: requestedWorkspaceId,
     });
     const databaseClient = createServerDatabaseClient(runtime);
@@ -161,10 +194,10 @@ export async function GET(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Workspace access lookup failed.",
-    );
+    return jsonServerError(error, {
+      event: "settings-access-get-route",
+      message: "Workspace access lookup failed.",
+    });
   }
 }
 
@@ -176,6 +209,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    const payload = parseWithSchema(WorkspaceAccessInviteBodySchema, body);
     const runtime = getWebServerRuntime();
 
     if (runtime.mode !== "supabase") {
@@ -184,8 +218,31 @@ export async function POST(request: Request) {
 
     const requestedWorkspaceId = readRequestedWorkspaceId(request, body);
     const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
       preferredWorkspaceId: requestedWorkspaceId,
     });
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...SETTINGS_ACCESS_INVITE_IP_RATE_LIMIT,
+          message: "Too many workspace access invite requests.",
+        }),
+        {
+          ...SETTINGS_ACCESS_INVITE_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+          }),
+          message: "Too many workspace access invite requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
 
     if (!canManageWorkspace(actor)) {
       return jsonError(
@@ -194,8 +251,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const email = readInviteEmail(body);
-    const inviteRole = normalizeWorkspaceInviteRole(body.role, actor.role);
+    const email = payload.email;
+    const inviteRole = normalizeWorkspaceInviteRole(payload.role, actor.role);
     const databaseClient = createServerDatabaseClient(runtime);
     const workspaceMemberships = createSupabaseWorkspaceMembershipRepository(
       databaseClient,
@@ -220,6 +277,20 @@ export async function POST(request: Request) {
         role: inviteRole,
         invitedBy: actor.userId,
         createdAt: new Date().toISOString(),
+      });
+      await logAuditEvent({
+        runtime,
+        action: "workspace.access_granted",
+        actorUserId: actor.userId,
+        workspaceId: actor.workspaceId,
+        resourceType: "workspace-membership",
+        resourceId: existingUser.id,
+        route: "/api/settings/access",
+        metadata: {
+          role: inviteRole,
+          email,
+          provisionMode: "existing-account",
+        },
       });
 
       return jsonOk(
@@ -246,6 +317,20 @@ export async function POST(request: Request) {
       role: inviteRole,
       createdBy: actor.userId,
     });
+    await logAuditEvent({
+      runtime,
+      action: "workspace.access_invited",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "workspace-invite",
+      resourceId: email,
+      route: "/api/settings/access",
+      metadata: {
+        role: inviteRole,
+        email,
+        provisionMode: "email-provision",
+      },
+    });
 
     return jsonOk(
       {
@@ -267,10 +352,10 @@ export async function POST(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Workspace access update failed.",
-    );
+    return jsonServerError(error, {
+      event: "settings-access-post-route",
+      message: "Workspace access update failed.",
+    });
   }
 }
 
@@ -282,6 +367,7 @@ export async function PATCH(request: Request) {
   }
 
   try {
+    const payload = parseWithSchema(WorkspaceAccessMemberBodySchema, body);
     const runtime = getWebServerRuntime();
 
     if (runtime.mode !== "supabase") {
@@ -290,8 +376,31 @@ export async function PATCH(request: Request) {
 
     const requestedWorkspaceId = readRequestedWorkspaceId(request, body);
     const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
       preferredWorkspaceId: requestedWorkspaceId,
     });
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...SETTINGS_ACCESS_MEMBER_IP_RATE_LIMIT,
+          message: "Too many workspace member update requests.",
+        }),
+        {
+          ...SETTINGS_ACCESS_MEMBER_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+          }),
+          message: "Too many workspace member update requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
 
     if (!canManageWorkspace(actor)) {
       return jsonError(
@@ -300,7 +409,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const userId = readMemberUserId(body);
+    const userId = payload.userId;
     const databaseClient = createServerDatabaseClient(runtime);
     const workspaceMemberships = createSupabaseWorkspaceMembershipRepository(
       databaseClient,
@@ -315,7 +424,7 @@ export async function PATCH(request: Request) {
     }
 
     const nextRole = normalizeWorkspaceMemberRoleChange(
-      body.role,
+      payload.role,
       actor.role,
       membership.role,
       membership.userId === actor.userId,
@@ -338,6 +447,19 @@ export async function PATCH(request: Request) {
       return jsonError(404, "That workspace member could not be updated.");
     }
 
+    await logAuditEvent({
+      runtime,
+      action: "workspace.member_role_updated",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "workspace-membership",
+      resourceId: userId,
+      route: "/api/settings/access",
+      metadata: {
+        role: updatedMembership.role,
+      },
+    });
+
     return jsonOk({
       result: {
         workspaceId: actor.workspaceId,
@@ -351,10 +473,10 @@ export async function PATCH(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Workspace access update failed.",
-    );
+    return jsonServerError(error, {
+      event: "settings-access-patch-route",
+      message: "Workspace access update failed.",
+    });
   }
 }
 
@@ -366,6 +488,7 @@ export async function DELETE(request: Request) {
   }
 
   try {
+    const payload = parseWithSchema(WorkspaceAccessMemberBodySchema, body);
     const runtime = getWebServerRuntime();
 
     if (runtime.mode !== "supabase") {
@@ -374,8 +497,31 @@ export async function DELETE(request: Request) {
 
     const requestedWorkspaceId = readRequestedWorkspaceId(request, body);
     const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
       preferredWorkspaceId: requestedWorkspaceId,
     });
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...SETTINGS_ACCESS_MEMBER_IP_RATE_LIMIT,
+          message: "Too many workspace member removal requests.",
+        }),
+        {
+          ...SETTINGS_ACCESS_MEMBER_ACTOR_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+          }),
+          message: "Too many workspace member removal requests.",
+        },
+      ],
+    });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
 
     if (!canManageWorkspace(actor)) {
       return jsonError(
@@ -384,7 +530,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const userId = readMemberUserId(body);
+    const userId = payload.userId;
     const databaseClient = createServerDatabaseClient(runtime);
     const workspaceMemberships = createSupabaseWorkspaceMembershipRepository(
       databaseClient,
@@ -420,6 +566,16 @@ export async function DELETE(request: Request) {
       return jsonError(404, "That workspace member could not be removed.");
     }
 
+    await logAuditEvent({
+      runtime,
+      action: "workspace.member_removed",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "workspace-membership",
+      resourceId: userId,
+      route: "/api/settings/access",
+    });
+
     return jsonOk({
       result: {
         workspaceId: actor.workspaceId,
@@ -432,9 +588,9 @@ export async function DELETE(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Workspace access update failed.",
-    );
+    return jsonServerError(error, {
+      event: "settings-access-delete-route",
+      message: "Workspace access update failed.",
+    });
   }
 }

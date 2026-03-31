@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createRouteHandlerSupabaseClient } from "../../../../server/auth/createRouteHandlerSupabaseClient";
-import { jsonError } from "../../../../server/http/json";
+import { jsonError, jsonServerError } from "../../../../server/http/json";
 
 export async function POST(request: Request) {
   try {
@@ -16,9 +16,9 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
-    return jsonError(
-      500,
-      error instanceof Error ? error.message : "Sign out failed.",
-    );
+    return jsonServerError(error, {
+      event: "auth-signout-route",
+      message: "Sign out failed.",
+    });
   }
 }

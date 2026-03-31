@@ -1,4 +1,4 @@
-import { jsonError, jsonOk } from "../../../../server/http/json";
+import { jsonError, jsonOk, jsonServerError } from "../../../../server/http/json";
 import { getWebServerRuntime } from "../../../../server/runtime/getWebServerRuntime";
 import {
   RequestContextError,
@@ -13,7 +13,9 @@ export async function GET(request: Request) {
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: false,
+    });
     const { searchParams } = new URL(request.url);
     const fieldId = searchParams.get("fieldId")?.trim();
     const requestedAt = searchParams.get("requestedAt")?.trim() || undefined;
@@ -33,11 +35,9 @@ export async function GET(request: Request) {
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error
-        ? error.message
-        : "Imagery provider diagnostics failed.",
-    );
+    return jsonServerError(error, {
+      event: "imagery-providers-route",
+      message: "Imagery provider diagnostics failed.",
+    });
   }
 }

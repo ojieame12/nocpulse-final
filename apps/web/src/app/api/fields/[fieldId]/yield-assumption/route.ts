@@ -1,31 +1,72 @@
-import { jsonError, jsonOk, readJsonObject } from "../../../../../server/http/json";
+import {
+  jsonError,
+  jsonOk,
+  jsonServerError,
+  readJsonObject,
+} from "../../../../../server/http/json";
+import {
+  buildActorRateLimitIdentifier,
+  buildIpRateLimitRule,
+  enforceRouteRateLimits,
+} from "../../../../../server/auth/routeRateLimit";
+import { logAuditEvent } from "../../../../../server/audit/logAuditEvent";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../server/runtime/resolveRequestContext";
+import {
+  nullableTrimmedText,
+  optionalTrimmedText,
+  optionalYearInput,
+  parseWithSchema,
+  positiveNumberInput,
+  z,
+} from "../../../../../server/http/validation";
 
-function readOptionalSeasonYear(value: unknown) {
-  if (value == null || value === "") {
-    return undefined;
-  }
+const FIELD_YIELD_RATE_LIMIT = {
+  scope: "field-yield-assumption:actor",
+  maxAttempts: 40,
+  windowSeconds: 5 * 60,
+} as const;
 
-  const parsed =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(value.trim())
-        : Number.NaN;
+const FIELD_YIELD_IP_RATE_LIMIT = {
+  scope: "field-yield-assumption:ip",
+  maxAttempts: 80,
+  windowSeconds: 5 * 60,
+} as const;
 
-  if (!Number.isInteger(parsed) || parsed < 1900 || parsed > 3000) {
-    throw new RequestContextError(
-      400,
+const YieldAssumptionBodySchema = z
+  .object({
+    yieldTonnesPerHa: z.union([
+      positiveNumberInput(
+        "[yield-assumption] yieldTonnesPerHa must be a positive number.",
+      ),
+      z.undefined(),
+    ]),
+    yield: z.union([
+      positiveNumberInput(
+        "[yield-assumption] yieldTonnesPerHa must be a positive number.",
+      ),
+      z.undefined(),
+    ]),
+    seasonYear: optionalYearInput(
       "[yield-assumption] seasonYear must be a valid integer year.",
-    );
-  }
-
-  return parsed;
-}
+    ),
+    cropSymbol: nullableTrimmedText(),
+    sourceKey: optionalTrimmedText(),
+    source: optionalTrimmedText(),
+    noteText: nullableTrimmedText(),
+    assumedAt: optionalTrimmedText(),
+  })
+  .refine(
+    (value) =>
+      value.yieldTonnesPerHa !== undefined || value.yield !== undefined,
+    {
+      message: "[yield-assumption] yieldTonnesPerHa must be a positive number.",
+      path: ["yieldTonnesPerHa"],
+    },
+  );
 
 export async function GET(
   request: Request,
@@ -38,10 +79,17 @@ export async function GET(
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
+    });
     const { fieldId } = await context.params;
     const { searchParams } = new URL(request.url);
-    const seasonYear = readOptionalSeasonYear(searchParams.get("seasonYear"));
+    const seasonYear = parseWithSchema(
+      optionalYearInput(
+        "[yield-assumption] seasonYear must be a valid integer year.",
+      ),
+      searchParams.get("seasonYear"),
+    );
     const cropSymbol = searchParams.get("cropSymbol")?.trim().toUpperCase() || undefined;
     const assumption = await runtime.services.market.latestFieldYieldAssumption({
       workspaceId: actor.workspaceId,
@@ -56,12 +104,10 @@ export async function GET(
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error
-        ? error.message
-        : "Field yield assumption lookup failed.",
-    );
+    return jsonServerError(error, {
+      event: "field-yield-assumption-get-route",
+      message: "Field yield assumption lookup failed.",
+    });
   }
 }
 
@@ -76,56 +122,67 @@ export async function POST(
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const actor = await resolveRequestActor(request, runtime);
+    const actor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
+    });
     const { fieldId } = await context.params;
     const body = await readJsonObject(request);
 
     if (!body) {
       return jsonError(400, "Expected a JSON request body.");
     }
+    const payload = parseWithSchema(YieldAssumptionBodySchema, body);
+    const rateLimitResponse = await enforceRouteRateLimits({
+      runtime,
+      rules: [
+        buildIpRateLimitRule({
+          request,
+          ...FIELD_YIELD_IP_RATE_LIMIT,
+          message: "Too many yield assumption updates.",
+        }),
+        {
+          ...FIELD_YIELD_RATE_LIMIT,
+          identifier: buildActorRateLimitIdentifier({
+            workspaceId: actor.workspaceId,
+            userId: actor.userId,
+            resourceId: fieldId,
+          }),
+          message: "Too many yield assumption updates.",
+        },
+      ],
+    });
 
-    const yieldTonnesPerHa =
-      typeof body.yieldTonnesPerHa === "number"
-        ? body.yieldTonnesPerHa
-        : typeof body.yield === "number"
-          ? body.yield
-          : null;
-    const seasonYear = readOptionalSeasonYear(body.seasonYear);
-    const cropSymbol =
-      typeof body.cropSymbol === "string" && body.cropSymbol.trim().length > 0
-        ? body.cropSymbol.trim().toUpperCase()
-        : null;
-    const sourceKey =
-      typeof body.sourceKey === "string" && body.sourceKey.trim().length > 0
-        ? body.sourceKey.trim()
-        : typeof body.source === "string" && body.source.trim().length > 0
-          ? body.source.trim()
-          : "manual-admin";
-    const noteText =
-      typeof body.noteText === "string" && body.noteText.trim().length > 0
-        ? body.noteText.trim()
-        : null;
-    const assumedAt =
-      typeof body.assumedAt === "string" && body.assumedAt.trim().length > 0
-        ? body.assumedAt.trim()
-        : undefined;
-
-    if (yieldTonnesPerHa == null || !Number.isFinite(yieldTonnesPerHa) || yieldTonnesPerHa <= 0) {
-      return jsonError(
-        400,
-        "[yield-assumption] yieldTonnesPerHa must be a positive number.",
-      );
+    if (rateLimitResponse) {
+      return rateLimitResponse;
     }
+
+    const yieldTonnesPerHa = payload.yieldTonnesPerHa ?? payload.yield;
 
     const assumption = await runtime.services.market.upsertFieldYieldAssumption({
       workspaceId: actor.workspaceId,
       fieldId,
-      seasonYear,
-      cropSymbol,
-      yieldTonnesPerHa,
-      sourceKey,
-      noteText,
-      assumedAt,
+      seasonYear: payload.seasonYear,
+      cropSymbol: payload.cropSymbol?.toUpperCase() ?? null,
+      yieldTonnesPerHa: yieldTonnesPerHa!,
+      sourceKey: payload.sourceKey ?? payload.source ?? "manual-admin",
+      noteText: payload.noteText ?? null,
+      assumedAt: payload.assumedAt,
+    });
+
+    await logAuditEvent({
+      runtime,
+      action: "field.yield_assumption_upserted",
+      actorUserId: actor.userId,
+      workspaceId: actor.workspaceId,
+      resourceType: "field-yield-assumption",
+      resourceId: assumption.id,
+      route: "/api/fields/[fieldId]/yield-assumption",
+      metadata: {
+        fieldId,
+        seasonYear: assumption.seasonYear,
+        cropSymbol: assumption.cropSymbol,
+        yieldTonnesPerHa: assumption.yieldTonnesPerHa,
+      },
     });
 
     return jsonOk({ assumption }, { status: 201 });
@@ -134,11 +191,9 @@ export async function POST(
       return jsonError(error.status, error.message);
     }
 
-    return jsonError(
-      500,
-      error instanceof Error
-        ? error.message
-        : "Field yield assumption upsert failed.",
-    );
+    return jsonServerError(error, {
+      event: "field-yield-assumption-post-route",
+      message: "Field yield assumption upsert failed.",
+    });
   }
 }

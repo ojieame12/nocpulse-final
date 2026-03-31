@@ -3,10 +3,13 @@ import {
   SupabaseSessionError,
 } from "@fieldpulse/module-auth";
 import type { ServerRuntime } from "@fieldpulse/platform-runtime";
+import {
+  isDevelopmentFallbackRequestAllowed,
+  requestHasValidDevelopmentFallbackToken,
+  resolveDevelopmentFallbackActorUserId,
+} from "../auth/developmentFallback";
 import { extractSupabaseAccessToken } from "../auth/extractSupabaseAccessToken";
 
-const FALLBACK_ACTOR_USER_ID = "00000000-0000-4000-8000-000000000001";
-const USER_ID_HEADER = "x-fieldpulse-user-id";
 const WORKSPACE_ID_HEADER = "x-fieldpulse-workspace-id";
 const PLACEHOLDER_WORKSPACE_IDS = new Set(["__empty__", "_empty_"]);
 
@@ -32,10 +35,6 @@ export function requireSupabaseRuntime(runtime: ServerRuntime) {
   }
 
   return runtime;
-}
-
-function canUseDevelopmentFallback(runtime: SupabaseServerRuntime) {
-  return runtime.env.nodeEnv !== "production";
 }
 
 export function resolveRequestedWorkspaceId(
@@ -74,7 +73,7 @@ export async function resolveRequestActor(
 ): Promise<ResolvedRequestActor> {
   const configured = requireSupabaseRuntime(runtime);
   const allowDevelopmentFallback =
-    options.allowDevelopmentFallback ?? true;
+    options.allowDevelopmentFallback ?? false;
   const preferredWorkspaceId =
     resolveRequestedWorkspaceId(request, options.preferredWorkspaceId) ??
     configured.env.devWorkspaceId ??
@@ -116,17 +115,28 @@ export async function resolveRequestActor(
     }
   }
 
-  if (!allowDevelopmentFallback || !canUseDevelopmentFallback(configured)) {
+  const canUseFallback =
+    allowDevelopmentFallback &&
+    isDevelopmentFallbackRequestAllowed({
+      nodeEnv: configured.env.nodeEnv,
+      request,
+    }) &&
+    await requestHasValidDevelopmentFallbackToken({
+      request,
+      serviceRoleKey: configured.env.supabase.serviceRoleKey,
+      devActorUserId: configured.env.devActorUserId,
+    });
+
+  if (!canUseFallback) {
     throw new RequestContextError(
       401,
       "[auth] No Supabase session was provided for this request.",
     );
   }
 
-  const actorUserId =
-    request.headers.get(USER_ID_HEADER)?.trim() ||
-    configured.env.devActorUserId ||
-    FALLBACK_ACTOR_USER_ID;
+  const actorUserId = resolveDevelopmentFallbackActorUserId({
+    devActorUserId: configured.env.devActorUserId,
+  });
   const actor = await configured.services.auth.resolveActor({
     userId: actorUserId,
     preferredWorkspaceId,
