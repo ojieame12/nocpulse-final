@@ -50,7 +50,8 @@ type SentinelHubStatisticsResponse = {
 const SENTINEL_HUB_STATS_ENDPOINT = "/api/v1/statistics";
 const EPSG_4326_CRS = "http://www.opengis.net/def/crs/EPSG/0/4326";
 const TEN_METERS_IN_DEGREES = 0.00009;
-const MATERIALIZATION_CONCURRENCY = 4;
+const MATERIALIZATION_CONCURRENCY = 1;
+const MATERIALIZATION_REQUEST_SPACING_MS = 200;
 const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 const DEFAULT_REQUEST_RETRIES = 4;
 const DEFAULT_RETRY_DELAY_MS = 750;
@@ -431,12 +432,18 @@ async function fetchSentinel2CellMeasurements({
   baseUrl,
   boundary,
   capturedAt,
+  index,
 }: {
   accessToken: string;
   baseUrl: string;
   boundary: RasterPolygon;
   capturedAt: string;
+  index?: number;
 }): Promise<Readonly<Record<string, number>> | null> {
+  if ((index ?? 0) > 0) {
+    await sleep(MATERIALIZATION_REQUEST_SPACING_MS);
+  }
+
   const response = await postJsonWithRetry(
     `${baseUrl}${SENTINEL_HUB_STATS_ENDPOINT}`,
     {
@@ -526,12 +533,13 @@ async function materializeSentinel2Observation({
   const measuredCells = await mapWithConcurrency(
     gridCells,
     MATERIALIZATION_CONCURRENCY,
-    async (cell) => {
+    async (cell, index) => {
       const measurements = await fetchSentinel2CellMeasurements({
         accessToken,
         baseUrl,
         boundary: cell.boundary,
         capturedAt: input.scene.capturedAt,
+        index,
       });
 
       return measurements
@@ -651,12 +659,18 @@ async function fetchSentinel1CellMeasurements({
   baseUrl,
   boundary,
   capturedAt,
+  index,
 }: {
   accessToken: string;
   baseUrl: string;
   boundary: RasterPolygon;
   capturedAt: string;
+  index?: number;
 }): Promise<Readonly<Record<string, number>> | null> {
+  if ((index ?? 0) > 0) {
+    await sleep(MATERIALIZATION_REQUEST_SPACING_MS);
+  }
+
   const response = await postJsonWithRetry(
     `${baseUrl}${SENTINEL_HUB_STATS_ENDPOINT}`,
     {
@@ -748,12 +762,13 @@ async function materializeSentinel1Observation({
   const measuredCells = await mapWithConcurrency(
     gridCells,
     MATERIALIZATION_CONCURRENCY,
-    async (cell) => {
+    async (cell, index) => {
       const measurements = await fetchSentinel1CellMeasurements({
         accessToken,
         baseUrl,
         boundary: cell.boundary,
         capturedAt: input.scene.capturedAt,
+        index,
       });
 
       return measurements
