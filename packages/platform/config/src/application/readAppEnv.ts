@@ -70,6 +70,8 @@ export function readAppEnv(source: Partial<Record<keyof AppEnv | string, string 
     },
     requestAccess: {
       notifyEmail: parsed.REQUEST_ACCESS_NOTIFY_EMAIL,
+      reviewWorkspaceId: parsed.REQUEST_ACCESS_REVIEW_WORKSPACE_ID,
+      reviewGrantedByUserId: parsed.REQUEST_ACCESS_REVIEW_GRANTED_BY_USER_ID,
     },
     r2: {
       enabled: r2Enabled,

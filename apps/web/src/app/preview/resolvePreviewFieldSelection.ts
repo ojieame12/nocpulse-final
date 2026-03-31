@@ -1,9 +1,8 @@
 import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import type { FieldBoundaryPreviewRenderModel } from "@fieldpulse/map/server";
+import { RequestContextError } from "../../server/runtime/resolveRequestContext";
 import { getWebServerRuntime } from "../../server/runtime/getWebServerRuntime";
 import { resolveServerComponentActorContext } from "../../server/runtime/resolveServerComponentActorContext";
-
-const HOPE_CREEK_WORKSPACE_SLUG = "hope-creek-farms";
 
 type PreviewWorkspaceSelection = {
   id: string;
@@ -17,6 +16,7 @@ type PreviewFieldSelection = {
 type PreviewFieldSelectionResult =
   | { status: "no-runtime" }
   | { status: "unauthenticated" }
+  | { status: "pending-access" }
   | { status: "no-fields" }
   | {
       status: "ready";
@@ -34,15 +34,35 @@ export async function resolvePreviewFieldSelection(
     return { status: "no-runtime" };
   }
 
-  const actorContext = await resolveServerComponentActorContext(runtime).catch(() => ({
-    actor: null,
-    authMode: "none" as const,
-    authModeLabel: "No actor available",
-    actorErrorMessage: "Authentication unavailable",
-  }));
+  const actorContext = await resolveServerComponentActorContext(runtime).catch(
+    (error: unknown) => {
+      if (error instanceof RequestContextError && error.status === 403) {
+        return {
+          actor: null,
+          authMode: "none" as const,
+          authModeLabel: "Authenticated actor access denied",
+          actorErrorMessage: error.message,
+          authRedirectStatus: "pending-access" as const,
+        };
+      }
+
+      return {
+        actor: null,
+        authMode: "none" as const,
+        authModeLabel: "No actor available",
+        actorErrorMessage: "Authentication unavailable",
+        authRedirectStatus: "unauthenticated" as const,
+      };
+    },
+  );
 
   if (!actorContext.actor) {
-    return { status: "unauthenticated" };
+    return {
+      status:
+        "authRedirectStatus" in actorContext
+          ? actorContext.authRedirectStatus
+          : "unauthenticated",
+    };
   }
 
   const workspaceSelection = await runtime.services.workspaces.resolveSelection({
@@ -107,10 +127,7 @@ export function resolvePreferredPreviewWorkspaceId(
   workspaces: readonly PreviewWorkspaceSelection[],
   fallbackWorkspaceId: string,
 ) {
-  return (
-    workspaces.find((workspace) => workspace.slug === HOPE_CREEK_WORKSPACE_SLUG)?.id ??
-    fallbackWorkspaceId
-  );
+  return fallbackWorkspaceId;
 }
 
 export function resolvePreviewFieldId(

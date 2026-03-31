@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { buildPreviewViewModel } from './buildPreviewViewModel';
 import { PreviewShell, type FieldViewModel } from './PreviewShell';
 import { PreviewEmptyShell } from './PreviewEmptyShell';
@@ -24,6 +26,14 @@ export default async function PreviewPage({ searchParams }: PreviewPageProps) {
     return <PreviewEmptyShell status="unauthenticated" />;
   }
 
+  if (viewModel.status === 'pending-access') {
+    redirect(
+      `/auth/pending-access?next=${encodeURIComponent(
+        `/preview${requestedFieldId ? `?fieldId=${requestedFieldId}` : ''}`,
+      )}`,
+    );
+  }
+
   // "ready" — includes empty workspaces (shell renders with empty states)
   const vm = viewModel as Extract<typeof viewModel, { status: 'ready' }>;
   const initial: FieldViewModel = {
@@ -46,7 +56,12 @@ export default async function PreviewPage({ searchParams }: PreviewPageProps) {
 
   return (
     <ErrorBoundary fallbackMessage="The preview environment crashed unexpectedly.">
-      <PreviewShell initial={initial} initialPanelsPromise={vm.panelsPromise} viewer={vm.viewer ?? null} />
+      <PreviewShell
+        initial={initial}
+        initialPanelsPromise={vm.panelsPromise}
+        viewer={vm.viewer ?? null}
+        guestSession={vm.guestSession ?? null}
+      />
     </ErrorBoundary>
   );
 }

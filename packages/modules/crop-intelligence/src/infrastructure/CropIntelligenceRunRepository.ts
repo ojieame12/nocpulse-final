@@ -9,6 +9,7 @@ export type CropIntelligenceRunRepository = {
   ): Promise<readonly CropIntelligenceRun[]>;
   listRecentRuns(input: {
     workspaceId?: string;
+    fieldId?: string;
     startedAfter?: string;
     limit?: number;
     sourceKey?: string;

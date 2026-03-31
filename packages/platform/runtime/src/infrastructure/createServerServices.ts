@@ -8,6 +8,9 @@ import {
 import type { FieldAlert } from "@fieldpulse/module-alerts";
 import { resolveAuthenticatedActor } from "@fieldpulse/module-auth";
 import {
+  FIELD_ACTION_CURATION_SOURCE_KEY,
+  buildFieldActionCurationVersion,
+  parseFieldActionCuration,
   buildFieldZoneActivityReport,
   buildDiseaseRiskReport,
   buildAlertFromIntelligenceFinding,
@@ -20,6 +23,7 @@ import {
   listWorkspaceIntelligenceFindings,
   prairieDefaultRulePack,
   resolveCropRuleContext,
+  type FieldActionCuration,
   type FieldIntelligenceFinding,
   upsertCropIntelligenceRun,
   upsertFieldIntelligenceFinding,
@@ -128,6 +132,7 @@ import type {
 } from "../contracts/ServerServices";
 import { createDefaultMoistureCellDerivationStrategy } from "./createDefaultMoistureCellDerivationStrategy";
 import {
+  loadFieldDetailByWorkspace,
   loadWorkspaceFieldDetail,
   loadWorkspaceFieldOverview,
   resolvePreferredWorkspaceSelection,
@@ -149,6 +154,7 @@ import {
   buildRuntimeFieldReportReadModel,
   renderRuntimeFieldReportPdf,
 } from "./fieldReportServices";
+import { curateFieldActionWithGemini } from "./curateFieldActionWithGemini";
 
 const REPORT_FIELD_CONCURRENCY = 12;
 
@@ -238,6 +244,298 @@ async function syncGeneratedFindingAlerts(
 
 function toSeasonYear(requestedAt: string) {
   return new Date(requestedAt).getUTCFullYear();
+}
+
+type RankedIntelligenceEntry = {
+  kind: "finding" | "alert";
+  family: string;
+  severityRank: number;
+  trackedZoneCount: number;
+  updatedAt: string | null;
+  familyPriority: number;
+  record: any;
+};
+
+function severityRank(value: string | null | undefined) {
+  switch (value) {
+    case "critical":
+      return 4;
+    case "high":
+      return 3;
+    case "medium":
+      return 2;
+    case "low":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function familyPriority(value: string | null | undefined) {
+  switch (value) {
+    case "hail_risk":
+      return 5;
+    case "moisture_stress":
+      return 4;
+    case "disease_risk":
+      return 3;
+    case "weather_risk":
+      return 2;
+    case "crop_health":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function toTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function countTrackedZones(value: any) {
+  const trackedZones = value?.evidence?.trackedZones;
+  if (Array.isArray(trackedZones)) {
+    return trackedZones.length;
+  }
+
+  const trackedZoneIds = value?.evidence?.trackedZoneIds;
+  if (Array.isArray(trackedZoneIds)) {
+    return trackedZoneIds.length;
+  }
+
+  return 0;
+}
+
+function rankActiveIntelligenceEntries(entries: readonly RankedIntelligenceEntry[]) {
+  return [...entries].sort((left, right) => {
+    if (right.severityRank !== left.severityRank) {
+      return right.severityRank - left.severityRank;
+    }
+
+    if (right.trackedZoneCount !== left.trackedZoneCount) {
+      return right.trackedZoneCount - left.trackedZoneCount;
+    }
+
+    if (right.familyPriority !== left.familyPriority) {
+      return right.familyPriority - left.familyPriority;
+    }
+
+    const updatedDelta = toTimestamp(right.updatedAt) - toTimestamp(left.updatedAt);
+    if (updatedDelta !== 0) {
+      return updatedDelta;
+    }
+
+    if (left.kind !== right.kind) {
+      return left.kind === "finding" ? -1 : 1;
+    }
+
+    return 0;
+  });
+}
+
+function dueDateLabel(value: string | null | undefined) {
+  switch (value) {
+    case "critical":
+    case "high":
+      return "Within 24h";
+    case "medium":
+      return "Within 48h";
+    case "low":
+      return "This week";
+    default:
+      return "As available";
+  }
+}
+
+function stripWrappedEnvValue(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim() || null;
+  }
+
+  return trimmed || null;
+}
+
+function resolveFieldActionCurationConfig() {
+  const enabled = process.env.FIELD_ACTION_CURATION_ENABLED?.trim() !== "0";
+  if (!enabled) {
+    return null;
+  }
+
+  const apiKey =
+    stripWrappedEnvValue(process.env.GOOGLE_AI_API_KEY) ??
+    stripWrappedEnvValue(process.env.GEMINI_API_KEY) ??
+    stripWrappedEnvValue(process.env.VITE_GOOGLE_AI_API_KEY);
+
+  if (!apiKey) {
+    return null;
+  }
+
+  return {
+    apiKey,
+    modelKey:
+      stripWrappedEnvValue(process.env.FIELD_ACTION_CURATION_MODEL) ??
+      stripWrappedEnvValue(process.env.GEMINI_MODEL) ??
+      "gemini-2.5-flash",
+  };
+}
+
+function buildFieldActionCurationContext(input: {
+  field: { name: string; legalLandDescription?: string | null };
+  readModel: any;
+}): {
+  inputVersion: string;
+  facts: Record<string, unknown>;
+  basis: {
+    state: "active";
+    source: "findings" | "alerts";
+    topRiskTitle: string;
+    topRiskSeverity: "low" | "medium" | "high" | "critical" | null;
+    dueDate: string;
+    activeFindingCount: number;
+    activeZoneCount: number;
+    activeAlertCount: number;
+  };
+} | null {
+  const findings = (input.readModel.findings ?? []).filter(
+    (finding: any) => finding.status === "active",
+  );
+  const alerts = (input.readModel.alerts ?? []).filter(
+    (alert: any) => alert.status === "active",
+  );
+
+  const ranked = rankActiveIntelligenceEntries([
+    ...findings.map(
+      (finding: any): RankedIntelligenceEntry => ({
+        kind: "finding",
+        family: finding.family,
+        severityRank: severityRank(finding.severity),
+        trackedZoneCount: countTrackedZones(finding),
+        updatedAt: finding.updatedAt ?? finding.startedAt ?? null,
+        familyPriority: familyPriority(finding.family),
+        record: finding,
+      }),
+    ),
+    ...alerts.map(
+      (alert: any): RankedIntelligenceEntry => ({
+        kind: "alert",
+        family: alert.family,
+        severityRank: severityRank(alert.severity),
+        trackedZoneCount: countTrackedZones(alert),
+        updatedAt: alert.updatedAt ?? alert.startedAt ?? null,
+        familyPriority: familyPriority(alert.family),
+        record: alert,
+      }),
+    ),
+  ]);
+
+  const primary = ranked[0];
+  if (!primary) {
+    return null;
+  }
+
+  const activeFindingCount =
+    input.readModel.summary?.activeFindingCount ??
+    findings.length;
+  const activeZoneCount =
+    input.readModel.summary?.activeTrackedZoneCount ??
+    ((input.readModel.zones?.newZoneCount ?? 0) +
+      (input.readModel.zones?.persistentZoneCount ?? 0) +
+      (input.readModel.zones?.recoveringZoneCount ?? 0));
+  const activeAlertCount =
+    input.readModel.summary?.activeAlertCount ??
+    alerts.length;
+  const topRiskSeverity = (primary.record?.severity ?? null) as
+    | "low"
+    | "medium"
+    | "high"
+    | "critical"
+    | null;
+  const dueDate = dueDateLabel(topRiskSeverity);
+  const basis = {
+    state: "active" as const,
+    source: primary.kind === "finding" ? "findings" as const : "alerts" as const,
+    topRiskTitle: primary.record?.title ?? "Active field intelligence",
+    topRiskSeverity,
+    dueDate,
+    activeFindingCount,
+    activeZoneCount,
+    activeAlertCount,
+  };
+  const inputVersion = buildFieldActionCurationVersion(basis);
+  const moisture = input.readModel.moisture?.latestSnapshot ?? null;
+  const weatherSignals = input.readModel.weather?.signals ?? null;
+
+  return {
+    inputVersion,
+    basis,
+    facts: {
+      field: {
+        name: input.field.name,
+        lld: input.field.legalLandDescription ?? null,
+        cropType:
+          input.readModel.cropContext?.cropType ??
+          input.readModel.summary?.cropType ??
+          null,
+        growthStage:
+          input.readModel.cropContext?.growthStage ??
+          input.readModel.summary?.growthStage ??
+          null,
+      },
+      intelligence: {
+        state: "active",
+        source: basis.source,
+        topRiskTitle: basis.topRiskTitle,
+        topRiskSeverity: basis.topRiskSeverity,
+        dueDate: basis.dueDate,
+        activeFindingCount,
+        activeZoneCount,
+        activeAlertCount,
+        trackedZoneCount: primary.trackedZoneCount,
+        primaryFamily: primary.family,
+        primarySummary: primary.record?.summary ?? null,
+        primaryExplanation: primary.record?.explanation ?? null,
+        primaryRecommendedAction: primary.record?.recommendedAction ?? null,
+        additionalActiveItems: ranked.slice(1, 3).map((entry) => ({
+          kind: entry.kind,
+          family: entry.family,
+          title: entry.record?.title ?? null,
+          severity: entry.record?.severity ?? null,
+        })),
+      },
+      moisture: moisture
+        ? {
+            observedAt: moisture.observedAt ?? null,
+            sourceKey: moisture.sourceKey ?? null,
+            rootZonePct: moisture.rootZonePct ?? null,
+            surfacePct: moisture.surfacePct ?? null,
+            confidence: moisture.confidence ?? null,
+          }
+        : null,
+      weather: weatherSignals
+        ? {
+            observedAt: weatherSignals.observedAt ?? null,
+            updatedAt: weatherSignals.updatedAt ?? null,
+            sourceKey: weatherSignals.sourceKey ?? null,
+            frostRiskMinTempC: weatherSignals.frostRiskMinTempC ?? null,
+            peakForecastVpdKpa24h: weatherSignals.peakForecastVpdKpa24h ?? null,
+            netWaterBalance72hMm: weatherSignals.netWaterBalance72hMm ?? null,
+          }
+        : null,
+    },
+  };
 }
 
 async function resolveCanonicalCropContext(
@@ -656,6 +954,9 @@ export function createServerServices(
       },
       loadWorkspaceFieldDetail(input) {
         return loadWorkspaceFieldDetail(repositories, input);
+      },
+      loadFieldDetailByWorkspace(input) {
+        return loadFieldDetailByWorkspace(repositories, input);
       },
     },
     imagery: {
@@ -1133,6 +1434,8 @@ export function createServerServices(
           workspaceId: input.workspaceId,
           limit: input.limit,
           status: input.status,
+          family: input.family,
+          updatedAfter: input.updatedAfter,
         });
       },
       async upsertRun(input) {
@@ -1291,6 +1594,123 @@ export function createServerServices(
           alerts,
           alertSync,
         };
+      },
+      async loadLatestFieldActionCuration(input) {
+        const [run] = await repositories.cropIntelligenceRuns.listRecentRuns({
+          workspaceId: input.workspaceId,
+          fieldId: input.fieldId,
+          sourceKey: FIELD_ACTION_CURATION_SOURCE_KEY,
+          status: "completed",
+          limit: 1,
+        });
+
+        if (!run) {
+          return null;
+        }
+
+        return parseFieldActionCuration(run.provenance, run.inputVersion);
+      },
+      async curateFieldAction(input) {
+        const config = resolveFieldActionCurationConfig();
+        if (!config) {
+          return null;
+        }
+
+        const requestedAt = input.requestedAt ?? new Date().toISOString();
+        const field = await requireFieldDetail(
+          repositories,
+          input.workspaceId,
+          input.fieldId,
+        );
+        const readModel = await buildRuntimeFieldReportReadModel(repositories, {
+          workspaceId: input.workspaceId,
+          fieldId: input.fieldId,
+          field,
+          reportDate: requestedAt,
+        });
+        const context = buildFieldActionCurationContext({
+          field,
+          readModel,
+        });
+
+        if (!context) {
+          return null;
+        }
+
+        const [latestRun] = await repositories.cropIntelligenceRuns.listRecentRuns({
+          workspaceId: input.workspaceId,
+          fieldId: input.fieldId,
+          sourceKey: FIELD_ACTION_CURATION_SOURCE_KEY,
+          status: "completed",
+          limit: 1,
+        });
+        const latestCuration = latestRun
+          ? parseFieldActionCuration(latestRun.provenance, latestRun.inputVersion)
+          : null;
+
+        if (
+          !input.force &&
+          latestCuration &&
+          latestCuration.inputVersion === context.inputVersion
+        ) {
+          return latestCuration;
+        }
+
+        try {
+          const generated = await curateFieldActionWithGemini({
+            apiKey: config.apiKey,
+            modelKey: config.modelKey,
+            facts: context.facts,
+          });
+          const completedAt = new Date().toISOString();
+          const curation: FieldActionCuration = {
+            inputVersion: context.inputVersion,
+            generatedAt: completedAt,
+            ...generated,
+          };
+
+          await repositories.cropIntelligenceRuns.upsertRun({
+            workspaceId: input.workspaceId,
+            fieldId: input.fieldId,
+            sourceKey: FIELD_ACTION_CURATION_SOURCE_KEY,
+            modelKey: config.modelKey,
+            status: "completed",
+            startedAt: requestedAt,
+            completedAt,
+            inputVersion: context.inputVersion,
+            provenance: {
+              kind: FIELD_ACTION_CURATION_SOURCE_KEY,
+              provider: curation.provider,
+              modelKey: curation.modelKey,
+              generatedAt: curation.generatedAt,
+              recommendation: curation.recommendation,
+              explanation: curation.explanation,
+              inspectFirst: curation.inspectFirst,
+              whyNow: curation.whyNow,
+              supportingContext: curation.supportingContext,
+              confidence: curation.confidence,
+            },
+          });
+
+          return curation;
+        } catch (error) {
+          await repositories.cropIntelligenceRuns.upsertRun({
+            workspaceId: input.workspaceId,
+            fieldId: input.fieldId,
+            sourceKey: FIELD_ACTION_CURATION_SOURCE_KEY,
+            modelKey: config.modelKey,
+            status: "failed",
+            startedAt: requestedAt,
+            completedAt: new Date().toISOString(),
+            inputVersion: context.inputVersion,
+            provenance: {
+              kind: `${FIELD_ACTION_CURATION_SOURCE_KEY}-error`,
+              message: toErrorMessage(error),
+            },
+          });
+
+          return null;
+        }
       },
       async buildRecentDiseaseRiskReport(input = {}) {
         return buildRecentDiseaseRiskReport(repositories, input);

@@ -5,7 +5,7 @@ import {
   resolvePreviewFieldId,
 } from "./resolvePreviewFieldSelection";
 
-test("resolvePreferredPreviewWorkspaceId prefers Hope Creek when present", () => {
+test("resolvePreferredPreviewWorkspaceId keeps the actor workspace even when Hope Creek is present", () => {
   const workspaceId = resolvePreferredPreviewWorkspaceId(
     [
       { id: "workspace-1", slug: "batch-demo" },
@@ -14,7 +14,7 @@ test("resolvePreferredPreviewWorkspaceId prefers Hope Creek when present", () =>
     "workspace-fallback",
   );
 
-  assert.equal(workspaceId, "workspace-hope-creek");
+  assert.equal(workspaceId, "workspace-fallback");
 });
 
 test("resolvePreferredPreviewWorkspaceId falls back to actor workspace when Hope Creek is absent", () => {

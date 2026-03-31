@@ -29,7 +29,7 @@ export async function GET(
     const prepared = prepareFieldDetailReportArtifact({
       fieldId: viewModel.fieldId,
       fieldName: viewModel.fieldName,
-      areaHaLabel: viewModel.areaHaLabel,
+      areaLabel: viewModel.areaHaLabel,
       summary: viewModel.summary,
       report: panels.reportPanel,
     });

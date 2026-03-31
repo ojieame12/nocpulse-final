@@ -7,6 +7,8 @@ import {
   normalizeWorkspaceSettings,
   type WorkspaceSettingsState,
 } from '../../features/settings/workspaceSettings';
+import { WorkspaceAccessCard } from './WorkspaceAccessCard';
+import { FieldShareCard } from './FieldShareCard';
 
 /* ── Types ── */
 
@@ -22,6 +24,8 @@ interface SettingsPanelProps {
   onClose?: () => void;
   workspaceId?: string | null;
   viewer?: SettingsViewer | null;
+  fieldId?: string | null;
+  fieldName?: string | null;
 }
 
 function readPersistedSettings(storageKey: string): WorkspaceSettingsState | null {
@@ -143,7 +147,13 @@ function Integration({ icon: Icon, name, desc, status, color }: {
 
 /* ── Component ── */
 
-export function SettingsPanel({ onClose, workspaceId = null, viewer = null }: SettingsPanelProps) {
+export function SettingsPanel({
+  onClose,
+  workspaceId = null,
+  viewer = null,
+  fieldId = null,
+  fieldName = null,
+}: SettingsPanelProps) {
   const profileName = viewer?.displayName ?? 'John Draper';
   const profileInitials = viewer?.initials ?? 'JD';
   const profileRole = viewer?.workspaceRoleLabel ?? 'Owner';
@@ -310,6 +320,14 @@ export function SettingsPanel({ onClose, workspaceId = null, viewer = null }: Se
           </div>
           <Mono>{profileEmail}</Mono>
         </Card>
+
+        <FieldShareCard
+          workspaceId={workspaceId}
+          fieldId={fieldId}
+          fieldName={fieldName}
+        />
+
+        <WorkspaceAccessCard workspaceId={workspaceId} />
 
         {/* ── Notifications ── */}
         <Card span={-1} style={{ gap: 4 }}>

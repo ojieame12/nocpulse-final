@@ -92,6 +92,19 @@ export function TopBar({
     whiteSpace: "nowrap",
     boxShadow: "0 4px 0 #002a15",
   };
+  const viewerMeta = viewer?.email
+    ? `${viewer.email} · ${viewer.workspaceRoleLabel}`
+    : viewer
+      ? [viewer.workspaceRoleLabel, viewer.workspaceName]
+          .filter(Boolean)
+          .join(" · ")
+      : null;
+  const viewerTitle = viewer
+    ? [viewer.displayName, viewer.email, viewer.workspaceRoleLabel, viewer.workspaceName]
+        .filter(Boolean)
+        .join(" · ")
+    : null;
+
   return (
     <header className="app-topbar">
       <div className="app-topbar__left">
@@ -155,13 +168,13 @@ export function TopBar({
         ) : null}
         {showAvatar ? (
           viewer ? (
-            <div className="app-topbar__avatar-wrap">
+            <div className="app-topbar__avatar-wrap" title={viewerTitle ?? undefined}>
               <div className="app-topbar__avatar app-topbar__avatar--initials">
                 {viewer.initials}
               </div>
               <div className="app-topbar__avatar-dropdown">
                 <span className="app-topbar__viewer-name">{viewer.displayName}</span>
-                <span className="app-topbar__viewer-role">{viewer.workspaceRoleLabel}</span>
+                <span className="app-topbar__viewer-role">{viewerMeta ?? viewer.workspaceRoleLabel}</span>
                 {viewer.email ? (
                   <span className="app-topbar__viewer-email">{viewer.email}</span>
                 ) : null}

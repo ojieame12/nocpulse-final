@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import type { WorkspaceRole } from "@fieldpulse/module-workspaces";
 
 const ALGORITHM = "sha256";
-const DEFAULT_GRANT_ACCESS_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_GRANT_ACCESS_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
 export type GrantAccessTokenPayload = {
   requestId: string;

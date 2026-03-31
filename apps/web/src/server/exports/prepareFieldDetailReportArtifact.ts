@@ -1,13 +1,18 @@
-import { renderPdfDocument } from "@fieldpulse/pdf";
-import type { PdfBlock } from "@fieldpulse/pdf";
-import type { FieldSummaryProps } from "../../components/panels/SummaryTab";
+import { renderPdfDocument, type PdfBlock, type PdfRenderInput, type RGB } from "@fieldpulse/pdf";
 import type {
   FieldReportProps,
-  ReportAlertItem,
   ReportChartSection,
-  ReportFindingItem,
-  ReportZoneItem,
 } from "../../components/panels/ReportTab";
+import type { FieldSummaryProps } from "../../components/panels/SummaryTab";
+import { loadPdfBrandLogo } from "./loadPdfBrandLogo";
+
+/* ═══════════════════════════════════════════════════════════════════
+   Field Detail Report — Branded PDF Artifact
+   ───────────────────────────────────────────────────────────────────
+   Produces a visual NocPulse-branded PDF from the same view-model
+   data that drives the UI panels: metric strips, colored severity
+   cards, data tables, progress bars, sparklines.
+   ═══════════════════════════════════════════════════════════════════ */
 
 function slugify(value: string) {
   return value
@@ -16,367 +21,402 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-/* ── Helpers ── */
+/* ── Brand palette ── */
+const GREEN: RGB = [0.08, 0.24, 0.17];
+const RED: RGB = [0.93, 0.27, 0.27];
+const AMBER: RGB = [0.96, 0.62, 0.04];
+const TEAL: RGB = [0.09, 0.64, 0.29];
 
-function severityIntent(severity: "High" | "Med" | "Low" | string): "danger" | "warning" | "info" {
-  if (severity === "High") return "danger";
-  if (severity === "Med") return "warning";
-  return "info";
+function sevType(sev: string): "critical" | "warning" | "info" {
+  const s = sev.toLowerCase();
+  return s === "high" ? "critical" : s === "med" ? "warning" : "info";
 }
 
-function summarizeChart(chart: ReportChartSection): string {
-  const seriesSummaries = chart.series.map((series) => {
-    const populated = series.points.filter((point) => typeof point.value === "number");
-    const latest = [...populated].reverse()[0];
-    return latest
-      ? `${series.label}: ${latest.value} (${latest.label})`
-      : `${series.label}: unavailable`;
-  });
-
-  return `${chart.subtitle} ${seriesSummaries.join(" · ")}`.trim();
+function hexToRgb(hex: string): RGB | undefined {
+  const c = hex.replace("#", "");
+  if (c.length !== 6) return undefined;
+  const r = parseInt(c.slice(0, 2), 16) / 255;
+  const g = parseInt(c.slice(2, 4), 16) / 255;
+  const b = parseInt(c.slice(4, 6), 16) / 255;
+  if (Number.isNaN(r)) return undefined;
+  return [r, g, b];
 }
 
-/* ── Builder ── */
+function chartSparkSeries(chart: ReportChartSection) {
+  return chart.series
+    .map((series) => ({
+      label: series.label,
+      color: hexToRgb(series.color) ?? GREEN,
+      data: series.points
+        .map((point) => point.value)
+        .filter((value): value is number => value !== null && Number.isFinite(value)),
+    }))
+    .filter((series) => series.data.length >= 2);
+}
 
-export function prepareFieldDetailReportArtifact(input: {
+/* ── Export types ── */
+
+export type PrepareFieldDetailReportArtifactInput = {
   fieldId: string;
   fieldName: string;
-  areaHaLabel: string;
-  summary: FieldSummaryProps | null;
+  areaLabel: string;
   report: FieldReportProps | null;
-}) {
-  const report = input.report;
-  const summary = input.summary;
-  const reportDate = new Date().toISOString().slice(0, 10);
-  const artifactKey = `field-detail-report/${input.fieldId}/${reportDate}.pdf`;
+  summary: FieldSummaryProps | null;
+  generatedAt?: string;
+};
+
+export type PreparedFieldDetailReportArtifact = {
+  bytes: Uint8Array;
+  contentType: "application/pdf";
+  cacheControl: string;
+  fileName: string;
+  metadata: {
+    artifactKey: string;
+    pageCount: number;
+    byteSize: number;
+    sha256: string;
+  };
+};
+
+/* ── Block builder ── */
+
+function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
   const blocks: PdfBlock[] = [];
+  const r = input.report;
+  const s = input.summary;
+  const generatedAt = input.generatedAt ?? new Date().toISOString();
 
-  /* ── Header ── */
+  /* ━━ COVER ━━ */
 
-  blocks.push({ style: "title", text: `Field report: ${input.fieldName}` });
+  blocks.push({ kind: "text", style: "title", text: `${input.fieldName} Field Report` });
   blocks.push({
+    kind: "text",
     style: "caption",
-    text: `Generated ${new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}`,
+    text: `Field Report · ${r?.updatedDate ?? generatedAt.slice(0, 10)} · ${r?.lld ?? s?.lld ?? ""}`,
   });
 
-  blocks.push({ type: "spacer", height: 6 });
-  blocks.push({ type: "divider" });
-  blocks.push({ type: "spacer", height: 4 });
-
-  /* ── Field overview (key-value pairs) ── */
-
-  blocks.push({ style: "heading", text: "Field overview" });
-
-  const healthStatus = report?.healthStatus ?? summary?.fieldState ?? "—";
-  const healthIntent: "positive" | "warning" | "danger" | "neutral" =
-    /healthy|good/i.test(healthStatus) ? "positive"
-    : /stress|critical/i.test(healthStatus) ? "danger"
-    : /watch|caution/i.test(healthStatus) ? "warning"
-    : "neutral";
-
-  blocks.push({ type: "status", label: "Status", status: healthStatus, intent: healthIntent });
-
-  blocks.push({ type: "key-value", label: "Area", value: input.areaHaLabel });
-  blocks.push({
-    type: "key-value",
-    label: "Legal land description",
-    value: report?.lld ?? summary?.lld ?? "—",
-  });
-  blocks.push({ type: "key-value", label: "Crop", value: summary?.crop ?? "—" });
-  blocks.push({
-    type: "key-value",
-    label: "Stage",
-    value: summary?.cropStage ?? report?.cropStage ?? "—",
-  });
-  blocks.push({
-    type: "key-value",
-    label: "Updated",
-    value: report?.updatedDate ?? summary?.updatedLabel ?? "—",
-  });
-
-  if (summary?.contextLabel) {
-    blocks.push({ type: "key-value", label: "Context", value: summary.contextLabel });
-  }
-  if (summary?.conditionsMeta) {
-    blocks.push({ type: "key-value", label: "Conditions", value: summary.conditionsMeta });
-  }
-
-  blocks.push({ type: "spacer", height: 6 });
-  blocks.push({ type: "divider" });
-
-  /* ── Conditions snapshot (from summary tab) ── */
-
-  if (summary) {
-    blocks.push({ style: "heading", text: "Conditions snapshot" });
-
+  // Health status badge
+  if (r) {
+    const ok = /healthy|good|normal/i.test(r.healthStatus);
     blocks.push({
-      type: "metric-row",
-      items: [
-        { label: "Moisture", value: `${summary.moisture}%` },
-        { label: "Cloud cover", value: summary.cloudCover },
-        { label: "Surface moisture", value: summary.surfaceMoisture },
-      ],
+      kind: "status-badge",
+      label: r.healthStatus,
+      color: ok ? TEAL : r.alerts.length > 0 ? RED : AMBER,
+      marginTop: 6,
     });
+  }
+
+  // Field identity
+  blocks.push({
+    kind: "key-value",
+    pairs: [
+      { key: "Crop", value: s?.crop ?? "—" },
+      { key: "Stage", value: r?.cropStage ?? s?.cropStage ?? "—" },
+      { key: "Area", value: input.areaLabel },
+      { key: "LLD", value: r?.lld ?? s?.lld ?? "—" },
+    ],
+    columns: 2,
+    marginTop: 8,
+  });
+
+  if (r) {
     blocks.push({
-      type: "metric-row",
-      items: [
-        { label: "Root moisture", value: `${summary.rootMoisture} ${summary.rootMoistureSub}` },
-        { label: "Trend", value: `${summary.trend} ${summary.trendSub}` },
-        { label: "Spread", value: `${summary.spread} ${summary.spreadSub}` },
-        { label: "Confidence", value: `${summary.confidence} ${summary.confidenceSub}` },
+      kind: "metric-strip",
+      cells: [
+        { label: "Updated", value: r.updatedDate || generatedAt.slice(0, 10) },
+        { label: "Alerts", value: String(r.alerts.length), valueColor: r.alerts.length > 0 ? RED : TEAL },
+        { label: "Findings", value: String(r.findings.length), valueColor: r.findings.length > 0 ? AMBER : TEAL },
+        { label: "Zones", value: String(r.zones.length), valueColor: r.zones.length > 0 ? GREEN : undefined },
       ],
+      marginTop: 6,
     });
 
-    blocks.push({ type: "spacer", height: 4 });
-    blocks.push({ style: "subheading", text: "Precipitation" });
     blocks.push({
-      type: "metric-row",
-      items: [
-        { label: "Current", value: `${summary.precipitation} ${summary.precipitationSub}` },
-        { label: "Next rain", value: `${summary.nextRain} ${summary.nextRainSub}` },
-        { label: "Rain chance", value: `${summary.rainChance} ${summary.rainChanceSub}` },
-        { label: "7-day total", value: `${summary.sevenDayTotal} ${summary.sevenDayTotalSub}` },
-      ],
+      kind: "text",
+      style: "caption",
+      text: `Generated from the current FDP field report model, including live readings, atmospheric conditions, intelligence findings, tracked zones, and report provenance.`,
+    });
+  }
+
+  /* ━━ CURRENT READINGS ━━ */
+
+  if (r && r.readings.length > 0) {
+    blocks.push({
+      kind: "section-header",
+      label: "Current Readings",
+      meta: `${r.readings.length} metrics`,
+      accentColor: GREEN,
     });
 
-    blocks.push({ type: "spacer", height: 6 });
-    blocks.push({ type: "divider" });
-  }
+    blocks.push({
+      kind: "metric-strip",
+      cells: r.readings.slice(0, 5).map((rd) => ({
+        label: rd.label,
+        value: rd.value,
+        valueColor: rd.valueColor ? hexToRgb(rd.valueColor) : undefined,
+      })),
+      marginTop: 10,
+    });
 
-  /* ── Current readings (metric row) ── */
-
-  blocks.push({ style: "heading", text: "Current readings" });
-
-  const readings = report?.readings ?? [];
-  if (readings.length === 0) {
-    blocks.push({ style: "body", text: "No readings available." });
-  } else {
-    // Chunk into rows of 4
-    for (let i = 0; i < readings.length; i += 4) {
-      const chunk = readings.slice(i, i + 4);
+    if (r.readings.length > 5) {
       blocks.push({
-        type: "metric-row",
-        items: chunk.map((r) => ({ label: r.label, value: r.value })),
+        kind: "metric-grid",
+        cells: r.readings.slice(5).map((rd) => ({
+          label: rd.label,
+          value: rd.value,
+          valueColor: rd.valueColor ? hexToRgb(rd.valueColor) : undefined,
+        })),
+        columns: 4,
+        marginTop: 4,
       });
     }
   }
 
-  blocks.push({ type: "spacer", height: 6 });
-  blocks.push({ type: "divider" });
+  /* ━━ CONDITIONS ━━ */
 
-  /* ── Crop parameter assessment (key-value with range suffix) ── */
+  if (s) {
+    blocks.push({
+      kind: "section-header",
+      label: "Conditions",
+      meta: s.conditionsMeta ?? "Field average",
+    });
 
-  blocks.push({ style: "heading", text: "Crop parameter assessment" });
+    blocks.push({
+      kind: "metric-grid",
+      cells: [
+        { label: "Root Moisture", value: s.rootMoisture, sub: s.rootMoistureSub },
+        { label: "Trend (7d)", value: s.trend, sub: s.trendSub, valueColor: AMBER },
+        { label: "Spread (σ)", value: s.spread, sub: s.spreadSub },
+        { label: "Confidence", value: s.confidence, sub: s.confidenceSub },
+      ],
+      columns: 4,
+      marginTop: 4,
+    });
 
-  const cropParams = report?.cropParams ?? [];
-  if (cropParams.length === 0) {
-    blocks.push({ style: "body", text: "None." });
-  } else {
-    for (const param of cropParams) {
+    blocks.push({
+      kind: "section-header",
+      label: "Atmosphere",
+    });
+
+    blocks.push({
+      kind: "metric-grid",
+      cells: [
+        { label: "Precipitation", value: s.precipitation, sub: s.precipitationSub },
+        { label: "Next Rain", value: s.nextRain, sub: s.nextRainSub },
+        { label: "Rain Chance", value: s.rainChance, sub: s.rainChanceSub },
+        { label: "7-Day Total", value: s.sevenDayTotal, sub: s.sevenDayTotalSub },
+      ],
+      columns: 4,
+      marginTop: 4,
+    });
+  }
+
+  /* ━━ CROP PARAMETER ASSESSMENT ━━ */
+
+  if (r && r.cropParams.length > 0) {
+    blocks.push({
+      kind: "section-header",
+      label: "Crop Parameter Assessment",
+      meta: r.cropStage,
+    });
+
+    for (const p of r.cropParams) {
       blocks.push({
-        type: "key-value",
-        label: param.label,
-        value: param.value,
-        suffix: `${param.rangeLow}–${param.rangeHigh}`,
+        kind: "progress-bar",
+        label: p.label,
+        value: p.value,
+        percent: p.fillPercent,
+        fillColor: GREEN,
+        rangeLabels: [p.rangeLow, p.rangeHigh],
+        marginTop: 4,
       });
     }
   }
 
-  blocks.push({ type: "spacer", height: 6 });
-  blocks.push({ type: "divider" });
+  /* ━━ CHART SPARKLINES ━━ */
 
-  /* ── Trend history ── */
+  if (r && r.charts.length > 0) {
+    blocks.push({
+      kind: "section-header",
+      label: "Trend History",
+      meta: `${r.charts.length} chart${r.charts.length === 1 ? "" : "s"}`,
+    });
 
-  blocks.push({ style: "heading", text: "Trend history" });
-
-  const charts = report?.charts ?? [];
-  if (charts.length === 0) {
-    blocks.push({ style: "body", text: "No report charts available." });
-  } else {
-    for (const chart of charts) {
-      blocks.push({ style: "subheading", text: chart.title });
-      blocks.push({ style: "body", text: summarizeChart(chart) });
-      if (chart.emptyText) {
-        blocks.push({ style: "caption", text: chart.emptyText });
+    for (const chart of r.charts) {
+      const series = chartSparkSeries(chart);
+      if (series.length > 0) {
+        blocks.push({
+          kind: "multi-sparkline",
+          label: `${chart.title} — ${chart.subtitle}`,
+          series,
+          marginTop: 10,
+        });
+      } else if (chart.emptyText) {
+        blocks.push({
+          kind: "text",
+          style: "caption",
+          text: `${chart.title}: ${chart.emptyText}`,
+        });
       }
     }
   }
 
-  blocks.push({ type: "spacer", height: 6 });
-  blocks.push({ type: "divider" });
+  /* ━━ 7-DAY FORECAST ━━ */
 
-  /* ── 7-day outlook (key-value pairs) ── */
+  if (r && r.forecast.length > 0) {
+    blocks.push({
+      kind: "section-header",
+      label: "7-Day Forecast",
+    });
 
-  blocks.push({ style: "heading", text: "7-day outlook" });
-
-  const forecast = report?.forecast ?? [];
-  if (forecast.length === 0) {
-    blocks.push({ style: "body", text: "None." });
-  } else {
-    for (const day of forecast) {
-      blocks.push({
-        type: "key-value",
-        label: day.day,
-        value: day.temp,
-        suffix: day.precip,
-      });
-    }
+    blocks.push({
+      kind: "table",
+      columns: [
+        { label: "Day", width: 0.25 },
+        { label: "Temperature", width: 0.40 },
+        { label: "Precipitation", width: 0.35, align: "right" },
+      ],
+      rows: r.forecast.map((day) => ({
+        cells: [day.day, day.temp, day.precip],
+      })),
+      marginTop: 4,
+    });
   }
 
-  blocks.push({ type: "spacer", height: 6 });
-  blocks.push({ type: "divider" });
+  /* ━━ ALERTS ━━ */
 
-  /* ── Active alerts (status blocks) ── */
-
-  blocks.push({ style: "heading", text: "Active alerts" });
-
-  const alerts = report?.alerts ?? [];
-  if (alerts.length === 0) {
-    blocks.push({ style: "body", text: report?.alertsEmptyStateTitle ?? "None." });
-    if (report?.alertsEmptyStateDescription) {
-      blocks.push({ style: "caption", text: report.alertsEmptyStateDescription });
-    }
-  } else {
-    for (const alert of alerts) {
-      blocks.push({
-        type: "status",
-        label: alert.text,
-        status: alert.severity,
-        intent: severityIntent(alert.severity),
-      });
-      if (alert.detail) {
-        blocks.push({ style: "caption", text: alert.detail });
-      }
-      if (alert.trackedZoneIds.length > 0) {
-        blocks.push({ style: "caption", text: `Zones: ${alert.trackedZoneIds.join(", ")}` });
-      }
-    }
-  }
-
-  blocks.push({ type: "spacer", height: 6 });
-  blocks.push({ type: "divider" });
-
-  /* ── Findings (status blocks) ── */
-
-  blocks.push({ style: "heading", text: "Findings" });
-
-  const findings = report?.findings ?? [];
-  if (findings.length === 0) {
-    blocks.push({ style: "body", text: "None." });
-  } else {
-    for (const finding of findings) {
-      blocks.push({
-        type: "status",
-        label: finding.title,
-        status: finding.severity,
-        intent: severityIntent(finding.severity),
-      });
-      if (finding.summary) {
-        blocks.push({ style: "caption", text: finding.summary });
-      }
-      if (finding.trackedZoneIds.length > 0) {
-        blocks.push({ style: "caption", text: `Zones: ${finding.trackedZoneIds.join(", ")}` });
-      }
-    }
-  }
-
-  blocks.push({ type: "spacer", height: 6 });
-  blocks.push({ type: "divider" });
-
-  /* ── Tracked zones (status blocks with details) ── */
-
-  blocks.push({ style: "heading", text: "Tracked zones" });
-
-  const zones = report?.zones ?? [];
-  if (zones.length === 0) {
-    blocks.push({ style: "body", text: "None." });
-  } else {
-    for (const zone of zones) {
-      blocks.push({
-        type: "status",
-        label: zone.family,
-        status: zone.severity ?? "None",
-        intent: zone.severity ? severityIntent(zone.severity) : "neutral",
-      });
-      blocks.push({
-        type: "metric-row",
-        items: [
-          { label: "Status", value: zone.status },
-          { label: "Tracking", value: zone.trackingKey },
-          { label: "Cells", value: String(zone.affectedCellCount) },
-          { label: "Last seen", value: zone.lastSeenAt },
-        ],
-      });
-      blocks.push({ type: "spacer", height: 4 });
-    }
-  }
-
-  /* ── Summary alerts (from summary tab, if available and not duplicated by report alerts) ── */
-
-  if (summary && summary.alerts.length > 0 && alerts.length === 0) {
-    blocks.push({ type: "spacer", height: 6 });
-    blocks.push({ type: "divider" });
-
-    blocks.push({ style: "heading", text: "Summary alerts" });
-    for (const sa of summary.alerts) {
-      blocks.push({
-        type: "status",
-        label: sa.label,
-        status: sa.severity,
-        intent: sa.severity === "danger" ? "danger" : "warning",
-      });
-      if (sa.desc) {
-        blocks.push({ style: "caption", text: sa.desc });
-      }
-    }
-  }
-
-  /* ── 7-day outlook detail (from summary tab) ── */
-
-  if (summary && summary.outlook.length > 0) {
-    blocks.push({ type: "spacer", height: 6 });
-    blocks.push({ type: "divider" });
-
-    blocks.push({ style: "heading", text: "7-day weather outlook" });
-    for (const day of summary.outlook) {
-      blocks.push({
-        type: "key-value",
-        label: day.day,
-        value: `${day.high}° / ${day.low}°`,
-        suffix: day.precip,
-      });
-    }
-  }
-
-  blocks.push({ type: "spacer", height: 6 });
-  blocks.push({ type: "divider" });
-
-  /* ── Provenance ── */
-
-  blocks.push({ style: "heading", text: "Provenance" });
-  blocks.push({ style: "body", text: report?.provenanceText ?? "No provenance available." });
+  const alertCount = r?.alerts.length ?? 0;
   blocks.push({
-    type: "key-value",
-    label: "Sources",
-    value: report?.sources.length
-      ? report.sources.map((source) => source.label).join(", ")
-      : "none",
+    kind: "section-header",
+    label: "Active Alerts",
+    meta: `${alertCount} active`,
+    accentColor: alertCount > 0 ? RED : GREEN,
   });
 
-  /* ── Render ── */
+  if (!r || alertCount === 0) {
+    blocks.push({
+      kind: "text",
+      style: "body",
+      text: r?.alertsEmptyStateDescription ?? "No active alerts. Field conditions are within expected parameters.",
+    });
+  } else {
+    for (const alert of r.alerts.slice(0, 10)) {
+      blocks.push({
+        kind: "severity-card",
+        severity: sevType(alert.severity),
+        title: alert.text,
+        detail: alert.detail ?? undefined,
+        body: alert.trackedZoneIds.length > 0
+          ? `${alert.trackedZoneIds.length} tracked zone${alert.trackedZoneIds.length > 1 ? "s" : ""} linked`
+          : undefined,
+        marginTop: 4,
+      });
+    }
+  }
 
-  const pdf = renderPdfDocument({
-    artifactKey,
-    title: `Field report: ${input.fieldName}`,
-    subject: "Field detail report export",
+  /* ━━ FINDINGS ━━ */
+
+  if (r && r.findings.length > 0) {
+    blocks.push({
+      kind: "section-header",
+      label: "Intelligence Findings",
+      meta: `${r.findings.length} active`,
+      accentColor: AMBER,
+    });
+
+    for (const f of r.findings.slice(0, 10)) {
+      blocks.push({
+        kind: "severity-card",
+        severity: sevType(f.severity),
+        title: f.title,
+        body: f.summary ?? undefined,
+        marginTop: 4,
+      });
+    }
+  }
+
+  /* ━━ TRACKED ZONES ━━ */
+
+  if (r && r.zones.length > 0) {
+    blocks.push({
+      kind: "section-header",
+      label: "Tracked Zones",
+      meta: `${r.zones.length} zones`,
+    });
+
+    blocks.push({
+      kind: "table",
+      columns: [
+        { label: "Family", width: 0.25 },
+        { label: "Status", width: 0.18 },
+        { label: "Severity", width: 0.15 },
+        { label: "Cells", width: 0.12, align: "right" },
+        { label: "Last Seen", width: 0.30 },
+      ],
+      rows: r.zones.slice(0, 12).map((z) => ({
+        cells: [z.family, z.status, z.severity ?? "—", String(z.affectedCellCount), z.lastSeenAt],
+        accentColor: z.status === "critical" ? RED : z.status === "stressed" ? AMBER : undefined,
+      })),
+      marginTop: 4,
+    });
+  }
+
+  /* ━━ PROVENANCE ━━ */
+
+  blocks.push({ kind: "divider", marginTop: 16 });
+
+  if (r) {
+    blocks.push({
+      kind: "section-header",
+      label: "Provenance",
+      accentColor: GREEN,
+    });
+    blocks.push({ kind: "text", style: "caption", text: r.provenanceText });
+    if (r.sources.length > 0) {
+      blocks.push({
+        kind: "text",
+        style: "caption",
+        text: `Sources: ${r.sources.map((src) => src.label).join(" · ")}`,
+      });
+    }
+  }
+
+  blocks.push({
+    kind: "text",
+    style: "caption",
+    text: "This report was generated by NocPulse and reflects conditions at the time of data collection. Verify critical decisions with on-ground observation.",
+  });
+
+  return blocks;
+}
+
+/* ── Public API ── */
+
+export function prepareFieldDetailReportArtifact(
+  input: PrepareFieldDetailReportArtifactInput,
+): PreparedFieldDetailReportArtifact {
+  const blocks = buildBlocks(input);
+  const generatedAt = input.generatedAt ?? new Date().toISOString();
+  const now = generatedAt.slice(0, 10);
+  const brandLogo = loadPdfBrandLogo();
+
+  const renderInput: PdfRenderInput = {
+    artifactKey: `detail-reports/${slugify(input.fieldName)}/${now}.pdf`,
+    title: `Field Report: ${input.fieldName}`,
+    subject: `Field report for ${input.fieldName}`,
     author: "NocPulse",
+    brandLogo: brandLogo ? { format: "png", bytes: brandLogo } : undefined,
     blocks,
-  });
+  };
+
+  const result = renderPdfDocument(renderInput);
+  const fileName = `${slugify(input.fieldName)}-field-report-${now}.pdf`;
 
   return {
-    bytes: pdf.bytes,
-    contentType: "application/pdf" as const,
+    bytes: result.bytes,
+    contentType: "application/pdf",
     cacheControl: "private, max-age=0, no-cache",
-    fileName: `${slugify(input.fieldName)}-report-${reportDate}.pdf`,
+    fileName,
+    metadata: result.metadata,
   };
 }

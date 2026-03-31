@@ -12,8 +12,8 @@
     "@fieldpulse/platform-config": "workspace:*",
     "@fieldpulse/platform-db": "workspace:*",
     "@fieldpulse/platform-runtime": "workspace:*",
-    "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.53.0",
+    "@supabase/ssr": "^0.5.2",
     "lucide-react": "^1.7.0",
     "maplibre-gl": "^5.4.0",
     "next": "^15.3.4",
@@ -35,7 +35,7 @@
     "smoke:imagery-providers": "tsx src/server/smoke/imageryProviderRoutes.ts",
     "smoke:field-intake": "tsx src/server/smoke/fieldIntakeRoutes.ts",
     "start": "next start",
-    "test": "node --import tsx --test src/app/preview/resolvePreviewFieldSelection.test.ts src/app/preview/previewRoutes.test.ts src/app/preview/previewShellRouting.test.ts src/features/fields/fieldPageShellRouting.test.ts src/features/fields/buildFieldOverviewViewModel.raster.test.ts src/features/fields/buildFieldOverviewViewModel.test.ts src/features/fields/zoneGeometry.test.ts src/features/settings/workspaceSettings.test.ts src/components/panels/__tests__/colorSystem.test.ts src/components/panels/__tests__/helpers.test.ts src/components/panels/__tests__/modeDataBuilder.test.ts src/components/panels/__tests__/fieldDetailPanel.render.test.tsx src/components/panels/__tests__/alertsPanel.render.test.tsx src/components/panels/__tests__/addFieldPanel.render.test.tsx src/server/fields/manualFieldDraft.test.ts",
+    "test": "node --import tsx --test src/app/preview/resolvePreviewFieldSelection.test.ts src/app/preview/previewRoutes.test.ts src/app/preview/previewShellRouting.test.ts src/features/fields/fieldPageShellRouting.test.ts src/features/fields/buildFieldOverviewViewModel.raster.test.ts src/features/fields/buildFieldOverviewViewModel.test.ts src/features/fields/zoneGeometry.test.ts src/features/settings/workspaceSettings.test.ts src/features/settings/workspaceAccess.test.ts src/components/panels/__tests__/colorSystem.test.ts src/components/panels/__tests__/helpers.test.ts src/components/panels/__tests__/modeDataBuilder.test.ts src/components/panels/__tests__/fieldDetailPanel.render.test.tsx src/components/panels/__tests__/alertsPanel.render.test.tsx src/components/panels/__tests__/addFieldPanel.render.test.tsx src/server/auth/emailSignInEligibility.test.ts src/server/auth/extractSupabaseAccessToken.test.ts src/server/auth/guestShareSession.test.ts src/server/auth/rateLimit.test.ts src/server/auth/requestAccess.test.ts src/server/auth/sanitizeNextPath.test.ts src/server/auth/workspaceEmailProvisioning.test.ts src/server/auth/workspaceProvisioning.test.ts src/server/auth/workspaceInviteEmail.test.ts src/server/fields/manualFieldDraft.test.ts src/server/exports/prepareFieldCropReportArtifact.test.ts src/server/exports/prepareFieldDetailReportArtifact.test.ts",
     "typecheck": "tsc --noEmit"
   }
 }

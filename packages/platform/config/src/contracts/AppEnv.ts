@@ -52,6 +52,18 @@ export const AppEnvSchema = z.object({
   EMAIL_FROM: optionalString(),
   /** Internal recipient for request-access notifications. */
   REQUEST_ACCESS_NOTIFY_EMAIL: optionalString(),
+  /** Explicit workspace binding for request-access review links. */
+  REQUEST_ACCESS_REVIEW_WORKSPACE_ID: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim().length === 0 ? undefined : value,
+    z.string().uuid().optional(),
+  ),
+  /** Explicit granting user binding for request-access review links. */
+  REQUEST_ACCESS_REVIEW_GRANTED_BY_USER_ID: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim().length === 0 ? undefined : value,
+    z.string().uuid().optional(),
+  ),
 });
 
 export type AppEnv = z.infer<typeof AppEnvSchema>;

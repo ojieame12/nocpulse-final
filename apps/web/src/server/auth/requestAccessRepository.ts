@@ -95,7 +95,40 @@ export async function resolveSingleGrantAccessContext(input: {
   adminClient: SupabaseAdminClient;
   recipientEmail: string | null;
   role: WorkspaceRole;
+  explicitWorkspaceId?: string | null;
+  explicitGrantedByUserId?: string | null;
 }) {
+  if (input.explicitWorkspaceId && input.explicitGrantedByUserId) {
+    const explicitMembershipResult = await input.client
+      .from("workspace_memberships")
+      .select("workspace_id, user_id, role")
+      .eq("workspace_id", input.explicitWorkspaceId)
+      .eq("user_id", input.explicitGrantedByUserId)
+      .in("role", ["owner", "manager"])
+      .maybeSingle();
+
+    if (explicitMembershipResult.error) {
+      throw explicitMembershipResult.error;
+    }
+
+    if (explicitMembershipResult.data) {
+      return {
+        workspaceId: explicitMembershipResult.data.workspace_id,
+        grantedByUserId: explicitMembershipResult.data.user_id,
+        recipientEmail: input.recipientEmail,
+        role: input.role,
+      };
+    }
+
+    console.warn(
+      "[request-access] explicit review grant binding is invalid; falling back to recipient lookup",
+      {
+        workspaceId: input.explicitWorkspaceId,
+        grantedByUserId: input.explicitGrantedByUserId,
+      },
+    );
+  }
+
   if (!input.recipientEmail) {
     return null;
   }

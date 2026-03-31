@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import { createRouteHandlerSupabaseClient } from "../../../server/auth/createRouteHandlerSupabaseClient";
 import { sanitizeNextPath } from "../../../server/auth/sanitizeNextPath";
-import { claimWorkspaceEmailProvisions } from "../../../server/auth/workspaceEmailProvisioning";
+import {
+  claimWorkspaceEmailProvisions,
+  normalizeWorkspaceProvisionEmail,
+  releaseBootstrapWorkspaceOwnerMemberships,
+} from "../../../server/auth/workspaceEmailProvisioning";
 import { getWebServerRuntime } from "../../../server/runtime/getWebServerRuntime";
 
 const EMAIL_OTP_TYPES = new Set([
@@ -46,6 +50,54 @@ function buildPendingAccessUrl(
   }
 
   return target;
+}
+
+async function listRequestAccessBootstrapOwnersForClaim(input: {
+  databaseClient: ReturnType<typeof createSupabaseDatabaseClient>;
+  email: string;
+  workspaceIds: readonly string[];
+}) {
+  if (input.workspaceIds.length === 0) {
+    return [];
+  }
+
+  const normalizedEmail = normalizeWorkspaceProvisionEmail(input.email);
+  const workspaceResult = await input.databaseClient
+    .from("workspaces")
+    .select("id, name, created_by")
+    .in("id", [...new Set(input.workspaceIds)]);
+
+  if (workspaceResult.error) {
+    throw workspaceResult.error;
+  }
+
+  const workspaces = workspaceResult.data ?? [];
+
+  if (workspaces.length === 0) {
+    return [];
+  }
+
+  const requestResult = await input.databaseClient
+    .from("request_access_requests")
+    .select("farm_name")
+    .eq("email", normalizedEmail)
+    .eq("status", "contacted")
+    .in(
+      "farm_name",
+      [...new Set(workspaces.map((workspace) => workspace.name))],
+    );
+
+  if (requestResult.error) {
+    throw requestResult.error;
+  }
+
+  const farmNames = new Set((requestResult.data ?? []).map((request) => request.farm_name));
+  return workspaces
+    .filter((workspace) => farmNames.has(workspace.name))
+    .map((workspace) => ({
+      workspaceId: workspace.id,
+      bootstrapOwnerUserId: workspace.created_by,
+    }));
 }
 
 export async function GET(request: Request) {
@@ -104,6 +156,17 @@ export async function GET(request: Request) {
       });
 
       if (claimed.claimedCount > 0) {
+        const bootstrapApprovals =
+          await listRequestAccessBootstrapOwnersForClaim({
+            databaseClient,
+            email: resolvedEmail,
+            workspaceIds: claimed.claimedWorkspaceIds,
+          });
+        await releaseBootstrapWorkspaceOwnerMemberships({
+          client: databaseClient,
+          approvals: bootstrapApprovals,
+          claimedUserId: resolvedUserId,
+        });
         actor = await runtime.services.auth.resolveActor({
           userId: resolvedUserId,
         });

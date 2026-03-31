@@ -275,7 +275,7 @@ export function buildReportProps(
       typeof forecast.precipitationMm === "number" ? forecast.precipitationMm : 0;
   }
 
-  const forecastDays = [...forecastByDay.values()].slice(0, 4).map((day) => ({
+  const forecastDays = [...forecastByDay.values()].slice(0, 7).map((day) => ({
     day: day.label,
     temp:
       day.maxC != null && day.minC != null
@@ -427,7 +427,7 @@ export function buildReportProps(
       maxC: obs?.airTemperatureC ?? null,
       minC: obs?.airTemperatureC ?? null,
     },
-    ...[...forecastByDay.values()].slice(0, 4).map((entry) => ({
+    ...[...forecastByDay.values()].slice(0, 7).map((entry) => ({
       label: entry.label,
       maxC: entry.maxC,
       minC: entry.minC,

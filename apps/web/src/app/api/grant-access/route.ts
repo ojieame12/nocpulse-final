@@ -1,5 +1,6 @@
 import {
   createSupabaseWorkspaceMembershipRepository,
+  createSupabaseWorkspaceRepository,
 } from "@fieldpulse/module-workspaces";
 import { getWebServerRuntime } from "../../../server/runtime/getWebServerRuntime";
 import { createSupabaseAdminClient } from "../../../server/auth/createSupabaseAdminClient";
@@ -8,12 +9,15 @@ import {
 } from "../../../server/auth/workspaceAccessProvisioning";
 import {
   listWorkspaceEmailProvisionsByEmail,
+  releaseBootstrapWorkspaceOwnerMemberships,
   upsertWorkspaceEmailProvision,
 } from "../../../server/auth/workspaceEmailProvisioning";
 import {
   verifyGrantAccessToken,
   type GrantAccessTokenPayload,
 } from "../../../server/auth/grantAccessToken";
+import { logAuditEvent } from "../../../server/audit/logAuditEvent";
+import { resolveUniqueWorkspaceSlug } from "../../../server/auth/workspaceProvisioning";
 import {
   hasWorkspaceGrantAuthority,
   loadRequestAccessRecord,
@@ -199,11 +203,12 @@ function renderReviewPage(input: {
         <div class="label">Farm / Operation</div><div class="value">${escapeHtml(input.requestRecord.farm_name)}</div>
         <div class="label">Approx. Acreage</div><div class="value">${escapeHtml(input.requestRecord.acreage ?? "Not provided")}</div>
         <div class="label">Message</div><div class="value">${escapeHtml(input.requestRecord.message ?? "Not provided")}</div>
+        <div class="label">Workspace To Create</div><div class="value">${escapeHtml(input.requestRecord.farm_name)}</div>
         <div class="label">Workspace</div><div class="value mono">${escapeHtml(input.payload.workspaceId)}</div>
-        <div class="label">Role</div><div class="value">${escapeHtml(input.payload.role)}</div>
+        <div class="label">Granted Role</div><div class="value">${escapeHtml(input.payload.role)}</div>
         <div class="label">Expires</div><div class="value">${escapeHtml(new Date(input.payload.expiresAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }))}</div>
       </div>
-      <p class="note">This link is bound to one request record and one workspace. The actual grant only happens after you press the button below.</p>
+      <p class="note">This link is bound to one request record and reviewer authority. Granting access will create a dedicated empty workspace for this requester.</p>
       <form method="post">
         <input type="hidden" name="token" value="${escapeHtml(input.token)}" />
         <div class="actions">
@@ -251,6 +256,31 @@ async function loadVerifiedPayload(request: Request) {
     token,
     verification,
   };
+}
+
+async function createDedicatedWorkspaceForRequest(input: {
+  client: ReturnType<typeof createServerDatabaseClient>;
+  grantedByUserId: string;
+  requestRecord: {
+    farm_name: string;
+  };
+}) {
+  const workspaceRepository = createSupabaseWorkspaceRepository(
+    input.client,
+  );
+  const workspaces = await workspaceRepository.listAll();
+  const { slug } = resolveUniqueWorkspaceSlug(
+    workspaces.map((workspace) => ({ slug: workspace.slug })),
+    input.requestRecord.farm_name,
+  );
+
+  return workspaceRepository.create(
+    {
+      name: input.requestRecord.farm_name,
+      slug,
+    },
+    input.grantedByUserId,
+  );
 }
 
 export async function GET(request: Request) {
@@ -305,7 +335,7 @@ export async function GET(request: Request) {
     logServerError("grant-access-review-route", error);
     return htmlPage({
       title: "Access Review Failed",
-      body: `<div class="stack"><p class="error">Access review failed.</p></div>`,
+      body: `<div class="stack"><p class="error">${escapeHtml(error instanceof Error ? error.message : "Access review failed.")}</p></div>`,
       status: 500,
     });
   }
@@ -391,17 +421,23 @@ export async function POST(request: Request) {
       payload.requestEmail,
     );
 
+    const createdWorkspace = await createDedicatedWorkspaceForRequest({
+      client: databaseClient,
+      grantedByUserId: payload.grantedByUserId,
+      requestRecord,
+    });
+
     let detailMessage = "";
 
     if (existingUser) {
       const alreadyMember = await workspaceMemberships.isMember(
-        payload.workspaceId,
+        createdWorkspace.id,
         existingUser.id,
       );
 
       if (!alreadyMember) {
         await workspaceMemberships.addMembership({
-          workspaceId: payload.workspaceId,
+          workspaceId: createdWorkspace.id,
           userId: existingUser.id,
           role: payload.role,
           invitedBy: payload.grantedByUserId,
@@ -409,19 +445,35 @@ export async function POST(request: Request) {
         });
       }
 
+      await releaseBootstrapWorkspaceOwnerMemberships({
+        client: databaseClient,
+        approvals: [
+          {
+            workspaceId: createdWorkspace.id,
+            bootstrapOwnerUserId: payload.grantedByUserId,
+          },
+        ],
+        claimedUserId: existingUser.id,
+      });
+
       detailMessage = alreadyMember
         ? "They already had workspace access. The request is now marked handled."
-        : "They already have a NocPulse account and can open the app immediately.";
+        : payload.role === "owner"
+          ? "They already have a NocPulse account and now own this dedicated workspace."
+          : "They already have a NocPulse account and can open the app immediately.";
     } else {
-      const existingProvision = (await listWorkspaceEmailProvisionsByEmail(
+      const existingProvisions = await listWorkspaceEmailProvisionsByEmail(
         databaseClient,
         payload.requestEmail,
-      )).find((provision) => provision.workspace_id === payload.workspaceId);
+      ) as Array<{ workspace_id: string; claimed_at: string | null }>;
+      const existingProvision = existingProvisions.find(
+        (provision) => provision.workspace_id === createdWorkspace.id,
+      );
 
       if (!existingProvision || existingProvision.claimed_at == null) {
         await upsertWorkspaceEmailProvision({
           client: databaseClient,
-          workspaceId: payload.workspaceId,
+          workspaceId: createdWorkspace.id,
           email: payload.requestEmail,
           role: payload.role,
           createdBy: payload.grantedByUserId,
@@ -437,13 +489,34 @@ export async function POST(request: Request) {
       requestId: payload.requestId,
     });
 
+    await logAuditEvent({
+      runtime,
+      action: "request-access.granted",
+      actorUserId: payload.grantedByUserId,
+      workspaceId: createdWorkspace.id,
+      resourceType: "request-access",
+      resourceId: payload.requestId,
+      route: "/api/grant-access",
+      metadata: {
+        requestEmail: payload.requestEmail,
+        role: payload.role,
+        sourceWorkspaceId: payload.workspaceId,
+        createdWorkspaceId: createdWorkspace.id,
+        createdWorkspaceSlug: createdWorkspace.slug,
+        existingUserId: existingUser?.id ?? null,
+        requestStatus: updatedRequestRecord?.status ?? "contacted",
+      },
+    });
+
     return htmlPage({
       title: "Access Granted",
       body: `<div class="stack">
         <p class="success">Access has been granted for <span class="mono">${escapeHtml(payload.requestEmail)}</span>.</p>
         <div class="kv">
           <div class="label">Request ID</div><div class="value mono">${escapeHtml(payload.requestId)}</div>
-          <div class="label">Workspace</div><div class="value mono">${escapeHtml(payload.workspaceId)}</div>
+          <div class="label">Workspace</div><div class="value">${escapeHtml(createdWorkspace.name)}</div>
+          <div class="label">Workspace ID</div><div class="value mono">${escapeHtml(createdWorkspace.id)}</div>
+          <div class="label">Workspace Slug</div><div class="value mono">${escapeHtml(createdWorkspace.slug)}</div>
           <div class="label">Role</div><div class="value">${escapeHtml(payload.role)}</div>
           <div class="label">Request Status</div><div class="value">${escapeHtml(updatedRequestRecord?.status ?? "contacted")}</div>
         </div>
@@ -454,7 +527,7 @@ export async function POST(request: Request) {
     logServerError("grant-access-consume-route", error);
     return htmlPage({
       title: "Grant Access Failed",
-      body: `<div class="stack"><p class="error">Grant access failed.</p></div>`,
+      body: `<div class="stack"><p class="error">${escapeHtml(error instanceof Error ? error.message : "Grant access failed.")}</p></div>`,
       status: 500,
     });
   }

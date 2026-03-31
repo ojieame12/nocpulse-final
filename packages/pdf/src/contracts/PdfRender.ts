@@ -1,4 +1,10 @@
-/* ── Text styles ── */
+/* ═══════════════════════════════════════════════════════════════════
+   PDF Render Contracts — Block-level layout primitives
+   ═══════════════════════════════════════════════════════════════════ */
+
+export type RGB = readonly [number, number, number];
+
+/* ── Text ── */
 
 export type PdfTextStyle =
   | "title"
@@ -9,75 +15,198 @@ export type PdfTextStyle =
 
 /* ── Block types ──
    The renderer accepts a flat array of blocks. Each block is a discriminated
-   union keyed by `type`. The legacy shape { style, text } still works and is
-   treated as a "text" block internally.                                     */
+   union keyed by `kind`. */
 
 /** Simple styled text paragraph. */
 export type PdfTextBlock = {
-  type?: "text";
+  kind: "text";
   style: PdfTextStyle;
   text: string;
 };
 
-/** Horizontal divider line. */
-export type PdfDividerBlock = {
-  type: "divider";
-  /** Weight in points (default 0.5). */
-  weight?: number;
-  /** RGB triplet 0–1. Defaults to a light gray. */
-  color?: readonly [number, number, number];
-};
+/* ── Spacer / Divider ── */
 
-/** Vertical whitespace. */
 export type PdfSpacerBlock = {
-  type: "spacer";
-  /** Height in points (default 8). */
-  height?: number;
+  kind: "spacer";
+  height: number;
 };
 
-/** Label + value pair rendered as two columns. */
-export type PdfKeyValueBlock = {
-  type: "key-value";
+export type PdfDividerBlock = {
+  kind: "divider";
+  color?: RGB;
+  thickness?: number;
+  marginTop?: number;
+};
+
+/* ── Metric Strip (horizontal row of label/value pairs) ── */
+
+export type PdfMetricStripCell = {
   label: string;
   value: string;
-  /** Optional right-aligned suffix (e.g. a unit). */
-  suffix?: string;
+  valueColor?: RGB;
 };
 
-/** Row of label + value pairs (for compact metric displays). */
-export type PdfMetricRowBlock = {
-  type: "metric-row";
-  items: readonly { label: string; value: string }[];
+export type PdfMetricStripBlock = {
+  kind: "metric-strip";
+  cells: readonly PdfMetricStripCell[];
+  marginTop?: number;
 };
 
-/** Colored status badge rendered inline after a label. */
-export type PdfStatusBlock = {
-  type: "status";
+/* ── Metric Grid (2-col grid of metric boxes) ── */
+
+export type PdfMetricGridCell = {
   label: string;
-  status: string;
-  /** Semantic intent — drives fill color. */
-  intent: "positive" | "warning" | "danger" | "info" | "neutral";
+  value: string;
+  sub?: string;
+  valueColor?: RGB;
+  accentColor?: RGB;
 };
 
-/** All renderable block types. */
+export type PdfMetricGridBlock = {
+  kind: "metric-grid";
+  cells: readonly PdfMetricGridCell[];
+  columns?: 2 | 3 | 4;
+  marginTop?: number;
+};
+
+/* ── Table ── */
+
+export type PdfTableColumn = {
+  label: string;
+  width: number; // fraction of content width (0-1)
+  align?: "left" | "right" | "center";
+};
+
+export type PdfTableRow = {
+  cells: readonly string[];
+  bold?: boolean;
+  accentColor?: RGB;
+};
+
+export type PdfTableBlock = {
+  kind: "table";
+  columns: readonly PdfTableColumn[];
+  rows: readonly PdfTableRow[];
+  headerBg?: RGB;
+  stripeBg?: RGB;
+  marginTop?: number;
+};
+
+/* ── Progress Bar ── */
+
+export type PdfProgressBarBlock = {
+  kind: "progress-bar";
+  label: string;
+  value: string;
+  percent: number; // 0-100
+  trackColor?: RGB;
+  fillColor?: RGB;
+  rangeLabels?: readonly [string, string];
+  marginTop?: number;
+};
+
+/* ── Severity Card (alert/finding with colored left border) ── */
+
+export type PdfSeverityCardBlock = {
+  kind: "severity-card";
+  severity: "critical" | "warning" | "info";
+  title: string;
+  body?: string;
+  detail?: string;
+  action?: string;
+  marginTop?: number;
+};
+
+/* ── Status Badge (filled pill with label) ── */
+
+export type PdfStatusBadgeBlock = {
+  kind: "status-badge";
+  label: string;
+  color: RGB;
+  textColor?: RGB;
+  marginTop?: number;
+};
+
+/* ── Sparkline ── */
+
+export type PdfSparklineBlock = {
+  kind: "sparkline";
+  label: string;
+  data: readonly number[];
+  color?: RGB;
+  height?: number;
+  marginTop?: number;
+};
+
+export type PdfMultiSparklineSeries = {
+  label: string;
+  data: readonly number[];
+  color?: RGB;
+};
+
+export type PdfMultiSparklineBlock = {
+  kind: "multi-sparkline";
+  label: string;
+  series: readonly PdfMultiSparklineSeries[];
+  height?: number;
+  marginTop?: number;
+};
+
+/* ── Key-Value Pairs (compact two-column label: value list) ── */
+
+export type PdfKeyValueBlock = {
+  kind: "key-value";
+  pairs: readonly { key: string; value: string; valueColor?: RGB }[];
+  columns?: 1 | 2;
+  marginTop?: number;
+};
+
+/* ── Section Header (heading with optional right-aligned meta) ── */
+
+export type PdfSectionHeaderBlock = {
+  kind: "section-header";
+  label: string;
+  meta?: string;
+  accentColor?: RGB;
+  marginTop?: number;
+};
+
+/* ── Brand Assets ── */
+
+export type PdfBrandLogo = {
+  format: "png";
+  bytes: Uint8Array;
+};
+
+/* ── Union of all block types ── */
+
 export type PdfBlock =
   | PdfTextBlock
-  | PdfDividerBlock
   | PdfSpacerBlock
+  | PdfDividerBlock
+  | PdfMetricStripBlock
+  | PdfMetricGridBlock
+  | PdfTableBlock
+  | PdfProgressBarBlock
+  | PdfSeverityCardBlock
+  | PdfStatusBadgeBlock
+  | PdfSparklineBlock
+  | PdfMultiSparklineBlock
   | PdfKeyValueBlock
-  | PdfMetricRowBlock
-  | PdfStatusBlock;
+  | PdfSectionHeaderBlock;
 
-/* ── Render I/O ── */
+/* ── Render input ── */
 
 export type PdfRenderInput = {
   artifactKey: string;
   title: string;
   subject?: string;
   author?: string;
-  /** Accepts both legacy PdfTextBlock[] and new PdfBlock[]. */
+  brandLogo?: PdfBrandLogo;
   blocks: readonly PdfBlock[];
 };
+
+/* ── Render results ── */
 
 export type PdfRenderResult = {
   artifactKey: string;
