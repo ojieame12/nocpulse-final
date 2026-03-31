@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { deflateSync, inflateSync } from "node:zlib";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import type {
   PdfBrandLogo,
   PdfBinaryRenderResult,
@@ -13,30 +10,28 @@ import type {
   RGB,
 } from "../contracts/PdfRender";
 import { parseTTF, generatePdfFontObjects, type EmbeddedFont } from "./ttfEmbed";
+import { PLAYFAIR_REGULAR, PLAYFAIR_BOLD } from "./fontData";
 
 /* ═══════════════════════════════════════════════════════════════════
    NocPulse PDF Renderer — Rich visual layout engine
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Embedded fonts ──
-   Load Playfair Display TTF files for the editorial serif role.
-   These replace Times-Roman/Times-Bold (F3/F4) with a real
-   high-contrast display serif that matches the P22 Mackinac design intent.
+   Playfair Display TTF data is inlined as base64 in fontData.ts
+   so it works on serverless platforms (Vercel) without filesystem access.
 */
-const FONTS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "fonts");
-
 let _serifRegular: EmbeddedFont | null = null;
 let _serifBold: EmbeddedFont | null = null;
 
 function getSerifRegular(): EmbeddedFont {
   if (!_serifRegular) {
-    _serifRegular = parseTTF(readFileSync(join(FONTS_DIR, "PlayfairDisplay-Regular.ttf")));
+    _serifRegular = parseTTF(PLAYFAIR_REGULAR);
   }
   return _serifRegular;
 }
 function getSerifBold(): EmbeddedFont {
   if (!_serifBold) {
-    _serifBold = parseTTF(readFileSync(join(FONTS_DIR, "PlayfairDisplay-Bold.ttf")));
+    _serifBold = parseTTF(PLAYFAIR_BOLD);
   }
   return _serifBold;
 }
