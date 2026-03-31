@@ -989,16 +989,26 @@ export function createFieldBoundaryPreviewRuntime({
         entranceRafId = requestAnimationFrame(animateEntrance);
       }
 
-      // Stagger: wait for the camera fly to mostly complete before extruding.
+      // Wait for camera to settle before extruding cells.
       // On first render there's no fly, so start immediately.
-      const staggerMs = isFirstRender
-        ? 0
-        : Math.round(flyDuration * ENTRANCE_FLY_OVERLAP);
-
-      if (staggerMs > 0) {
-        entranceDelayTimer = setTimeout(startEntranceAnimation, staggerMs);
-      } else {
+      // On field switch, listen for MapLibre's moveend event to know the camera
+      // has actually arrived, then add a small buffer for visual settle.
+      if (isFirstRender || flyDuration === 0) {
         startEntranceAnimation();
+      } else {
+        // Use moveend event — fires when fitBounds animation completes
+        const onCameraSettle = () => {
+          mounted.map.off("moveend", onCameraSettle);
+          // Small buffer (80ms) for the easing tail to visually settle
+          entranceDelayTimer = setTimeout(startEntranceAnimation, 80);
+        };
+        mounted.map.on("moveend", onCameraSettle);
+
+        // Safety fallback: if moveend never fires (edge case), start after fly duration + buffer
+        entranceDelayTimer = setTimeout(() => {
+          mounted.map.off("moveend", onCameraSettle);
+          startEntranceAnimation();
+        }, flyDuration + 200);
       }
     } else {
       // No animation needed — show full state immediately
