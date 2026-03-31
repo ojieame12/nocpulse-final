@@ -98,6 +98,26 @@ function inferWeatherDesc(temp: string, precip: string): string {
   return "Dry";
 }
 
+/** Generate advisory note for a crop parameter based on its label and position in range. */
+function cropParamNote(label: string, value: string, fillPct: number): string {
+  const lbl = label.toLowerCase();
+  if (fillPct < 25) {
+    if (lbl.includes("moisture") && lbl.includes("root")) return "Below optimal. Monitor for wilting and schedule irrigation.";
+    if (lbl.includes("moisture") && lbl.includes("surface")) return "Surface is dry. Seed germination risk if planting.";
+    if (lbl.includes("frost")) return "Severe frost risk. Protect sensitive tissue overnight.";
+    if (lbl.includes("vpd")) return "Very low VPD. Watch for fungal disease pressure.";
+    if (lbl.includes("water balance")) return "Negative water balance. Crop drawing down reserves.";
+    return "Below expected range for this crop and stage.";
+  }
+  if (fillPct > 85) {
+    if (lbl.includes("moisture")) return "Excess moisture. Check for waterlogging and root rot.";
+    if (lbl.includes("vpd")) return "High VPD. Rapid transpiration — increase irrigation.";
+    if (lbl.includes("water balance")) return "Surplus water. Drainage may be needed.";
+    return "Above expected range. Monitor closely.";
+  }
+  return "Within acceptable range for selected crop.";
+}
+
 /** Determine row accent color from forecast data. */
 function forecastRowColor(temp: string, precip: string): RGB | undefined {
   // Parse lowest temperature from strings like "-3°C / 5°C" or "Low: -2°C"
@@ -308,7 +328,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
   /* ── Moisture Conditions ── */
 
   if (s) {
-    blocks.push({ kind: "spacer", height: 10 });
+    blocks.push({ kind: "spacer", height: 6 });
     blocks.push({
       kind: "section-header",
       label: "Moisture Conditions",
@@ -375,13 +395,13 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
     });
   }
 
-  /* ── Crop Parameter Thresholds ── */
+  /* ── Crop Parameter Assessment (table + bars) ── */
 
   if (r && r.cropParams.length > 0) {
-    blocks.push({ kind: "spacer", height: 10 });
+    blocks.push({ kind: "spacer", height: 6 });
     blocks.push({
       kind: "section-header",
-      label: "Crop Thresholds",
+      label: "Crop Parameter Assessment",
       meta: r.cropStage || "Stage unverified",
       accentColor: GREEN,
     });
@@ -389,22 +409,37 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
     blocks.push({
       kind: "text",
       style: "caption",
-      text: "Each bar shows where the current reading falls within the acceptable range for this crop and growth stage.",
+      text: "Each parameter is compared against the acceptable range for this crop and growth stage. Status and advisory notes highlight where attention is needed.",
     });
 
-    for (const p of r.cropParams) {
-      const isLow = p.fillPercent < 25;
-      const isHigh = p.fillPercent > 85;
-      blocks.push({
-        kind: "progress-bar",
-        label: p.label,
-        value: p.value,
-        percent: p.fillPercent,
-        fillColor: isLow ? RED : isHigh ? AMBER : GREEN_SOFT,
-        rangeLabels: [p.rangeLow, p.rangeHigh],
-        marginTop: 6,
-      });
-    }
+    // Assessment table — like CAI's Parameter tables with advisory notes
+    blocks.push({
+      kind: "table",
+      columns: [
+        { label: "Parameter", width: 0.18 },
+        { label: "Current", width: 0.12, align: "right" },
+        { label: "Expected Range", width: 0.18 },
+        { label: "Status", width: 0.10 },
+        { label: "Notes", width: 0.42 },
+      ],
+      headerBg: GREEN,
+      rows: r.cropParams.map((p) => {
+        const isLow = p.fillPercent < 25;
+        const isHigh = p.fillPercent > 85;
+        const status = isLow ? "Below" : isHigh ? "Above" : "In range";
+        return {
+          cells: [
+            p.label,
+            p.value,
+            `${p.rangeLow} – ${p.rangeHigh}`,
+            status,
+            cropParamNote(p.label, p.value, p.fillPercent),
+          ],
+          accentColor: isLow ? RED : isHigh ? AMBER : undefined,
+        };
+      }),
+      marginTop: 6,
+    });
   }
 
   /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -414,7 +449,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
   /* ── 7-Day Forecast ── */
 
   if (r && r.forecast.length > 0) {
-    blocks.push({ kind: "spacer", height: 10 });
+    blocks.push({ kind: "spacer", height: 6 });
     blocks.push({
       kind: "section-header",
       label: "7-Day Forecast",
@@ -485,7 +520,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
   /* ── Trend History Sparklines ── */
 
   if (r && r.charts.length > 0) {
-    blocks.push({ kind: "spacer", height: 10 });
+    blocks.push({ kind: "spacer", height: 6 });
     blocks.push({
       kind: "section-header",
       label: "Trend History",
@@ -501,7 +536,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
           label: `${chart.title}  ·  ${chart.subtitle}`,
           series,
           height: 72,
-          marginTop: 10,
+          marginTop: 6,
         });
       } else if (chart.emptyText) {
         blocks.push({
@@ -520,7 +555,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
   /* ── Full Alerts ── */
 
   const alertCount = r?.alerts.length ?? 0;
-  blocks.push({ kind: "spacer", height: 10 });
+  blocks.push({ kind: "spacer", height: 6 });
   blocks.push({
     kind: "section-header",
     label: "Alerts",
@@ -554,7 +589,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
   /* ── Intelligence Findings ── */
 
   if (r && r.findings.length > 0) {
-    blocks.push({ kind: "spacer", height: 10 });
+    blocks.push({ kind: "spacer", height: 6 });
     blocks.push({
       kind: "section-header",
       label: "Intelligence Findings",
@@ -584,7 +619,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
   /* ── Tracked Zones ── */
 
   if (r && r.zones.length > 0) {
-    blocks.push({ kind: "spacer", height: 10 });
+    blocks.push({ kind: "spacer", height: 6 });
     blocks.push({
       kind: "section-header",
       label: "Tracked Zones",
@@ -637,7 +672,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
      FOOTER — PROVENANCE & SOURCES
      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
-  blocks.push({ kind: "spacer", height: 12 });
+  blocks.push({ kind: "spacer", height: 8 });
   blocks.push({ kind: "divider", marginTop: 8, color: SLATE, thickness: 0.5 });
 
   blocks.push({

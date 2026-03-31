@@ -113,6 +113,62 @@ function inferForecastConditions(f: FieldWeatherForecast): string {
   return "Dry";
 }
 
+/** Generate advisory note for a weather signal based on its name and value. */
+function signalNote(label: string, value: number | null): string {
+  if (value === null) return "Data unavailable";
+  const lbl = label.toLowerCase();
+  if (lbl.includes("vpd") && !lbl.includes("peak")) {
+    if (value < 0.4) return "Low VPD. Fungal disease risk elevated.";
+    if (value > 1.5) return "High VPD. Rapid transpiration likely.";
+    return "Within comfortable range for most crops.";
+  }
+  if (lbl.includes("peak") && lbl.includes("vpd")) {
+    if (value > 2.0) return "Extreme VPD forecast. Expect crop stress.";
+    if (value > 1.2) return "Elevated peak VPD. Monitor plant turgor.";
+    return "Peak VPD within acceptable range.";
+  }
+  if (lbl.includes("water balance") && lbl.includes("24")) {
+    if (value < -5) return "Significant deficit. Irrigation needed soon.";
+    if (value < 0) return "Mild deficit. Acceptable short-term.";
+    return "Positive balance. Adequate moisture supply.";
+  }
+  if (lbl.includes("water balance") && lbl.includes("72")) {
+    if (value < -10) return "Severe 3-day deficit. Prioritize irrigation.";
+    if (value < -3) return "Moderate deficit over 72h.";
+    return "3-day balance is positive.";
+  }
+  if (lbl.includes("frost")) {
+    if (value < -5) return "Hard frost. Significant crop damage risk.";
+    if (value < 0) return "Frost likely. Protect sensitive crops.";
+    if (value < 2) return "Near-frost. Monitor overnight lows.";
+    return "No frost risk in forecast.";
+  }
+  if (lbl.includes("gdd")) {
+    if (value < 5) return "Minimal heat accumulation. Growth stalled.";
+    return "Accumulating growing degree days.";
+  }
+  if (lbl.includes("leaf wet")) {
+    if (value > 12) return "Extended wetness. High disease pressure.";
+    if (value > 6) return "Moderate leaf wetness. Scout for disease.";
+    return "Leaf wetness within safe range.";
+  }
+  if (lbl.includes("spray")) {
+    if (value === 0) return "No spray windows. Conditions unfavorable.";
+    if (value < 2) return "Limited windows. Plan applications carefully.";
+    return "Multiple spray windows available.";
+  }
+  return "Within expected range.";
+}
+
+/** Generate advisory note for moisture levels. */
+function moistureNote(rootPct: number | null, surfacePct: number | null): string {
+  if (rootPct === null) return "Insufficient data.";
+  if (rootPct < 20) return "Root zone critically dry. Irrigation urgent.";
+  if (rootPct < 30) return "Below optimal. Monitor for stress signs.";
+  if (rootPct > 80) return "Saturated. Risk of waterlogging.";
+  return "Within acceptable range for most crops.";
+}
+
 /** Derive a plain-language action from a finding. */
 function inferFindingAction(finding: FieldIntelligenceFinding): string | undefined {
   if (finding.recommendedAction) return finding.recommendedAction;
@@ -269,7 +325,7 @@ export function buildFieldReportPdfRenderInput({
      PAGE 2 — MOISTURE & WEATHER CONDITIONS
      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
-  blocks.push({ kind: "spacer", height: 10 });
+  blocks.push({ kind: "spacer", height: 6 });
   blocks.push({
     kind: "section-header",
     label: "Moisture Conditions",
@@ -328,6 +384,83 @@ export function buildFieldReportPdfRenderInput({
       rangeLabels: ["0%", "100%"],
       marginTop: 4,
     });
+    // Moisture cell-level summary table
+    if (m.moisture.latestCells.length > 0) {
+      const cells = m.moisture.latestCells;
+      const highConf = cells.filter((c) => c.confidence === "high");
+      const medConf = cells.filter((c) => c.confidence === "medium");
+      const lowConf = cells.filter((c) => c.confidence === "low");
+      const avgRoot = (arr: typeof cells) => arr.length > 0 ? arr.reduce((s, c) => s + c.rootZonePct, 0) / arr.length : null;
+      const avgSurf = (arr: typeof cells) => arr.length > 0 ? arr.reduce((s, c) => s + c.surfacePct, 0) / arr.length : null;
+
+      blocks.push({ kind: "spacer", height: 6 });
+      blocks.push({
+        kind: "text",
+        style: "caption",
+        text: `Cell-level moisture breakdown across ${cells.length} mapped cells:`,
+      });
+
+      const moistureRows: { cells: string[]; accentColor?: RGB }[] = [];
+      if (highConf.length > 0) {
+        moistureRows.push({
+          cells: [
+            "High",
+            String(highConf.length),
+            fmtPct(avgRoot(highConf)),
+            fmtPct(avgSurf(highConf)),
+            moistureNote(avgRoot(highConf), avgSurf(highConf)),
+          ],
+        });
+      }
+      if (medConf.length > 0) {
+        moistureRows.push({
+          cells: [
+            "Medium",
+            String(medConf.length),
+            fmtPct(avgRoot(medConf)),
+            fmtPct(avgSurf(medConf)),
+            moistureNote(avgRoot(medConf), avgSurf(medConf)),
+          ],
+          accentColor: AMBER,
+        });
+      }
+      if (lowConf.length > 0) {
+        moistureRows.push({
+          cells: [
+            "Low",
+            String(lowConf.length),
+            fmtPct(avgRoot(lowConf)),
+            fmtPct(avgSurf(lowConf)),
+            "Low-confidence cells. Verify with in-field probe.",
+          ],
+          accentColor: RED,
+        });
+      }
+      // Summary row
+      moistureRows.push({
+        cells: [
+          "All Cells",
+          String(cells.length),
+          fmtPct(m.moisture.rootZoneAvgPct),
+          fmtPct(m.moisture.surfaceAvgPct),
+          `Range: ${fmtPct(m.moisture.rootZoneMinPct)} – ${fmtPct(m.moisture.rootZoneMaxPct)} root zone`,
+        ],
+      });
+
+      blocks.push({
+        kind: "table",
+        columns: [
+          { label: "Confidence", width: 0.14 },
+          { label: "Cells", width: 0.10, align: "right" },
+          { label: "Avg Root Zone", width: 0.16, align: "right" },
+          { label: "Avg Surface", width: 0.16, align: "right" },
+          { label: "Notes", width: 0.44 },
+        ],
+        headerBg: GREEN,
+        rows: moistureRows,
+        marginTop: 4,
+      });
+    }
   } else {
     blocks.push({
       kind: "text",
@@ -338,7 +471,7 @@ export function buildFieldReportPdfRenderInput({
 
   /* ── Weather Observations ── */
 
-  blocks.push({ kind: "spacer", height: 10 });
+  blocks.push({ kind: "spacer", height: 6 });
   blocks.push({
     kind: "section-header",
     label: "Weather Observations",
@@ -370,54 +503,102 @@ export function buildFieldReportPdfRenderInput({
     });
   }
 
-  /* ── Derived Weather Signals ── */
+  /* ── Derived Weather Signals Assessment ── */
 
   if (sig) {
     blocks.push({ kind: "spacer", height: 8 });
     blocks.push({
       kind: "section-header",
-      label: "Derived Weather Signals",
+      label: "Weather Signal Assessment",
       meta: fmtDate(sig.observedAt),
       accentColor: GREEN,
     });
 
+    // Build signal rows with thresholds and advisory notes
+    const signalRows: { label: string; value: string; range: string; status: string; note: string; color?: RGB }[] = [
+      {
+        label: "VPD (current)",
+        value: `${fmt(sig.currentVpdKpa, 2)} kPa`,
+        range: "0.4 – 1.5 kPa",
+        status: sig.currentVpdKpa !== null && sig.currentVpdKpa < 0.4 ? "Low" : sig.currentVpdKpa !== null && sig.currentVpdKpa > 1.5 ? "High" : "OK",
+        note: signalNote("vpd now", sig.currentVpdKpa),
+        color: sig.currentVpdKpa !== null && (sig.currentVpdKpa < 0.4 || sig.currentVpdKpa > 1.5) ? AMBER : undefined,
+      },
+      {
+        label: "Peak VPD (24h)",
+        value: `${fmt(sig.peakForecastVpdKpa24h, 2)} kPa`,
+        range: "< 2.0 kPa",
+        status: sig.peakForecastVpdKpa24h !== null && sig.peakForecastVpdKpa24h > 2.0 ? "High" : "OK",
+        note: signalNote("peak vpd", sig.peakForecastVpdKpa24h),
+        color: sig.peakForecastVpdKpa24h !== null && sig.peakForecastVpdKpa24h > 2.0 ? RED : undefined,
+      },
+      {
+        label: "Water Balance (24h)",
+        value: `${fmt(sig.netWaterBalance24hMm, 1)} mm`,
+        range: "> -5 mm",
+        status: sig.netWaterBalance24hMm !== null && sig.netWaterBalance24hMm < -5 ? "Deficit" : sig.netWaterBalance24hMm !== null && sig.netWaterBalance24hMm < 0 ? "Mild" : "OK",
+        note: signalNote("water balance 24h", sig.netWaterBalance24hMm),
+        color: sig.netWaterBalance24hMm !== null && sig.netWaterBalance24hMm < -5 ? AMBER : undefined,
+      },
+      {
+        label: "Water Balance (72h)",
+        value: `${fmt(sig.netWaterBalance72hMm, 1)} mm`,
+        range: "> -10 mm",
+        status: sig.netWaterBalance72hMm !== null && sig.netWaterBalance72hMm < -10 ? "Deficit" : sig.netWaterBalance72hMm !== null && sig.netWaterBalance72hMm < -3 ? "Watch" : "OK",
+        note: signalNote("water balance 72h", sig.netWaterBalance72hMm),
+        color: sig.netWaterBalance72hMm !== null && sig.netWaterBalance72hMm < -10 ? RED : undefined,
+      },
+      {
+        label: "Frost Risk Min",
+        value: `${fmt(sig.frostRiskMinTempC)}°C`,
+        range: "> 2°C",
+        status: sig.frostRiskMinTempC !== null && sig.frostRiskMinTempC < 0 ? "Risk" : sig.frostRiskMinTempC !== null && sig.frostRiskMinTempC < 2 ? "Watch" : "OK",
+        note: signalNote("frost risk", sig.frostRiskMinTempC),
+        color: sig.frostRiskMinTempC !== null && sig.frostRiskMinTempC < 0 ? RED : undefined,
+      },
+      {
+        label: "Leaf Wet Hours (24h)",
+        value: `${sig.leafWetHours24h ?? "—"} h`,
+        range: "< 6 h",
+        status: sig.leafWetHours24h > 12 ? "High" : sig.leafWetHours24h > 6 ? "Watch" : "OK",
+        note: signalNote("leaf wet hours", sig.leafWetHours24h),
+        color: sig.leafWetHours24h > 12 ? AMBER : undefined,
+      },
+      {
+        label: "Spray Windows (24h)",
+        value: String(sig.sprayWindowCount24h ?? "—"),
+        range: "> 2",
+        status: sig.sprayWindowCount24h === 0 ? "None" : sig.sprayWindowCount24h < 2 ? "Limited" : "OK",
+        note: signalNote("spray windows", sig.sprayWindowCount24h),
+        color: sig.sprayWindowCount24h === 0 ? AMBER : undefined,
+      },
+      {
+        label: "GDD (72h)",
+        value: fmt(sig.gdd72h, 1),
+        range: "> 5",
+        status: sig.gdd72h !== null && sig.gdd72h < 5 ? "Low" : "OK",
+        note: signalNote("gdd", sig.gdd72h),
+      },
+    ];
+
     blocks.push({
-      kind: "metric-grid",
-      cells: [
-        { label: "VPD Now", value: `${fmt(sig.currentVpdKpa, 2)} kPa` },
-        { label: "Peak VPD (24h)", value: `${fmt(sig.peakForecastVpdKpa24h, 2)} kPa` },
-        {
-          label: "Water Balance (24h)",
-          value: `${fmt(sig.netWaterBalance24hMm, 1)} mm`,
-          valueColor: sig.netWaterBalance24hMm !== null && sig.netWaterBalance24hMm < -5 ? AMBER : undefined,
-        },
-        {
-          label: "Water Balance (72h)",
-          value: `${fmt(sig.netWaterBalance72hMm, 1)} mm`,
-          valueColor: sig.netWaterBalance72hMm !== null && sig.netWaterBalance72hMm < -10 ? RED : undefined,
-        },
+      kind: "table",
+      columns: [
+        { label: "Signal", width: 0.20 },
+        { label: "Value", width: 0.13, align: "right" },
+        { label: "Threshold", width: 0.13 },
+        { label: "Status", width: 0.10 },
+        { label: "Notes", width: 0.44 },
       ],
-      columns: 4,
+      headerBg: GREEN,
+      rows: signalRows.map((r) => ({
+        cells: [r.label, r.value, r.range, r.status, r.note],
+        accentColor: r.color,
+      })),
       marginTop: 6,
     });
 
-    blocks.push({
-      kind: "metric-grid",
-      cells: [
-        { label: "Leaf Wet Hours", value: String(sig.leafWetHours24h ?? "—") },
-        { label: "Spray Windows", value: String(sig.sprayWindowCount24h ?? "—") },
-        {
-          label: "Frost Risk Min",
-          value: `${fmt(sig.frostRiskMinTempC)}°C`,
-          valueColor: sig.frostRiskMinTempC !== null && sig.frostRiskMinTempC < 0 ? RED : undefined,
-        },
-        { label: "GDD (72h)", value: fmt(sig.gdd72h, 1) },
-      ],
-      columns: 4,
-      marginTop: 4,
-    });
-
-    // Frost risk progress bar if relevant
+    // Frost risk progress bar if relevant (visual emphasis)
     if (sig.frostRiskMinTempC !== null && sig.frostRiskMinTempC < 2) {
       blocks.push({
         kind: "progress-bar",
@@ -426,7 +607,7 @@ export function buildFieldReportPdfRenderInput({
         percent: Math.max(0, Math.min(100, ((sig.frostRiskMinTempC + 4) / 6) * 100)),
         fillColor: sig.frostRiskMinTempC < 0 ? RED : AMBER,
         rangeLabels: ["-4°C", ">-2°C"],
-        marginTop: 6,
+        marginTop: 4,
       });
     }
   }
@@ -437,7 +618,7 @@ export function buildFieldReportPdfRenderInput({
 
   const forecasts = m.weather.profile.forecasts.slice(0, 8);
   if (forecasts.length > 0) {
-    blocks.push({ kind: "spacer", height: 10 });
+    blocks.push({ kind: "spacer", height: 6 });
     blocks.push({
       kind: "section-header",
       label: "Forecast",
@@ -522,7 +703,7 @@ export function buildFieldReportPdfRenderInput({
 
   /* ── Alerts ── */
 
-  blocks.push({ kind: "spacer", height: 10 });
+  blocks.push({ kind: "spacer", height: 6 });
   blocks.push({
     kind: "section-header",
     label: "Alerts",
@@ -568,7 +749,7 @@ export function buildFieldReportPdfRenderInput({
   /* ── Findings ── */
 
   if (m.findings.length > 0) {
-    blocks.push({ kind: "spacer", height: 10 });
+    blocks.push({ kind: "spacer", height: 6 });
     blocks.push({
       kind: "section-header",
       label: "Intelligence Findings",
@@ -608,7 +789,7 @@ export function buildFieldReportPdfRenderInput({
 
   const zones = m.zones;
   if (zones.totalZoneCount > 0) {
-    blocks.push({ kind: "spacer", height: 10 });
+    blocks.push({ kind: "spacer", height: 6 });
     blocks.push({
       kind: "section-header",
       label: "Tracked Zones",
@@ -663,7 +844,7 @@ export function buildFieldReportPdfRenderInput({
      FOOTER — PROVENANCE
      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
-  blocks.push({ kind: "spacer", height: 12 });
+  blocks.push({ kind: "spacer", height: 8 });
   blocks.push({ kind: "divider", marginTop: 8, color: SLATE, thickness: 0.5 });
 
   blocks.push({

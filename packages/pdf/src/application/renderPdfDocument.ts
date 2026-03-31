@@ -761,9 +761,9 @@ function renderMetricGrid(
   marginTop = 6,
 ) {
   if (cells.length === 0) return;
-  const gap = 8;
+  const gap = 6;
   const cellW = (CW - gap * (columns - 1)) / columns;
-  const cellH = 48;
+  const cellH = 42;
   const rows = Math.ceil(cells.length / columns);
 
   advanceY(ctx, marginTop);
@@ -902,6 +902,8 @@ function renderTable(
       const cellText = row.cells[c];
       const font: PdfFontRef = row.bold ? "F2" : "F1";
       const fontSize = 9;
+      // Dynamic truncation based on column width (wider columns get more chars)
+      const maxChars = Math.max(12, Math.floor(pos.w / 4.2));
       let tx = pos.x + 6;
       if (pos.align === "right") {
         tx = pos.x + pos.w - estimateTextWidth(cellText, fontSize, row.bold ? "F2" : "F1") - 6;
@@ -909,7 +911,7 @@ function renderTable(
         tx = pos.x + (pos.w - estimateTextWidth(cellText, fontSize, row.bold ? "F2" : "F1")) / 2;
       }
       curPage(ctx).push(
-        textCmd(truncate(cellText, 40), font, fontSize, tx, rowY - 12, TEXT_BODY),
+        textCmd(truncate(cellText, maxChars), font, fontSize, tx, rowY - 12, TEXT_BODY),
       );
     }
 
