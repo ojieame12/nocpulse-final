@@ -2810,6 +2810,17 @@ img {
 /* ── Dark ── */
 
 [data-theme="dark"] .edit-field {
+  --text-primary: rgba(255, 255, 255, 0.78);
+  --text-secondary: rgba(255, 255, 255, 0.48);
+  --text-tertiary: rgba(255, 255, 255, 0.32);
+  --text-body: rgba(255, 255, 255, 0.54);
+  --text-muted: rgba(255, 255, 255, 0.30);
+  --surface-white: rgba(255, 255, 255, 0.08);
+  --surface-bg: rgba(255, 255, 255, 0.04);
+  --color-slate-50: rgba(255, 255, 255, 0.05);
+  --color-slate-100: rgba(255, 255, 255, 0.08);
+  --border-light: rgba(255, 255, 255, 0.10);
+  --border-medium: rgba(255, 255, 255, 0.16);
   background: rgba(12, 18, 14, 0.96);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -9460,14 +9471,14 @@ img {
 .edit-field__activity-label {
   font-family: var(--font-body);
   font-size: 12px;
-  color: #8a8f98;
+  color: var(--text-muted, #8a8f98);
 }
 
 .edit-field__activity-value {
   font-family: var(--font-body);
   font-size: 12px;
   font-weight: 600;
-  color: #111111;
+  color: var(--text-primary, #111111);
 }
 
 /* ── Save actions ── */
@@ -9485,7 +9496,7 @@ img {
   cursor: pointer;
   font-family: var(--font-body);
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-muted, #6b7280);
   text-align: center;
   padding: 0;
 }
@@ -9519,7 +9530,7 @@ img {
   font-family: var(--font-body);
   font-size: 11px;
   line-height: var(--line-height-normal);
-  color: #8a8f98;
+  color: var(--text-muted, #8a8f98);
   margin: 0;
 }
 
