@@ -1,4 +1,3 @@
-import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import { jsonError, jsonOk, readJsonObject } from "../../../server/http/json";
 import {
   normalizeRequestAccessSubmission,
@@ -16,7 +15,11 @@ import { getWebServerRuntime } from "../../../server/runtime/getWebServerRuntime
 import { buildGrantAccessUrl } from "../../../server/auth/grantAccessToken";
 import { getAppOrigin } from "../../../server/auth/getAppOrigin";
 import { createSupabaseAdminClient } from "../../../server/auth/createSupabaseAdminClient";
-import { findSupabaseAuthUserByEmail } from "../../../server/auth/workspaceAccessProvisioning";
+import {
+  createRequestAccessRecord,
+  resolveSingleGrantAccessContext,
+} from "../../../server/auth/requestAccessRepository";
+import { createServerDatabaseClient } from "../../../server/runtime/createServerDatabaseClient";
 
 const OWNER_NOTIFY_EMAIL = "nathan@ojieame.design";
 const DEFAULT_GRANT_ACCESS_ROLE = "member" as const;
@@ -59,50 +62,6 @@ async function sendRequestAccessNotification(input: {
   }
 }
 
-async function resolveGrantAccessContext(input: {
-  databaseClient: ReturnType<typeof createSupabaseDatabaseClient>;
-  adminClient: ReturnType<typeof createSupabaseAdminClient>;
-  recipientEmail: string | null;
-}) {
-  if (!input.recipientEmail) {
-    return null;
-  }
-
-  const recipientUser = await findSupabaseAuthUserByEmail(
-    input.adminClient,
-    input.recipientEmail,
-  );
-
-  if (!recipientUser) {
-    return null;
-  }
-
-  const membershipResult = await input.databaseClient
-    .from("workspace_memberships")
-    .select("workspace_id, user_id, role, created_at")
-    .eq("user_id", recipientUser.id)
-    .in("role", ["owner", "manager"])
-    .order("created_at", { ascending: true })
-    .limit(2);
-
-  if (membershipResult.error) {
-    throw membershipResult.error;
-  }
-
-  if (membershipResult.data.length !== 1) {
-    return null;
-  }
-
-  const membership = membershipResult.data[0];
-
-  return {
-    workspaceId: membership.workspace_id,
-    grantedByUserId: membership.user_id,
-    recipientEmail: input.recipientEmail,
-    role: DEFAULT_GRANT_ACCESS_ROLE,
-  };
-}
-
 export async function POST(request: Request) {
   const body = await readJsonObject(request);
 
@@ -118,10 +77,7 @@ export async function POST(request: Request) {
       return jsonError(503, "Supabase runtime is not configured.");
     }
 
-    const databaseClient = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
+    const databaseClient = createServerDatabaseClient(runtime);
     const ipRateLimit = await consumeRateLimit({
       client: databaseClient,
       scope: REQUEST_ACCESS_IP_RATE_LIMIT.scope,
@@ -152,26 +108,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const insertResult = await databaseClient
-      .from("request_access_requests")
-      .insert({
-        name: submission.name,
-        email: submission.email,
-        farm_name: submission.farmName,
-        acreage: submission.acreage,
-        message: submission.message,
-      })
-      .select("*")
-      .single();
-
-    if (insertResult.error || !insertResult.data) {
-      return jsonError(
-        500,
-        insertResult.error?.message ?? "Request access insert failed.",
-      );
-    }
-
-    const requestRecord = insertResult.data;
+    const requestRecord = await createRequestAccessRecord({
+      client: databaseClient,
+      submission,
+    });
     const envRecipients = resolveRequestAccessNotificationRecipients(
       runtime.env.requestAccess.notifyEmail,
     );
@@ -187,10 +127,11 @@ export async function POST(request: Request) {
     let reviewAccessUrl: string | undefined;
 
     try {
-      const grantAccessContext = await resolveGrantAccessContext({
-        databaseClient,
+      const grantAccessContext = await resolveSingleGrantAccessContext({
+        client: databaseClient,
         adminClient,
         recipientEmail: reviewRecipientEmail,
+        role: DEFAULT_GRANT_ACCESS_ROLE,
       });
 
       if (grantAccessContext) {

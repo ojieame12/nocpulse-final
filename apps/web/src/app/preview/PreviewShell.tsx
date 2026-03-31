@@ -120,6 +120,21 @@ type OnboardingDispatchSnapshot = {
   fieldId?: string | null;
 };
 
+type PreviewJobDispatchSnapshot = {
+  id: string;
+  key: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  activePhaseLabel: string | null;
+  progressPct: number | null;
+  progressMessage: string | null;
+  updatedAt: string | null;
+  completedAt: string | null;
+  failedAt: string | null;
+  cancelledAt: string | null;
+  lastError: string | null;
+  fieldId: string | null;
+};
+
 /** Per-field onboarding progress derived from dispatch snapshots. */
 export type FieldOnboardingStatus = {
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -371,6 +386,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
   const [sidebarFields, setSidebarFields] = useState(initial.sidebarFields);
   const [revealedFieldId, setRevealedFieldId] = useState<string | null>(null);
   const [isLoadingField, setIsLoadingField] = useState(false);
+  const [fieldSwitchError, setFieldSwitchError] = useState<string | null>(null);
   const [workspaceFieldFeatures] = useState(
     initial.mapPreview.workspaceFieldFeatures ?? [],
   );
@@ -386,7 +402,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
   );
 
   /* Onboarding dispatch statuses — owned here so they survive panel switches */
-  const [onboardingStatuses, setOnboardingStatuses] = useState<Map<string, OnboardingDispatchSnapshot>>(new Map());
+  const [onboardingStatuses, setOnboardingStatuses] = useState<Map<string, PreviewJobDispatchSnapshot>>(new Map());
 
   /** Derived per-field progress for the field strip */
   const fieldOnboardingProgress = useMemo(() => {
@@ -520,7 +536,38 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
     setFieldData(nextField);
     setSidebarFields(nextField.sidebarFields);
     setWorkspaceId(nextField.workspaceId);
+    setFieldSwitchError(null);
   }, []);
+
+  const resolveFieldSelectionLabel = useCallback(
+    (fieldId: string) => {
+      if (isPlaceholderFieldId(fieldId)) {
+        return 'your current workspace';
+      }
+
+      return (
+        fieldCacheRef.current.get(fieldId)?.fieldName
+        ?? sidebarFields.find((field) => field.id === fieldId)?.name
+        ?? 'the previous field'
+      );
+    },
+    [sidebarFields],
+  );
+
+  const revertFailedFieldSwitch = useCallback(
+    (failedFieldId: string, fallbackFieldId: string) => {
+      setActiveFieldId(fallbackFieldId);
+      const failedSummary =
+        failedRequestsRef.current.get(failedFieldId)?.summary
+        ?? 'Unable to load field data right now.';
+      const failedLabel = resolveFieldSelectionLabel(failedFieldId);
+      const fallbackLabel = resolveFieldSelectionLabel(fallbackFieldId);
+      setFieldSwitchError(
+        `Couldn't load ${failedLabel}. ${failedSummary}. Showing ${fallbackLabel} instead.`,
+      );
+    },
+    [resolveFieldSelectionLabel],
+  );
 
   const fetchFieldOverview = useCallback(
     (
@@ -634,6 +681,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
     fieldIds: string[];
   }) => {
     const preferredFieldId = result.preferredFieldId ?? null;
+    const previousFieldId = activeFieldId;
     const revealedFieldId = preferredFieldId ?? result.fieldIds[0] ?? null;
     setRevealedFieldId(revealedFieldId);
 
@@ -651,6 +699,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
       (result.fieldIds.length === 1 || shouldSwitchFromPlaceholder) &&
       switchTargetId !== activeFieldId
     ) {
+      setFieldSwitchError(null);
       setActiveFieldId(switchTargetId);
       setActivePanel('detail');
       setPanelAnim('entering');
@@ -661,7 +710,11 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
       void (async () => {
         try {
           const nextField = await fetchFieldOverview(switchTargetId, { force: true });
-          if (!nextField || fieldRequestSequenceRef.current !== requestSequence) {
+          if (fieldRequestSequenceRef.current !== requestSequence) {
+            return;
+          }
+          if (!nextField) {
+            revertFailedFieldSwitch(switchTargetId, previousFieldId);
             return;
           }
           applyFieldData(nextField);
@@ -684,7 +737,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
       setPanelAnim('entering');
     }
     applyFieldData(nextField);
-  }, [activeFieldId, applyFieldData, fetchFieldOverview]);
+  }, [activeFieldId, applyFieldData, fetchFieldOverview, revertFailedFieldSwitch]);
 
   const handleOnboardingTracked = useCallback((result: {
     preferredFieldId?: string | null;
@@ -761,7 +814,23 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
 
         const dispatches = payload.result?.dispatches ?? [];
         const dispatchById = new Map(
-          dispatches.map((dispatch) => [dispatch.id, dispatch] as const),
+          dispatches.map((dispatch) => [
+            dispatch.id,
+            {
+              id: dispatch.id,
+              key: dispatch.id,
+              status: dispatch.status,
+              activePhaseLabel: dispatch.activePhaseLabel ?? null,
+              progressPct: dispatch.progressPct ?? null,
+              progressMessage: dispatch.progressMessage ?? null,
+              updatedAt: null,
+              completedAt: dispatch.status === 'completed' ? new Date().toISOString() : null,
+              failedAt: dispatch.status === 'failed' ? new Date().toISOString() : null,
+              cancelledAt: dispatch.status === 'cancelled' ? new Date().toISOString() : null,
+              lastError: null,
+              fieldId: dispatch.fieldId ?? pendingOnboardingWatch.dispatchFieldMap.get(dispatch.id)?.fieldId ?? null,
+            } satisfies PreviewJobDispatchSnapshot,
+          ] as const),
         );
 
         if (cancelled) return;
@@ -820,6 +889,8 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
   const handleFieldSelect = useCallback(
     (id: string) => {
       if (isPlaceholderFieldId(id) || id === activeFieldId) return;
+      const previousFieldId = activeFieldId;
+      setFieldSwitchError(null);
       setActiveFieldId(id);
       setActivePanel('detail');
       setPanelAnim('entering');
@@ -847,7 +918,11 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
       void (async () => {
         try {
           const nextField = await fetchFieldOverview(id, { force: true });
-          if (!nextField || fieldRequestSequenceRef.current !== requestSequence) {
+          if (fieldRequestSequenceRef.current !== requestSequence) {
+            return;
+          }
+          if (!nextField) {
+            revertFailedFieldSwitch(id, previousFieldId);
             return;
           }
           applyFieldData(nextField);
@@ -858,7 +933,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
         }
       })();
     },
-    [activeFieldId, applyFieldData, fetchFieldOverview],
+    [activeFieldId, applyFieldData, fetchFieldOverview, revertFailedFieldSwitch],
   );
 
   const handleFieldPrefetch = useCallback(
@@ -938,6 +1013,20 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
       cancelled = true;
     };
   }, [activeFieldId, applyFieldData, fetchFieldOverview]);
+
+  useEffect(() => {
+    if (!fieldSwitchError) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setFieldSwitchError(null);
+    }, 6000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [fieldSwitchError]);
 
   useEffect(() => {
     setHoveredCell(null);
@@ -1228,7 +1317,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
           <AddFieldPanel
             onFieldsChanged={handleFieldsChanged}
             onOnboardingTracked={handleOnboardingTracked}
-            jobStatuses={onboardingStatuses as never}
+            jobStatuses={onboardingStatuses}
             workspaceId={fieldData.workspaceId}
             onClose={() => switchPanel('detail')}
           />
@@ -1282,6 +1371,15 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
                   <span className="map-area__loading-dot" />
                 </div>
               )}
+              {fieldSwitchError ? (
+                <div
+                  className="map-area__error-indicator"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {fieldSwitchError}
+                </div>
+              ) : null}
             </div>
 
             {/* Field strip — horizontal bottom dock */}

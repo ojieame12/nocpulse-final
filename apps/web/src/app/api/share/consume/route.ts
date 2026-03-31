@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import { readJsonObject } from "../../../../server/http/json";
 import {
   GUEST_SHARE_COOKIE_NAME,
@@ -16,6 +15,7 @@ import {
   resolveRequestRateLimitIp,
 } from "../../../../server/auth/rateLimit";
 import { getWebServerRuntime } from "../../../../server/runtime/getWebServerRuntime";
+import { createServerDatabaseClient } from "../../../../server/runtime/createServerDatabaseClient";
 
 const SHARE_CONSUME_IP_RATE_LIMIT = {
   scope: "share-consume:ip",
@@ -66,10 +66,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const client = createSupabaseDatabaseClient({
-    url: runtime.env.supabase.url!,
-    serviceKey: runtime.env.supabase.serviceRoleKey!,
-  });
+  const client = createServerDatabaseClient(runtime);
   const ipRateLimit = await consumeRateLimit({
     client,
     scope: SHARE_CONSUME_IP_RATE_LIMIT.scope,

@@ -1,4 +1,3 @@
-import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import {
   createSupabaseWorkspaceMembershipRepository,
 } from "@fieldpulse/module-workspaces";
@@ -15,6 +14,12 @@ import {
   verifyGrantAccessToken,
   type GrantAccessTokenPayload,
 } from "../../../server/auth/grantAccessToken";
+import {
+  hasWorkspaceGrantAuthority,
+  loadRequestAccessRecord,
+  markRequestAccessRecordContacted,
+} from "../../../server/auth/requestAccessRepository";
+import { createServerDatabaseClient } from "../../../server/runtime/createServerDatabaseClient";
 
 export const dynamic = "force-dynamic";
 
@@ -247,43 +252,6 @@ async function loadVerifiedPayload(request: Request) {
   };
 }
 
-async function loadRequestRecord(input: {
-  databaseClient: ReturnType<typeof createSupabaseDatabaseClient>;
-  requestId: string;
-}) {
-  const requestResult = await input.databaseClient
-    .from("request_access_requests")
-    .select("*")
-    .eq("id", input.requestId)
-    .maybeSingle();
-
-  if (requestResult.error) {
-    throw requestResult.error;
-  }
-
-  return requestResult.data;
-}
-
-async function ensureGrantAuthority(input: {
-  databaseClient: ReturnType<typeof createSupabaseDatabaseClient>;
-  workspaceId: string;
-  grantedByUserId: string;
-}) {
-  const membershipResult = await input.databaseClient
-    .from("workspace_memberships")
-    .select("role")
-    .eq("workspace_id", input.workspaceId)
-    .eq("user_id", input.grantedByUserId)
-    .maybeSingle();
-
-  if (membershipResult.error) {
-    throw membershipResult.error;
-  }
-
-  return membershipResult.data?.role === "owner" ||
-    membershipResult.data?.role === "manager";
-}
-
 export async function GET(request: Request) {
   try {
     const { runtime, token, verification } = await loadVerifiedPayload(request);
@@ -300,12 +268,9 @@ export async function GET(request: Request) {
       );
     }
 
-    const databaseClient = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
-    const requestRecord = await loadRequestRecord({
-      databaseClient,
+    const databaseClient = createServerDatabaseClient(runtime);
+    const requestRecord = await loadRequestAccessRecord({
+      client: databaseClient,
       requestId: verification.payload.requestId,
     });
 
@@ -376,12 +341,9 @@ export async function POST(request: Request) {
     }
 
     const payload = verification.payload;
-    const databaseClient = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
-    const requestRecord = await loadRequestRecord({
-      databaseClient,
+    const databaseClient = createServerDatabaseClient(runtime);
+    const requestRecord = await loadRequestAccessRecord({
+      client: databaseClient,
       requestId: payload.requestId,
     });
 
@@ -406,8 +368,8 @@ export async function POST(request: Request) {
       });
     }
 
-    if (!await ensureGrantAuthority({
-      databaseClient,
+    if (!await hasWorkspaceGrantAuthority({
+      client: databaseClient,
       workspaceId: payload.workspaceId,
       grantedByUserId: payload.grantedByUserId,
     })) {
@@ -469,17 +431,10 @@ export async function POST(request: Request) {
         "They do not have a NocPulse account yet. Access has been provisioned and will attach automatically on first sign-in.";
     }
 
-    const updateResult = await databaseClient
-      .from("request_access_requests")
-      .update({ status: "contacted" })
-      .eq("id", payload.requestId)
-      .neq("status", "archived")
-      .select("id, status")
-      .maybeSingle();
-
-    if (updateResult.error) {
-      throw updateResult.error;
-    }
+    const updatedRequestRecord = await markRequestAccessRecordContacted({
+      client: databaseClient,
+      requestId: payload.requestId,
+    });
 
     return htmlPage({
       title: "Access Granted",
@@ -489,7 +444,7 @@ export async function POST(request: Request) {
           <div class="label">Request ID</div><div class="value mono">${escapeHtml(payload.requestId)}</div>
           <div class="label">Workspace</div><div class="value mono">${escapeHtml(payload.workspaceId)}</div>
           <div class="label">Role</div><div class="value">${escapeHtml(payload.role)}</div>
-          <div class="label">Request Status</div><div class="value">${escapeHtml(updateResult.data?.status ?? "contacted")}</div>
+          <div class="label">Request Status</div><div class="value">${escapeHtml(updatedRequestRecord?.status ?? "contacted")}</div>
         </div>
         <p>${escapeHtml(detailMessage)}</p>
       </div>`,
