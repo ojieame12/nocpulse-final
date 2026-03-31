@@ -36,6 +36,10 @@ type WeatherObservationLike = {
   relativeHumidityPct: number | null;
   soilMoisturePct: number | null;
   evapotranspirationMm: number | null;
+  provenance?: {
+    soilDataset?: string | null;
+    forecastModel?: string | null;
+  } | null;
 };
 
 export type RebuildFieldMoistureEstimateSources = {
@@ -131,6 +135,10 @@ function deriveSourceBackedEstimate(
   const relativeHumidityPct = weatherObservation?.relativeHumidityPct ?? null;
   const rasterSourceKey = rasterObservation?.sourceKey ?? null;
   const weatherSourceKey = weatherObservation?.sourceKey ?? null;
+  const baselineDataset =
+    weatherSoilMoisture !== null
+      ? weatherObservation?.provenance?.soilDataset ?? weatherSourceKey
+      : null;
 
   const hasRasterSignal =
     moistureSignal !== null ||
@@ -226,7 +234,9 @@ function deriveSourceBackedEstimate(
   }
 
   if (weatherSoilMoisture !== null) {
-    confidenceReasonParts.push("weather soil moisture");
+    confidenceReasonParts.push(
+      baselineDataset === null ? "weather soil moisture" : "baseline soil moisture",
+    );
   } else if (hasWeatherSignal) {
     confidenceReasonParts.push("weather pulse");
   }
@@ -245,6 +255,7 @@ function deriveSourceBackedEstimate(
       derivationMode: "source-backed",
       rasterSourceKey: rasterSourceKey ?? undefined,
       weatherSourceKey: weatherSourceKey ?? undefined,
+      baselineDataset: baselineDataset ?? undefined,
       rasterMode,
       signalBlend,
       usedOptical: isOpticalRasterSource(rasterSourceKey),
