@@ -1154,6 +1154,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
         return (
           <SettingsPanel
             workspaceId={fieldData.workspaceId}
+            viewer={viewer}
             onClose={() => switchPanel('detail')}
           />
         );

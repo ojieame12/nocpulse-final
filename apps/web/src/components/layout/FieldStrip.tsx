@@ -257,6 +257,12 @@ function formatLocationSummary(legalLandDescription?: string | null): string | n
   return `${parsed.length} parcels`;
 }
 
+export type FieldOnboardingStatus = {
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  progressPct: number | null;
+  phaseLabel: string | null;
+};
+
 export interface FieldStripProps {
   fields: SidebarFieldItem[];
   activeFieldId?: string;
@@ -266,6 +272,7 @@ export interface FieldStripProps {
   onAddField?: () => void;
   onReorder?: (fromIndex: number, toIndex: number) => void;
   onSearchOpen?: () => void;
+  onboardingProgress?: ReadonlyMap<string, FieldOnboardingStatus>;
 }
 
 export function FieldStrip({
@@ -277,6 +284,7 @@ export function FieldStrip({
   onAddField,
   onReorder,
   onSearchOpen,
+  onboardingProgress,
 }: FieldStripProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -785,12 +793,20 @@ export function FieldStrip({
                 dragIndex !== null &&
                 hoverIndex !== null &&
                 field.id === filteredFields[dragIndex]?.id;
+              const fieldProgress = onboardingProgress?.get(field.id) ?? null;
+              const isOnboarding = fieldProgress != null && (fieldProgress.status === 'queued' || fieldProgress.status === 'running');
+              const progressPct = isOnboarding ? (fieldProgress.progressPct ?? 0) : 0;
+
+              /* Phase label replaces location during onboarding */
+              const onboardingLabel = isOnboarding
+                ? (fieldProgress.phaseLabel || (fieldProgress.status === 'running' ? 'syncing' : 'queued'))
+                : null;
 
             return (
               <button
                 key={field.id}
                 data-field-id={field.id}
-                className={`field-strip__card${isActive ? " field-strip__card--active" : ""}${isDragged ? " field-strip__card--dragging" : ""}`}
+                className={`field-strip__card${isActive ? " field-strip__card--active" : ""}${isDragged ? " field-strip__card--dragging" : ""}${isOnboarding ? " field-strip__card--onboarding" : ""}`}
                 onClick={() => {
                   if (suppressClickRef.current) {
                     suppressClickRef.current = false;
@@ -804,19 +820,29 @@ export function FieldStrip({
                 onPointerMove={handleCardPointerMove}
                 onPointerUp={handleCardPointerUp}
                 type="button"
-                title={field.legalLandDescription ? `${field.name} · ${field.legalLandDescription}` : field.name}
+                title={isOnboarding
+                  ? `${field.name} · ${onboardingLabel}`
+                  : (field.legalLandDescription ? `${field.name} · ${field.legalLandDescription}` : field.name)}
+                style={isOnboarding ? {
+                  borderBottom: '2px solid transparent',
+                  borderImage: `linear-gradient(to right, rgba(22,163,74,0.35) ${progressPct}%, transparent ${progressPct}%) 1`,
+                } : undefined}
               >
                 <span
                   className="field-strip__dot"
                   style={{ background: statusColor }}
                 />
                 <span className="field-strip__card-name">{field.name}</span>
-                {locationSummary ? (
+                {isOnboarding ? (
+                  <span className="field-strip__card-location">
+                    {onboardingLabel}
+                  </span>
+                ) : locationSummary ? (
                   <span className="field-strip__card-location">
                     {locationSummary}
                   </span>
                 ) : null}
-                {isActive && (
+                {isActive && !isOnboarding && (
                   <span className="field-strip__card-meta">
                     {field.crop ? (
                       <span className="field-strip__card-crop">

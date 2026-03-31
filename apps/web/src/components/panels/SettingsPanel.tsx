@@ -10,9 +10,18 @@ import {
 
 /* ── Types ── */
 
+export interface SettingsViewer {
+  displayName: string;
+  email: string | null;
+  initials: string;
+  workspaceRoleLabel: string;
+  workspaceName: string | null;
+}
+
 interface SettingsPanelProps {
   onClose?: () => void;
   workspaceId?: string | null;
+  viewer?: SettingsViewer | null;
 }
 
 function readPersistedSettings(storageKey: string): WorkspaceSettingsState | null {
@@ -134,7 +143,12 @@ function Integration({ icon: Icon, name, desc, status, color }: {
 
 /* ── Component ── */
 
-export function SettingsPanel({ onClose, workspaceId = null }: SettingsPanelProps) {
+export function SettingsPanel({ onClose, workspaceId = null, viewer = null }: SettingsPanelProps) {
+  const profileName = viewer?.displayName ?? 'John Draper';
+  const profileInitials = viewer?.initials ?? 'JD';
+  const profileRole = viewer?.workspaceRoleLabel ?? 'Owner';
+  const profileWorkspace = viewer?.workspaceName ?? 'Hope Creek Farms';
+  const profileEmail = viewer?.email ?? 'john@hopecreek.ca';
   const [emailAlerts, setEmailAlerts] = useState(true);
   const [healthWarnings, setHealthWarnings] = useState(true);
   const [sprayWindows, setSprayWindows] = useState(false);
@@ -281,27 +295,20 @@ export function SettingsPanel({ onClose, workspaceId = null }: SettingsPanelProp
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 400,
               color: '#fff', flexShrink: 0, letterSpacing: '-0.02em',
-            }}>JD</div>
+            }}>{profileInitials}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-              <Big size={18}>John Draper</Big>
-              <Sub>Owner · Hope Creek Farms</Sub>
+              <Big size={18}>{profileName}</Big>
+              <Sub>{profileRole} · {profileWorkspace}</Sub>
             </div>
           </div>
         </Card>
 
-        <Card>
+        <Card span={-1}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <User size={14} style={{ color: 'var(--text-muted)' }} />
             <LblM>EMAIL</LblM>
           </div>
-          <Mono>john@hopecreek.ca</Mono>
-        </Card>
-        <Card>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Building2 size={14} style={{ color: 'var(--text-muted)' }} />
-            <LblM>REGION</LblM>
-          </div>
-          <Mono>Saskatchewan, CA</Mono>
+          <Mono>{profileEmail}</Mono>
         </Card>
 
         {/* ── Notifications ── */}

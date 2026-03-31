@@ -586,6 +586,10 @@ img {
   border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 
+[data-theme="dark"] .app-topbar__brand-logo {
+  filter: brightness(0) invert(1);
+}
+
 [data-theme="dark"] .app-topbar__brand-text {
   color: rgba(255, 255, 255, 0.9);
 }
@@ -1974,6 +1978,22 @@ img {
   color: rgba(255, 255, 255, 0.46);
 }
 
+/* ── Onboarding state ──
+   Subtle treatment: the card looks "not yet arrived" rather than "loading."
+   - Name at reduced opacity (the field exists but isn't ready)
+   - Phase label in the location slot, italic to differentiate
+   - Bottom border gradient sweep as quiet progress indicator
+   - No pulsing, no progress bars, no percentages                      */
+
+.field-strip__card--onboarding .field-strip__card-name {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.field-strip__card--onboarding .field-strip__card-location {
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.32);
+}
+
 /* Expanded meta (visible only on active card) */
 
 .field-strip__card-meta {
@@ -2230,6 +2250,14 @@ img {
 
 [data-theme="light"] .field-strip__card-area {
   color: rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="light"] .field-strip__card--onboarding .field-strip__card-name {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] .field-strip__card--onboarding .field-strip__card-location {
+  color: rgba(0, 0, 0, 0.28);
 }
 
 /* ═══════════════════════════════════════════════════════════════════

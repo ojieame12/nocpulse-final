@@ -15,7 +15,11 @@ interface AddFieldPanelProps {
     fieldIds: string[];
     dispatchIds: string[];
     workspaceId?: string | null;
+    /** Per-dispatch mapping to field context for progress derivation */
+    trackedJobs: readonly { dispatchId: string; fieldId: string; fieldLabel: string }[];
   }) => void;
+  /** Dispatch statuses owned by the parent — AddFieldPanel reads these instead of polling. */
+  jobStatuses?: ReadonlyMap<string, JobDispatchSnapshot>;
   workspaceId?: string | null;
 }
 
@@ -601,6 +605,7 @@ export function AddFieldPanel({
   onClose,
   onFieldsChanged,
   onOnboardingTracked,
+  jobStatuses: parentJobStatuses,
   workspaceId = null,
 }: AddFieldPanelProps) {
   const effectiveWorkspaceId = normalizeWorkspaceId(workspaceId);
@@ -617,9 +622,12 @@ export function AddFieldPanel({
   const [previewCard, setPreviewCard] = useState<PreviewCard | null>(null);
   const [spreadsheetPreview, setSpreadsheetPreview] = useState<SpreadsheetPreviewPayload | null>(null);
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>([]);
-  const [jobStatuses, setJobStatuses] = useState<Map<string, JobDispatchSnapshot>>(new Map());
   const [lldDraftReady, setLldDraftReady] = useState(false);
   const [boundaryDraftReady, setBoundaryDraftReady] = useState(false);
+
+  /* Job statuses come from the parent shell (which owns the single polling
+     loop). Fall back to an empty map if no parent supplies them. */
+  const jobStatuses: ReadonlyMap<string, JobDispatchSnapshot> = parentJobStatuses ?? new Map();
 
   const clearFeedback = () => {
     setStatusTone('neutral');
@@ -627,69 +635,9 @@ export function AddFieldPanel({
     setPreviewCard(null);
     setSpreadsheetPreview(null);
     setTrackedJobs([]);
-    setJobStatuses(new Map());
     setLldDraftReady(false);
     setBoundaryDraftReady(false);
   };
-
-  useEffect(() => {
-    if (trackedJobs.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    const poll = async () => {
-      try {
-        const response = await fetch('/api/jobs/dispatches', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({
-            workspaceId: effectiveWorkspaceId ?? undefined,
-            ids: trackedJobs.map((job) => job.dispatchId),
-          }),
-        });
-        const result = await readApiResult<{ dispatches: JobDispatchSnapshot[] }>(response);
-        if (cancelled) {
-          return;
-        }
-
-        const nextStatuses = new Map(
-          result.dispatches.map((dispatch) => [dispatch.id, dispatch] as const),
-        );
-        setJobStatuses(nextStatuses);
-
-        const shouldContinue = trackedJobs.some((job) => {
-          const status = nextStatuses.get(job.dispatchId)?.status ?? 'queued';
-          return status === 'queued' || status === 'running';
-        });
-
-        if (shouldContinue) {
-          timeoutId = setTimeout(() => {
-            void poll();
-          }, JOB_STATUS_POLL_MS);
-        }
-      } catch {
-        if (!cancelled) {
-          timeoutId = setTimeout(() => {
-            void poll();
-          }, JOB_STATUS_POLL_MS);
-        }
-      }
-    };
-
-    void poll();
-
-    return () => {
-      cancelled = true;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [effectiveWorkspaceId, trackedJobs]);
 
   const primaryLabel = useMemo(() => {
     if (isSubmitting) {
@@ -826,6 +774,7 @@ export function AddFieldPanel({
       fieldIds: [result.field.id],
       dispatchIds: Array.from(new Set(nextTrackedJobs.map((job) => job.dispatchId))),
       workspaceId: effectiveWorkspaceId,
+      trackedJobs: nextTrackedJobs,
     });
     onFieldsChanged?.({
       preferredFieldId: result.field.id,
@@ -925,6 +874,7 @@ export function AddFieldPanel({
       fieldIds: [result.field.id],
       dispatchIds: Array.from(new Set(nextTrackedJobs.map((job) => job.dispatchId))),
       workspaceId: effectiveWorkspaceId,
+      trackedJobs: nextTrackedJobs,
     });
     onFieldsChanged?.({
       preferredFieldId: result.field.id,
@@ -1034,6 +984,7 @@ export function AddFieldPanel({
       fieldIds: committed.candidates.map((entry) => entry.field.id),
       dispatchIds: Array.from(new Set(nextTrackedJobs.map((job) => job.dispatchId))),
       workspaceId: effectiveWorkspaceId,
+      trackedJobs: nextTrackedJobs,
     });
     onFieldsChanged?.({
       preferredFieldId:
