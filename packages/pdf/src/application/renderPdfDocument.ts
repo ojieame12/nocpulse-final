@@ -10,39 +10,40 @@ import type {
   RGB,
 } from "../contracts/PdfRender";
 import { parseTTF, generatePdfFontObjects, type EmbeddedFont } from "./ttfEmbed";
-import { PLAYFAIR_REGULAR, PLAYFAIR_BOLD } from "./fontData";
+import { CAUDEX_REGULAR, CAUDEX_BOLD } from "./fontData";
 
 /* ═══════════════════════════════════════════════════════════════════
    NocPulse PDF Renderer — Rich visual layout engine
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Embedded fonts ──
-   Playfair Display TTF data is inlined as base64 in fontData.ts
+   Caudex TTF data is inlined as base64 in fontData.ts
    so it works on serverless platforms (Vercel) without filesystem access.
+   Caudex is a warm, readable Unicode serif used for hero values and titles.
 */
 let _serifRegular: EmbeddedFont | null = null;
 let _serifBold: EmbeddedFont | null = null;
 
 function getSerifRegular(): EmbeddedFont {
   if (!_serifRegular) {
-    _serifRegular = parseTTF(PLAYFAIR_REGULAR);
+    _serifRegular = parseTTF(CAUDEX_REGULAR);
   }
   return _serifRegular;
 }
 function getSerifBold(): EmbeddedFont {
   if (!_serifBold) {
-    _serifBold = parseTTF(PLAYFAIR_BOLD);
+    _serifBold = parseTTF(CAUDEX_BOLD);
   }
   return _serifBold;
 }
 
 /* ── Font roles (maps to design system) ──
-   F1 = Helvetica              → body/UI (Sintony stand-in)
-   F2 = Helvetica-Bold         → body/UI bold
-   F3 = Playfair Display       → editorial serif (P22 Mackinac replacement)
-   F4 = Playfair Display Bold  → editorial serif bold
-   F5 = Courier                → data/mono (IBM Plex Mono stand-in)
-   F6 = Courier-Bold           → data/mono bold
+   F1 = Helvetica         → body/UI (Sintony stand-in)
+   F2 = Helvetica-Bold    → body/UI bold
+   F3 = Caudex            → editorial serif (P22 Mackinac replacement)
+   F4 = Caudex Bold       → editorial serif bold
+   F5 = Courier           → data/mono (IBM Plex Mono stand-in)
+   F6 = Courier-Bold      → data/mono bold
 */
 type PdfFontRef = "F1" | "F2" | "F3" | "F4" | "F5" | "F6";
 
@@ -193,14 +194,15 @@ function escapePdfText(value: string) {
       result += "\\" + UNICODE_TO_WINANSI[ch].toString(8).padStart(3, "0");
     } else {
       const code = ch.charCodeAt(0);
-      if (code > 0x7E && code < 0xA0) {
-        // Control range — skip or replace
-        result += " ";
-      } else if (code <= 0xFF) {
-        // Direct WinAnsi range
+      if (code <= 0x7E) {
+        // ASCII printable — safe to emit directly
         result += ch;
+      } else if (code <= 0xFF) {
+        // Latin-1 supplement (0x7F–0xFF) — must use octal escape
+        // to avoid UTF-8 multi-byte corruption in the PDF stream
+        result += "\\" + code.toString(8).padStart(3, "0");
       } else {
-        // Unmapped Unicode — replace with placeholder
+        // Unmapped Unicode above U+00FF — replace with placeholder
         result += "?";
       }
     }

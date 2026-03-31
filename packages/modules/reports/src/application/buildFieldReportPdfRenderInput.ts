@@ -98,6 +98,21 @@ function inferAlertAction(alert: FieldAlert): string | undefined {
   return undefined;
 }
 
+/** Infer a short weather description from forecast numeric data. */
+function inferForecastConditions(f: FieldWeatherForecast): string {
+  const minT = f.airTemperatureMinC;
+  const precip = f.precipitationMm ?? 0;
+  const wind = f.windSpeedKph ?? 0;
+
+  if (minT !== null && minT <= -10) return precip >= 2 ? "Snow likely" : "Deep frost";
+  if (minT !== null && minT <= 0) return precip >= 2 ? "Rain/snow mix" : "Frost risk";
+  if (precip >= 10) return "Heavy rain";
+  if (precip >= 2) return "Light rain";
+  if (wind >= 40) return "High wind";
+  if (precip > 0) return "Chance of showers";
+  return "Dry";
+}
+
 /** Derive a plain-language action from a finding. */
 function inferFindingAction(finding: FieldIntelligenceFinding): string | undefined {
   if (finding.recommendedAction) return finding.recommendedAction;
@@ -433,17 +448,19 @@ export function buildFieldReportPdfRenderInput({
     blocks.push({
       kind: "table",
       columns: [
-        { label: "Time", width: 0.24 },
-        { label: "Min", width: 0.10, align: "right" },
-        { label: "Max", width: 0.10, align: "right" },
+        { label: "Time", width: 0.18 },
+        { label: "Conditions", width: 0.16 },
+        { label: "Min", width: 0.09, align: "right" },
+        { label: "Max", width: 0.09, align: "right" },
         { label: "Precip", width: 0.14, align: "right" },
         { label: "Wind", width: 0.14, align: "right" },
-        { label: "Chance", width: 0.14, align: "right" },
+        { label: "Chance", width: 0.12, align: "right" },
       ],
       headerBg: GREEN,
       rows: forecasts.map((f) => ({
         cells: [
           fmtDate(f.validAt),
+          inferForecastConditions(f),
           `${fmt(f.airTemperatureMinC)}°`,
           `${fmt(f.airTemperatureMaxC)}°`,
           `${fmt(f.precipitationMm)} mm`,
@@ -463,6 +480,40 @@ export function buildFieldReportPdfRenderInput({
       })),
       marginTop: 6,
     });
+
+    // Precipitation sparkline from forecast data
+    const precipValues = forecasts
+      .map((f) => f.precipitationMm ?? 0);
+    if (precipValues.some((v) => v > 0)) {
+      blocks.push({
+        kind: "sparkline",
+        label: "Forecast Precipitation (mm)",
+        data: precipValues,
+        color: [0.23, 0.51, 0.85] as RGB,
+        height: 48,
+        marginTop: 8,
+      });
+    }
+
+    // Temperature window — High vs Low sparklines
+    const tempHighs = forecasts
+      .map((f) => f.airTemperatureMaxC)
+      .filter((v): v is number => v !== null);
+    const tempLows = forecasts
+      .map((f) => f.airTemperatureMinC)
+      .filter((v): v is number => v !== null);
+    if (tempHighs.length >= 2 && tempLows.length >= 2) {
+      blocks.push({
+        kind: "multi-sparkline",
+        label: "Forecast Temperature Window (°C)",
+        series: [
+          { label: "High", data: tempHighs, color: RED },
+          { label: "Low", data: tempLows, color: [0.23, 0.51, 0.85] as RGB },
+        ],
+        height: 56,
+        marginTop: 8,
+      });
+    }
   }
 
   /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

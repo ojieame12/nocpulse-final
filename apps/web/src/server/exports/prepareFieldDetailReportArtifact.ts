@@ -83,6 +83,21 @@ function alertActionText(alert: ReportAlertItem): string | undefined {
   return undefined;
 }
 
+/** Infer a short weather description from temperature and precipitation strings. */
+function inferWeatherDesc(temp: string, precip: string): string {
+  const tempNums = temp.match(/-?\d+\.?\d*/g);
+  const precipNums = precip.match(/\d+\.?\d*/g);
+  const minTemp = tempNums ? Math.min(...tempNums.map(Number)) : null;
+  const precipVal = precipNums ? Math.max(...precipNums.map(Number)) : 0;
+
+  if (minTemp !== null && minTemp <= -10) return precipVal >= 2 ? "Snow likely" : "Deep frost";
+  if (minTemp !== null && minTemp <= 0) return precipVal >= 2 ? "Rain/snow mix" : "Frost risk";
+  if (precipVal >= 10) return "Heavy rain";
+  if (precipVal >= 2) return "Light rain";
+  if (precipVal > 0) return "Chance of showers";
+  return "Dry";
+}
+
 /** Determine row accent color from forecast data. */
 function forecastRowColor(temp: string, precip: string): RGB | undefined {
   // Parse lowest temperature from strings like "-3°C / 5°C" or "Low: -2°C"
@@ -313,6 +328,30 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
       marginTop: 6,
     });
 
+    // Moisture depth comparison — Root vs Surface progress bars
+    {
+      const rootPct = parseFloat(s.rootMoisture) || 0;
+      const surfPct = parseFloat(s.surfaceMoisture ?? "0") || 0;
+      blocks.push({
+        kind: "progress-bar",
+        label: "Root Zone Moisture",
+        value: s.rootMoisture,
+        percent: Math.min(100, rootPct),
+        fillColor: rootPct < 25 ? RED : GREEN_SOFT,
+        rangeLabels: ["0%", "100%"],
+        marginTop: 8,
+      });
+      blocks.push({
+        kind: "progress-bar",
+        label: "Surface Moisture",
+        value: s.surfaceMoisture ?? "—",
+        percent: Math.min(100, surfPct),
+        fillColor: surfPct < 20 ? RED : surfPct < 30 ? AMBER : GREEN_SOFT,
+        rangeLabels: ["0%", "100%"],
+        marginTop: 4,
+      });
+    }
+
     blocks.push({ kind: "spacer", height: 8 });
 
     /* ── Atmosphere ── */
@@ -386,17 +425,61 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
     blocks.push({
       kind: "table",
       columns: [
-        { label: "Day", width: 0.30 },
-        { label: "Temperature", width: 0.35 },
-        { label: "Precipitation", width: 0.35, align: "right" },
+        { label: "Day", width: 0.22 },
+        { label: "Conditions", width: 0.20 },
+        { label: "Temperature", width: 0.30 },
+        { label: "Precipitation", width: 0.28, align: "right" },
       ],
       headerBg: GREEN,
       rows: r.forecast.map((day) => ({
-        cells: [day.day, day.temp, day.precip],
+        cells: [day.day, inferWeatherDesc(day.temp, day.precip), day.temp, day.precip],
         accentColor: forecastRowColor(day.temp, day.precip),
       })),
       marginTop: 6,
     });
+
+    // Precipitation sparkline from forecast data
+    const precipValues = r.forecast
+      .map((day) => {
+        const nums = day.precip.match(/\d+\.?\d*/g);
+        return nums ? Math.max(...nums.map(Number)) : 0;
+      });
+    if (precipValues.some((v) => v > 0)) {
+      blocks.push({
+        kind: "sparkline",
+        label: "Forecast Precipitation (mm)",
+        data: precipValues,
+        color: [0.23, 0.51, 0.85] as RGB,
+        height: 48,
+        marginTop: 8,
+      });
+    }
+
+    // Temperature range sparkline from forecast
+    const tempHighValues = r.forecast
+      .map((day) => {
+        const nums = day.temp.match(/-?\d+\.?\d*/g);
+        return nums ? Math.max(...nums.map(Number)) : null;
+      })
+      .filter((v): v is number => v !== null);
+    const tempLowValues = r.forecast
+      .map((day) => {
+        const nums = day.temp.match(/-?\d+\.?\d*/g);
+        return nums ? Math.min(...nums.map(Number)) : null;
+      })
+      .filter((v): v is number => v !== null);
+    if (tempHighValues.length >= 2 && tempLowValues.length >= 2) {
+      blocks.push({
+        kind: "multi-sparkline",
+        label: "Forecast Temperature Window (°C)",
+        series: [
+          { label: "High", data: tempHighValues, color: RED },
+          { label: "Low", data: tempLowValues, color: [0.23, 0.51, 0.85] as RGB },
+        ],
+        height: 56,
+        marginTop: 8,
+      });
+    }
   }
 
   /* ── Trend History Sparklines ── */
