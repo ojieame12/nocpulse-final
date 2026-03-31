@@ -15,6 +15,7 @@ type CreatePlanetImageryProviderClientOptions = {
   apiKey: string;
   baseUrl?: string;
   ordersBaseUrl?: string;
+  ordersProductBundles?: readonly string[];
 };
 
 type PlanetFeature = {
@@ -46,7 +47,11 @@ type PlanetOrderResult = {
   location?: string;
 };
 
-const PLANET_ORDERS_PRODUCT_BUNDLE = "analytic_sr_udm2,analytic_udm2";
+const PLANET_DEFAULT_PRODUCT_BUNDLES: readonly string[] = [
+  "analytic_sr_udm2,analytic_udm2",
+  "analytic_udm2",
+  "visual",
+];
 const PLANET_ORDER_POLL_ATTEMPTS = 36;
 const PLANET_ORDER_POLL_INTERVAL_MS = 5000;
 
@@ -153,11 +158,13 @@ async function createPlanetOrder({
   ordersBaseUrl,
   fieldId,
   sceneKey,
+  productBundle,
 }: {
   apiKey: string;
   ordersBaseUrl: string;
   fieldId: string;
   sceneKey: string;
+  productBundle: string;
 }) {
   const response = await fetch(ordersBaseUrl, {
     method: "POST",
@@ -173,7 +180,7 @@ async function createPlanetOrder({
         {
           item_ids: [sceneKey],
           item_type: "PSScene",
-          product_bundle: PLANET_ORDERS_PRODUCT_BUNDLE,
+          product_bundle: productBundle,
         },
       ],
       tools: [
@@ -193,11 +200,12 @@ async function createPlanetOrder({
   });
 
   if (!response.ok) {
-    throw new Error(
-      `[imagery] planet order creation failed with ${await readPlanetErrorMessage(
-        response,
-      )}`,
-    );
+    return {
+      success: false as const,
+      status: response.status,
+      message: await readPlanetErrorMessage(response),
+      bundle: productBundle,
+    };
   }
 
   const payload = (await response.json()) as PlanetOrder;
@@ -206,7 +214,59 @@ async function createPlanetOrder({
     throw new Error("[imagery] planet order response missing order id");
   }
 
-  return payload.id;
+  return {
+    success: true as const,
+    orderId: payload.id,
+    bundle: productBundle,
+  };
+}
+
+async function createPlanetOrderWithBundleFallback({
+  apiKey,
+  ordersBaseUrl,
+  fieldId,
+  sceneKey,
+  bundles,
+}: {
+  apiKey: string;
+  ordersBaseUrl: string;
+  fieldId: string;
+  sceneKey: string;
+  bundles: readonly string[];
+}) {
+  const failedAttempts: { bundle: string; status: number; message: string }[] = [];
+
+  for (const bundle of bundles) {
+    const result = await createPlanetOrder({
+      apiKey,
+      ordersBaseUrl,
+      fieldId,
+      sceneKey,
+      productBundle: bundle,
+    });
+
+    if (result.success) {
+      if (failedAttempts.length > 0) {
+        console.warn(
+          `[imagery] planet order succeeded with fallback bundle "${bundle}" after ${failedAttempts.length} failed attempt(s): ${failedAttempts.map((a) => `${a.bundle}→${a.status}`).join(", ")}`,
+        );
+      }
+      return { orderId: result.orderId, resolvedBundle: bundle, failedAttempts };
+    }
+
+    failedAttempts.push({
+      bundle: result.bundle,
+      status: result.status,
+      message: result.message,
+    });
+  }
+
+  const summary = failedAttempts
+    .map((a) => `${a.bundle}→${a.status}`)
+    .join(", ");
+  throw new Error(
+    `[imagery] planet order creation failed for all bundles [${summary}]: ${failedAttempts[failedAttempts.length - 1]?.message ?? "unknown error"}`,
+  );
 }
 
 async function fetchPlanetOrder({
@@ -396,17 +456,20 @@ async function materializePlanetObservation({
   gridCells,
   apiKey,
   ordersBaseUrl,
+  bundles,
 }: {
   input: MaterializeImagerySceneInput;
   gridCells: RasterFieldGridObservation["cells"];
   apiKey: string;
   ordersBaseUrl: string;
+  bundles: readonly string[];
 }) {
-  const orderId = await createPlanetOrder({
+  const { orderId, resolvedBundle, failedAttempts } = await createPlanetOrderWithBundleFallback({
     apiKey,
     ordersBaseUrl,
     fieldId: input.fieldId,
     sceneKey: input.scene.sceneKey,
+    bundles,
   });
   const order = await waitForPlanetOrderSuccess({
     apiKey,
@@ -452,6 +515,15 @@ async function materializePlanetObservation({
       materializationFallbackReason: null,
       materializationOrderId: orderId,
       materializationOrderState: order.state ?? "success",
+      materializationResolvedBundle: resolvedBundle,
+      ...(failedAttempts.length > 0
+        ? {
+            materializationBundleFallbackCount: failedAttempts.length,
+            materializationBundleFallbackLog: failedAttempts
+              .map((a) => `${a.bundle}→${a.status}`)
+              .join(", "),
+          }
+        : {}),
       materializationArtifactName: rasterResult.name,
       ...(udm2Result?.name
         ? {
@@ -474,7 +546,9 @@ export function createPlanetImageryProviderClient({
   apiKey,
   baseUrl = "https://api.planet.com/data/v1",
   ordersBaseUrl = "https://api.planet.com/compute/ops/orders/v2",
+  ordersProductBundles = PLANET_DEFAULT_PRODUCT_BUNDLES,
 }: CreatePlanetImageryProviderClientOptions): ImageryProviderClient {
+  const resolvedBundles = ordersProductBundles.length > 0 ? ordersProductBundles : PLANET_DEFAULT_PRODUCT_BUNDLES;
   const rasterGridProvider = createSyntheticRasterFieldObservationProvider({
     providers: ["planet"],
     sourceKey: "planet-raster-grid-v1",
@@ -511,7 +585,7 @@ export function createPlanetImageryProviderClient({
           details: {
             httpStatus: response.status,
             providerConfigured: true,
-            ordersProductBundle: null,
+            ordersProductBundles: null,
           },
         };
       }
@@ -528,7 +602,7 @@ export function createPlanetImageryProviderClient({
         details: {
           httpStatus: response.status,
           providerConfigured: true,
-          ordersProductBundle: PLANET_ORDERS_PRODUCT_BUNDLE,
+          ordersProductBundles: resolvedBundles.join(" | "),
         },
       };
     },
@@ -654,6 +728,7 @@ export function createPlanetImageryProviderClient({
         gridCells: baseGrid.cells,
         apiKey,
         ordersBaseUrl,
+        bundles: resolvedBundles,
       });
     },
   };

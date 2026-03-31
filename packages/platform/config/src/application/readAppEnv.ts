@@ -56,6 +56,9 @@ export function readAppEnv(source: Partial<Record<keyof AppEnv | string, string 
       planet: {
         enabled: planetEnabled,
         apiKey: parsed.PLANET_API_KEY,
+        ordersProductBundles: parsed.PLANET_ORDERS_PRODUCT_BUNDLES
+          ? parsed.PLANET_ORDERS_PRODUCT_BUNDLES.split("|").map((s: string) => s.trim()).filter(Boolean)
+          : undefined,
       },
     },
     weather: {

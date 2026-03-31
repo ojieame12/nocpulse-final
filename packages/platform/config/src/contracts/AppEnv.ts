@@ -25,6 +25,7 @@ export const AppEnvSchema = z.object({
   SENTINEL_HUB_CLIENT_ID: optionalString(),
   SENTINEL_HUB_CLIENT_SECRET: optionalString(),
   PLANET_API_KEY: optionalString(),
+  PLANET_ORDERS_PRODUCT_BUNDLES: optionalString(),
   DATABASE_URL: optionalString(),
   DEV_ACTOR_USER_ID: z.preprocess(
     (value) =>

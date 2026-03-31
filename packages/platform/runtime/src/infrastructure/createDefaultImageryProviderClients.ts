@@ -35,6 +35,7 @@ export function createDefaultImageryProviderClients(
       ? createFallbackImageryProviderClient({
           primary: createPlanetImageryProviderClient({
             apiKey: env.imagery.planet.apiKey,
+            ordersProductBundles: env.imagery.planet.ordersProductBundles,
           }),
           fallback: createSyntheticImageryProviderClient({
             provider: "planet",
