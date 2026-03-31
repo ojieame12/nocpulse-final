@@ -350,6 +350,31 @@ export function createServerServices(
         });
       },
     },
+    fields: {
+      async renameField(input) {
+        await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
+
+        return repositories.fields.renameField(
+          input.workspaceId,
+          input.fieldId,
+          input.name,
+        );
+      },
+      async setLegalLandDescription(input) {
+        await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
+
+        return repositories.fields.setLegalLandDescription(
+          input.workspaceId,
+          input.fieldId,
+          input.legalLandDescription,
+        );
+      },
+      async deleteField(input) {
+        await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
+
+        await repositories.fields.deleteField(input.workspaceId, input.fieldId);
+      },
+    },
     fieldIntake: {
       async lookupLldBoundary(input) {
         return lookupLldBoundary(input, {

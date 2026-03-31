@@ -1,6 +1,7 @@
 import {
   coerceNumber,
   requireSupabaseData,
+  requireSupabaseSuccess,
   type DatabaseClient,
   type DatabaseSchema,
   type JsonValue,
@@ -176,6 +177,30 @@ export function createSupabaseFieldRepository(
       return result.data ? mapFieldDetail(result.data) : null;
     },
 
+    async renameField(workspaceId, fieldId, name) {
+      const result = await client
+        .from("fields")
+        .update({
+          name,
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("id", fieldId)
+        .select("id")
+        .single();
+
+      requireSupabaseData(result, "fields.renameField.update");
+
+      const detail = await this.getById(workspaceId, fieldId);
+
+      if (!detail) {
+        throw new Error(
+          `[fields] updated field ${fieldId} could not be reloaded after rename`,
+        );
+      }
+
+      return detail;
+    },
+
     async setLegalLandDescription(workspaceId, fieldId, legalLandDescription) {
       const result = await client
         .from("fields")
@@ -198,6 +223,16 @@ export function createSupabaseFieldRepository(
       }
 
       return detail;
+    },
+
+    async deleteField(workspaceId, fieldId) {
+      const result = await client
+        .from("fields")
+        .delete()
+        .eq("workspace_id", workspaceId)
+        .eq("id", fieldId);
+
+      requireSupabaseSuccess(result, "fields.deleteField");
     },
 
     async listByWorkspace(workspaceId: WorkspaceId) {

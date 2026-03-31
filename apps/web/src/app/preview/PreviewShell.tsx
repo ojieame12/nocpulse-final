@@ -23,6 +23,7 @@ import { ScoutReportPanel } from '../../components/panels/ScoutReportPanel';
 import { EvidencePanel } from '../../components/panels/EvidencePanel';
 import { SpotInspectorPanel } from '../../components/panels/SpotInspectorPanel';
 import { SettingsPanel } from '../../components/panels/SettingsPanel';
+import { EditFieldPanel } from '../../components/panels/EditFieldPanel';
 import { AddFieldPanel } from '../../components/panels/AddFieldPanel';
 import type { FieldActionProps } from '../../components/panels/ActionTab';
 import type { FieldNotesProps } from '../../components/panels/NotesTab';
@@ -101,6 +102,10 @@ const PREFETCH_DELAY_MS = 250;
 const FAILED_FETCH_RETRY_MS = 15_000;
 const ONBOARDING_STATUS_POLL_MS = 3_000;
 const EMPTY_PREVIEW_FIELD_ID = "__empty__";
+
+type WorkspaceFieldFeatures = NonNullable<
+  FieldBoundaryPreviewRenderModel["workspaceFieldFeatures"]
+>;
 
 type PendingOnboardingWatch = {
   workspaceId?: string | null;
@@ -186,6 +191,156 @@ function resolveFieldMeta(
   return [cropLabel, stageLabel, areaLabel].filter(Boolean).join(' · ');
 }
 
+function renameSidebarField(
+  fields: SidebarFieldItem[],
+  fieldId: string,
+  name: string,
+) {
+  return fields.map((field) =>
+    field.id === fieldId ? { ...field, name } : field,
+  );
+}
+
+function updateSidebarFieldLld(
+  fields: SidebarFieldItem[],
+  fieldId: string,
+  legalLandDescription: string | null,
+) {
+  return fields.map((field) =>
+    field.id === fieldId ? { ...field, legalLandDescription } : field,
+  );
+}
+
+function updateSidebarFieldCrop(
+  fields: SidebarFieldItem[],
+  fieldId: string,
+  crop: string,
+) {
+  return fields.map((field) =>
+    field.id === fieldId ? { ...field, crop } : field,
+  );
+}
+
+function removeSidebarField(fields: SidebarFieldItem[], fieldId: string) {
+  return fields.filter((field) => field.id !== fieldId);
+}
+
+function patchFieldViewModelName(field: FieldViewModel, name: string): FieldViewModel {
+  return {
+    ...field,
+    fieldName: name,
+    mapPreview: {
+      ...field.mapPreview,
+      fieldName: name,
+      boundaryFeature: {
+        ...field.mapPreview.boundaryFeature,
+        properties: {
+          ...field.mapPreview.boundaryFeature.properties,
+          fieldName: name,
+        },
+      },
+    },
+    summary: field.summary ? { ...field.summary, name } : field.summary,
+  };
+}
+
+function patchFieldViewModelLld(
+  field: FieldViewModel,
+  legalLandDescription: string | null,
+): FieldViewModel {
+  const nextLabel = legalLandDescription ?? '';
+
+  return {
+    ...field,
+    summary: field.summary ? { ...field.summary, lld: nextLabel } : field.summary,
+    cropPanel: field.cropPanel ? { ...field.cropPanel, lld: nextLabel } : field.cropPanel,
+  };
+}
+
+function patchFieldViewModelCrop(
+  field: FieldViewModel,
+  crop: string,
+): FieldViewModel {
+  return {
+    ...field,
+    summary: field.summary ? { ...field.summary, crop } : field.summary,
+    cropPanel: field.cropPanel ? { ...field.cropPanel, cropName: crop } : field.cropPanel,
+  };
+}
+
+function buildEmptyPreviewFieldViewModel(
+  workspaceId: string,
+  template: FieldBoundaryPreviewRenderModel,
+  workspaceFieldFeatures: WorkspaceFieldFeatures,
+): FieldViewModel {
+  return {
+    workspaceId,
+    fieldId: EMPTY_PREVIEW_FIELD_ID,
+    fieldName: '',
+    areaHaLabel: '',
+    mapPreview: {
+      fieldId: EMPTY_PREVIEW_FIELD_ID,
+      fieldName: '',
+      bbox: template.bbox,
+      labelPoint: template.labelPoint,
+      boundaryFeature: {
+        type: 'Feature',
+        properties: {
+          fieldId: EMPTY_PREVIEW_FIELD_ID,
+          fieldName: '',
+        },
+        geometry: {
+          type: 'MultiPolygon',
+          coordinates: [],
+        },
+      },
+      workspaceFieldFeatures,
+      zones: [],
+      agronomicSurface: null,
+      alternateAgronomicSurfaces: {},
+      focusedZoneId: null,
+      presentation: template.presentation,
+    },
+    sidebarFields: [],
+    summary: null,
+    reportPanel: null,
+    actionPanel: null,
+    notesPanel: null,
+    marketPanel: null,
+    cropPanel: null,
+    alertsPanel: null,
+    activityPanel: null,
+    cellInspector: null,
+  };
+}
+
+function selectFallbackFieldId(
+  fields: SidebarFieldItem[],
+  removedFieldId: string,
+) {
+  const removedIndex = fields.findIndex((field) => field.id === removedFieldId);
+  const remaining = removeSidebarField(fields, removedFieldId);
+
+  if (remaining.length === 0) {
+    return null;
+  }
+
+  return remaining[removedIndex]?.id ?? remaining[removedIndex - 1]?.id ?? remaining[0]?.id ?? null;
+}
+
+async function readApiErrorMessage(response: Response, fallback: string) {
+  try {
+    const payload = (await response.clone().json()) as {
+      error?: { message?: string };
+      message?: string;
+    };
+    return payload.error?.message ?? payload.message ?? fallback;
+  } catch {
+    const text = await response.text().catch(() => "");
+    return text.trim().length > 0 ? text : fallback;
+  }
+}
+
 /* ── Panel views ── */
 
 type PanelView =
@@ -201,7 +356,8 @@ type PanelView =
   | 'zoneDetail'
   | 'evidence'
   | 'spot'
-  | 'add-field';
+  | 'add-field'
+  | 'edit-field';
 
 export function resolvePreviewCanonicalDetailInitialPage(
   panel: PanelView,
@@ -387,7 +543,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
   const [revealedFieldId, setRevealedFieldId] = useState<string | null>(null);
   const [isLoadingField, setIsLoadingField] = useState(false);
   const [fieldSwitchError, setFieldSwitchError] = useState<string | null>(null);
-  const [workspaceFieldFeatures] = useState(
+  const [workspaceFieldFeatures, setWorkspaceFieldFeatures] = useState<WorkspaceFieldFeatures>(
     initial.mapPreview.workspaceFieldFeatures ?? [],
   );
   const [pendingOnboardingWatch, setPendingOnboardingWatch] =
@@ -539,6 +695,44 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
     setFieldSwitchError(null);
   }, []);
 
+  const syncSidebarFieldsAcrossCache = useCallback(
+    (transform: (fields: SidebarFieldItem[]) => SidebarFieldItem[]) => {
+      setSidebarFields((prev) => transform(prev));
+      setFieldData((prev) => ({
+        ...prev,
+        sidebarFields: transform(prev.sidebarFields),
+      }));
+
+      const nextCache = new Map<string, FieldViewModel>();
+
+      for (const [cachedFieldId, cachedField] of fieldCacheRef.current.entries()) {
+        nextCache.set(cachedFieldId, {
+          ...cachedField,
+          sidebarFields: transform(cachedField.sidebarFields),
+        });
+      }
+
+      fieldCacheRef.current = nextCache;
+    },
+    [],
+  );
+
+  const patchCachedField = useCallback(
+    (
+      fieldId: string,
+      update: (field: FieldViewModel) => FieldViewModel,
+    ) => {
+      const cached = fieldCacheRef.current.get(fieldId);
+
+      if (cached) {
+        fieldCacheRef.current.set(fieldId, update(cached));
+      }
+
+      setFieldData((prev) => (prev.fieldId === fieldId ? update(prev) : prev));
+    },
+    [],
+  );
+
   const resolveFieldSelectionLabel = useCallback(
     (fieldId: string) => {
       if (isPlaceholderFieldId(fieldId)) {
@@ -675,6 +869,309 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
 
     applyFieldData(nextField);
   }, [activeFieldId, applyFieldData, fetchFieldOverview]);
+
+  const handleFieldRename = useCallback(
+    async (fieldId: string, newName: string) => {
+      const snapshot = {
+        fieldData,
+        sidebarFields,
+        workspaceFieldFeatures,
+        cache: new Map(fieldCacheRef.current),
+      };
+
+      syncSidebarFieldsAcrossCache((fields) =>
+        renameSidebarField(fields, fieldId, newName),
+      );
+      patchCachedField(fieldId, (field) => patchFieldViewModelName(field, newName));
+      setWorkspaceFieldFeatures((prev) =>
+        prev.map((feature) =>
+          feature.properties.fieldId === fieldId
+            ? {
+                ...feature,
+                properties: {
+                  ...feature.properties,
+                  fieldName: newName,
+                },
+              }
+            : feature,
+        ),
+      );
+
+      const response = await fetch(`/api/fields/${fieldId}`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+          'x-fieldpulse-workspace-id': workspaceId,
+        },
+        body: JSON.stringify({
+          name: newName,
+        }),
+      });
+
+      if (!response.ok) {
+        fieldCacheRef.current = snapshot.cache;
+        setSidebarFields(snapshot.sidebarFields);
+        setWorkspaceFieldFeatures(snapshot.workspaceFieldFeatures);
+        setFieldData((current) =>
+          current.fieldId === fieldId ? snapshot.fieldData : current,
+        );
+        setFieldSwitchError(
+          await readApiErrorMessage(response, 'Unable to rename this field right now.'),
+        );
+        return;
+      }
+
+      const nextField = await fetchFieldOverview(fieldId, { force: true });
+      if (!nextField) {
+        return;
+      }
+
+      if (activeFieldId === fieldId) {
+        applyFieldData(nextField);
+      }
+    },
+    [
+      activeFieldId,
+      applyFieldData,
+      fieldData,
+      fetchFieldOverview,
+      patchCachedField,
+      sidebarFields,
+      syncSidebarFieldsAcrossCache,
+      workspaceFieldFeatures,
+      workspaceId,
+    ],
+  );
+
+  const handleFieldLldUpdate = useCallback(
+    async (fieldId: string, legalLandDescription: string) => {
+      const normalizedLegalLandDescription = legalLandDescription.trim();
+      const nextLegalLandDescription =
+        normalizedLegalLandDescription.length > 0
+          ? normalizedLegalLandDescription
+          : null;
+      const snapshot = {
+        fieldData,
+        sidebarFields,
+        workspaceFieldFeatures,
+        cache: new Map(fieldCacheRef.current),
+      };
+
+      syncSidebarFieldsAcrossCache((fields) =>
+        updateSidebarFieldLld(fields, fieldId, nextLegalLandDescription),
+      );
+      patchCachedField(fieldId, (field) =>
+        patchFieldViewModelLld(field, nextLegalLandDescription),
+      );
+      setWorkspaceFieldFeatures((prev) =>
+        prev.map((feature) =>
+          feature.properties.fieldId === fieldId
+            ? {
+                ...feature,
+                properties: {
+                  ...feature.properties,
+                  legalLandDescription: nextLegalLandDescription,
+                },
+              }
+            : feature,
+        ),
+      );
+
+      const response = await fetch(`/api/fields/${fieldId}`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+          'x-fieldpulse-workspace-id': workspaceId,
+        },
+        body: JSON.stringify({
+          legalLandDescription: nextLegalLandDescription,
+        }),
+      });
+
+      if (!response.ok) {
+        fieldCacheRef.current = snapshot.cache;
+        setSidebarFields(snapshot.sidebarFields);
+        setWorkspaceFieldFeatures(snapshot.workspaceFieldFeatures);
+        setFieldData((current) =>
+          current.fieldId === fieldId ? snapshot.fieldData : current,
+        );
+        setFieldSwitchError(
+          await readApiErrorMessage(
+            response,
+            'Unable to update the legal land description right now.',
+          ),
+        );
+        return;
+      }
+
+      const nextField = await fetchFieldOverview(fieldId, { force: true });
+      if (!nextField) {
+        return;
+      }
+
+      if (activeFieldId === fieldId) {
+        applyFieldData(nextField);
+      }
+    },
+    [
+      activeFieldId,
+      applyFieldData,
+      fieldData,
+      fetchFieldOverview,
+      patchCachedField,
+      sidebarFields,
+      syncSidebarFieldsAcrossCache,
+      workspaceFieldFeatures,
+      workspaceId,
+    ],
+  );
+
+  const handleFieldCropUpdate = useCallback(
+    async (
+      fieldId: string,
+      crop: { cropName: string; variety?: string; seedingDate?: string },
+    ) => {
+      const nextCropName = crop.cropName.trim();
+
+      if (!nextCropName) {
+        setFieldSwitchError('Crop type cannot be empty.');
+        return;
+      }
+
+      const snapshot = {
+        fieldData,
+        sidebarFields,
+        workspaceFieldFeatures,
+        cache: new Map(fieldCacheRef.current),
+      };
+
+      syncSidebarFieldsAcrossCache((fields) =>
+        updateSidebarFieldCrop(fields, fieldId, nextCropName),
+      );
+      patchCachedField(fieldId, (field) => patchFieldViewModelCrop(field, nextCropName));
+
+      const response = await fetch(`/api/fields/${fieldId}/crop-context`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+          'x-fieldpulse-workspace-id': workspaceId,
+        },
+        body: JSON.stringify({
+          cropType: nextCropName,
+          ...(crop.variety !== undefined ? { variety: crop.variety } : {}),
+          ...(crop.seedingDate !== undefined ? { seedingDate: crop.seedingDate } : {}),
+        }),
+      });
+
+      if (!response.ok) {
+        fieldCacheRef.current = snapshot.cache;
+        setSidebarFields(snapshot.sidebarFields);
+        setWorkspaceFieldFeatures(snapshot.workspaceFieldFeatures);
+        setFieldData((current) =>
+          current.fieldId === fieldId ? snapshot.fieldData : current,
+        );
+        setFieldSwitchError(
+          await readApiErrorMessage(response, 'Unable to update crop context right now.'),
+        );
+        return;
+      }
+
+      const nextField = await fetchFieldOverview(fieldId, { force: true });
+      if (!nextField) {
+        return;
+      }
+
+      if (activeFieldId === fieldId) {
+        applyFieldData(nextField);
+      }
+    },
+    [
+      activeFieldId,
+      applyFieldData,
+      fieldData,
+      fetchFieldOverview,
+      patchCachedField,
+      sidebarFields,
+      syncSidebarFieldsAcrossCache,
+      workspaceFieldFeatures,
+      workspaceId,
+    ],
+  );
+
+  const handleFieldDelete = useCallback(
+    async (fieldId: string) => {
+      const fallbackFieldId = selectFallbackFieldId(sidebarFields, fieldId);
+      const response = await fetch(`/api/fields/${fieldId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-fieldpulse-workspace-id': workspaceId,
+        },
+      });
+
+      if (!response.ok) {
+        setFieldSwitchError(
+          await readApiErrorMessage(response, 'Unable to delete this field right now.'),
+        );
+        return;
+      }
+
+      syncSidebarFieldsAcrossCache((fields) => removeSidebarField(fields, fieldId));
+      setWorkspaceFieldFeatures((prev) =>
+        prev.filter((feature) => feature.properties.fieldId !== fieldId),
+      );
+      fieldCacheRef.current.delete(fieldId);
+      inflightRequestsRef.current.delete(fieldId);
+      failedRequestsRef.current.delete(fieldId);
+      setRevealedFieldId(null);
+      setActivePanel('detail');
+      setPanelAnim('entering');
+
+      if (activeFieldId !== fieldId) {
+        return;
+      }
+
+      setHoveredCell(null);
+      setSelectedCell(null);
+      setSelectedZoneId(null);
+
+      if (!fallbackFieldId) {
+        const emptyField = buildEmptyPreviewFieldViewModel(
+          workspaceId,
+          fieldData.mapPreview,
+          [],
+        );
+        fieldCacheRef.current.set(EMPTY_PREVIEW_FIELD_ID, emptyField);
+        setActiveFieldId(EMPTY_PREVIEW_FIELD_ID);
+        applyFieldData(emptyField);
+        setIsLoadingField(false);
+        return;
+      }
+
+      setActiveFieldId(fallbackFieldId);
+      const cachedFallback = fieldCacheRef.current.get(fallbackFieldId);
+
+      if (cachedFallback) {
+        applyFieldData(cachedFallback);
+      }
+
+      const nextField = await fetchFieldOverview(fallbackFieldId, { force: true });
+
+      if (!nextField || nextField.fieldId !== fallbackFieldId) {
+        return;
+      }
+
+      applyFieldData(nextField);
+    },
+    [
+      activeFieldId,
+      applyFieldData,
+      fieldData.mapPreview,
+      fetchFieldOverview,
+      sidebarFields,
+      syncSidebarFieldsAcrossCache,
+      workspaceId,
+    ],
+  );
 
   const handleFieldsChanged = useCallback(async (result: {
     preferredFieldId?: string | null;
@@ -1247,6 +1744,24 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
             onClose={() => switchPanel('detail')}
           />
         );
+      case 'edit-field':
+        return (
+          <EditFieldPanel
+            fieldId={activeFieldId}
+            fieldName={fieldData.fieldName}
+            areaHaLabel={fieldData.areaHaLabel}
+            lld={fieldData.summary?.lld ?? fieldData.cropPanel?.lld ?? null}
+            crop={fieldData.summary?.crop ?? fieldData.cropPanel?.cropName ?? null}
+            cropStage={fieldData.summary?.cropStage ?? fieldData.cropPanel?.thresholdStageLabel ?? null}
+            growthStageLabel={fieldData.cropPanel?.thresholdStageLabel ?? null}
+            accumulatedGdd={fieldData.cropPanel?.accumulatedGddLabel ?? null}
+            onClose={() => switchPanel('detail')}
+            onRename={handleFieldRename}
+            onUpdateLld={handleFieldLldUpdate}
+            onUpdateCrop={handleFieldCropUpdate}
+            onDelete={handleFieldDelete}
+          />
+        );
       case 'scout':
         return <ScoutReportPanel onClose={() => switchPanel('detail')} />;
       case 'zone':
@@ -1392,6 +1907,13 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null }: P
               onAddField={() => switchPanel(activePanel === 'add-field' ? 'detail' : 'add-field')}
               onSearchOpen={() => setPaletteOpen(true)}
               onboardingProgress={fieldOnboardingProgress}
+              onFieldRename={handleFieldRename}
+              onFieldDelete={handleFieldDelete}
+              onFieldEdit={(fieldId) => {
+                handleFieldSelect(fieldId);
+                switchPanel('edit-field');
+              }}
+              workspaceId={fieldData.workspaceId}
             />
 
             {/* Command palette — anchored above the field strip */}

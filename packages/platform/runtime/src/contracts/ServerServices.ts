@@ -139,6 +139,23 @@ export type LoadWorkspaceFieldDetailInput = LoadWorkspaceFieldOverviewInput & {
   fieldId: string;
 };
 
+export type RenameFieldInput = {
+  workspaceId: WorkspaceId;
+  fieldId: string;
+  name: string;
+};
+
+export type UpdateFieldLegalLandDescriptionInput = {
+  workspaceId: WorkspaceId;
+  fieldId: string;
+  legalLandDescription: string | null;
+};
+
+export type DeleteFieldInput = {
+  workspaceId: WorkspaceId;
+  fieldId: string;
+};
+
 export type WorkspaceFieldDetailSelection = ResolvedWorkspaceSelection & {
   fields: readonly FieldOverview[];
   field: {
@@ -506,6 +523,13 @@ export type ServerServices = {
       userId: UserId;
       preferredWorkspaceId?: WorkspaceId;
     }): Promise<AuthenticatedActor | null>;
+  };
+  fields: {
+    renameField(input: RenameFieldInput): Promise<FieldDetail>;
+    setLegalLandDescription(
+      input: UpdateFieldLegalLandDescriptionInput,
+    ): Promise<FieldDetail>;
+    deleteField(input: DeleteFieldInput): Promise<void>;
   };
   fieldIntake: {
     lookupLldBoundary(

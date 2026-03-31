@@ -273,6 +273,12 @@ export interface FieldStripProps {
   onReorder?: (fromIndex: number, toIndex: number) => void;
   onSearchOpen?: () => void;
   onboardingProgress?: ReadonlyMap<string, FieldOnboardingStatus>;
+  onFieldRename?: (fieldId: string, newName: string) => void;
+  onFieldDelete?: (fieldId: string) => void;
+  onFieldEdit?: (fieldId: string) => void;
+  /** Base URL for report export, e.g. "/api/fields". fieldId is appended. */
+  exportBaseUrl?: string;
+  workspaceId?: string | null;
 }
 
 export function FieldStrip({
@@ -285,10 +291,23 @@ export function FieldStrip({
   onReorder,
   onSearchOpen,
   onboardingProgress,
+  onFieldRename,
+  onFieldDelete,
+  onFieldEdit,
+  exportBaseUrl = "/api/fields",
+  workspaceId,
 }: FieldStripProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+
+  /* ── Kebab menu + inline rename state ── */
+  const [kebabFieldId, setKebabFieldId] = useState<string | null>(null);
+  const [renamingFieldId, setRenamingFieldId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteConfirmFieldId, setDeleteConfirmFieldId] = useState<string | null>(null);
+  const kebabMenuRef = useRef<HTMLDivElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   /* ── Grouping + tabs ── */
   const [groupStrategy, setGroupStrategy] = useState<GroupStrategy>("none");
@@ -361,6 +380,26 @@ export function FieldStrip({
     window.addEventListener("pointerdown", handleClick);
     return () => window.removeEventListener("pointerdown", handleClick);
   }, [sortMenuOpen]);
+
+  /* Close kebab menu on outside click */
+  useEffect(() => {
+    if (!kebabFieldId) return;
+    function handleClick(e: MouseEvent) {
+      if (kebabMenuRef.current?.contains(e.target as Node)) return;
+      setKebabFieldId(null);
+      setDeleteConfirmFieldId(null);
+    }
+    window.addEventListener("pointerdown", handleClick);
+    return () => window.removeEventListener("pointerdown", handleClick);
+  }, [kebabFieldId]);
+
+  /* Focus rename input when entering rename mode */
+  useEffect(() => {
+    if (renamingFieldId && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renamingFieldId]);
 
   const filteredFields = useMemo(() => {
     const filtered = activeTab.match ? fields.filter(activeTab.match) : fields;
@@ -796,6 +835,8 @@ export function FieldStrip({
               const fieldProgress = onboardingProgress?.get(field.id) ?? null;
               const isOnboarding = fieldProgress != null && (fieldProgress.status === 'queued' || fieldProgress.status === 'running');
               const progressPct = isOnboarding ? (fieldProgress.progressPct ?? 0) : 0;
+              const isRenaming = renamingFieldId === field.id;
+              const isKebabOpen = kebabFieldId === field.id;
 
               /* Phase label replaces location during onboarding */
               const onboardingLabel = isOnboarding
@@ -803,8 +844,8 @@ export function FieldStrip({
                 : null;
 
             return (
+              <div key={field.id} className="field-strip__card-wrap" style={{ position: "relative", flexShrink: 0 }}>
               <button
-                key={field.id}
                 data-field-id={field.id}
                 className={`field-strip__card${isActive ? " field-strip__card--active" : ""}${isDragged ? " field-strip__card--dragging" : ""}${isOnboarding ? " field-strip__card--onboarding" : ""}`}
                 onClick={() => {
@@ -812,6 +853,7 @@ export function FieldStrip({
                     suppressClickRef.current = false;
                     return;
                   }
+                  if (isRenaming) return;
                   onFieldSelect?.(field.id);
                 }}
                 onMouseEnter={() => onFieldPrefetch?.(field.id)}
@@ -832,17 +874,46 @@ export function FieldStrip({
                   className="field-strip__dot"
                   style={{ background: statusColor }}
                 />
-                <span className="field-strip__card-name">{field.name}</span>
-                {isOnboarding ? (
+                {isRenaming ? (
+                  <input
+                    ref={renameInputRef}
+                    className="field-strip__rename-input"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const trimmed = renameValue.trim();
+                        if (trimmed && trimmed !== field.name) {
+                          onFieldRename?.(field.id, trimmed);
+                        }
+                        setRenamingFieldId(null);
+                      } else if (e.key === "Escape") {
+                        setRenamingFieldId(null);
+                      }
+                    }}
+                    onBlur={() => {
+                      const trimmed = renameValue.trim();
+                      if (trimmed && trimmed !== field.name) {
+                        onFieldRename?.(field.id, trimmed);
+                      }
+                      setRenamingFieldId(null);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <span className="field-strip__card-name">{field.name}</span>
+                )}
+                {!isRenaming && isOnboarding ? (
                   <span className="field-strip__card-location">
                     {onboardingLabel}
                   </span>
-                ) : locationSummary ? (
+                ) : !isRenaming && locationSummary ? (
                   <span className="field-strip__card-location">
                     {locationSummary}
                   </span>
                 ) : null}
-                {isActive && !isOnboarding && (
+                {isActive && !isOnboarding && !isRenaming && (
                   <span className="field-strip__card-meta">
                     {field.crop ? (
                       <span className="field-strip__card-crop">
@@ -857,7 +928,112 @@ export function FieldStrip({
                     ) : null}
                   </span>
                 )}
+                {/* Kebab trigger — only on active card, not during rename/onboarding */}
+                {isActive && !isOnboarding && !isRenaming && (
+                  <span
+                    className="field-strip__kebab"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setKebabFieldId(isKebabOpen ? null : field.id);
+                      setDeleteConfirmFieldId(null);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Field actions"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="5" r="2" />
+                      <circle cx="12" cy="12" r="2" />
+                      <circle cx="12" cy="19" r="2" />
+                    </svg>
+                  </span>
+                )}
               </button>
+
+              {/* ── Kebab dropdown menu ── */}
+              {isKebabOpen && (
+                <div ref={kebabMenuRef} className="field-strip__kebab-menu" onPointerDown={(e) => e.stopPropagation()}>
+                  {deleteConfirmFieldId === field.id ? (
+                    /* Delete confirmation */
+                    <div className="field-strip__kebab-confirm">
+                      <span className="field-strip__kebab-confirm-text">Delete this field?</span>
+                      <div className="field-strip__kebab-confirm-actions">
+                        <button
+                          type="button"
+                          className="field-strip__kebab-confirm-btn field-strip__kebab-confirm-btn--danger"
+                          onClick={() => {
+                            onFieldDelete?.(field.id);
+                            setKebabFieldId(null);
+                            setDeleteConfirmFieldId(null);
+                          }}
+                        >Delete</button>
+                        <button
+                          type="button"
+                          className="field-strip__kebab-confirm-btn"
+                          onClick={() => setDeleteConfirmFieldId(null)}
+                        >Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Normal menu items */
+                    <>
+                      <button
+                        type="button"
+                        className="field-strip__kebab-item"
+                        onClick={() => {
+                          setRenameValue(field.name);
+                          setRenamingFieldId(field.id);
+                          setKebabFieldId(null);
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                        </svg>
+                        Rename
+                      </button>
+                      {onFieldEdit && (
+                        <button
+                          type="button"
+                          className="field-strip__kebab-item"
+                          onClick={() => {
+                            onFieldEdit(field.id);
+                            setKebabFieldId(null);
+                          }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                          Edit field
+                        </button>
+                      )}
+                      <a
+                        className="field-strip__kebab-item"
+                        href={`${exportBaseUrl}/${field.id}/report-export${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ""}`}
+                        download
+                        onClick={() => setKebabFieldId(null)}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        Export PDF
+                      </a>
+                      <div className="field-strip__kebab-separator" />
+                      <button
+                        type="button"
+                        className="field-strip__kebab-item field-strip__kebab-item--danger"
+                        onClick={() => setDeleteConfirmFieldId(field.id)}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              </div>
             );
               })}
             </div>

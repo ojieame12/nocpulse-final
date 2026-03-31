@@ -15,5 +15,5 @@ export { ShareBriefModal } from './__archive__/ShareBriefModal';
 export { AddFieldPanel } from './AddFieldPanel';
 export { UploadCsvPanel } from './__archive__/UploadCsvPanel';
 export { UploadKmlPanel } from './__archive__/UploadKmlPanel';
-export { EditFieldPanel } from './__archive__/EditFieldPanel';
+export { EditFieldPanel } from './EditFieldPanel';
 export { FieldDetailPanel } from './FieldDetailPanel';
