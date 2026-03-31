@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Trash2, MapPin, Leaf, Ruler, Calendar, Activity, ChevronDown } from 'lucide-react';
+import { X, Trash2, MapPin, Leaf, Ruler, Calendar, Activity, Pencil, Download } from 'lucide-react';
 
 /* ── Types ── */
 
@@ -24,9 +24,9 @@ export interface EditFieldPanelProps {
   onDelete?: (fieldId: string) => void;
 }
 
-/* ── Inline editable row ── */
+/* ── Inline editable field ── */
 
-function EditableRow({
+function InlineEdit({
   label,
   value,
   placeholder,
@@ -52,6 +52,8 @@ function EditableRow({
     }
   }, [editing]);
 
+  useEffect(() => { setDraft(value); }, [value]);
+
   function commit() {
     const trimmed = draft.trim();
     if (trimmed && trimmed !== value && onCommit) {
@@ -60,16 +62,18 @@ function EditableRow({
     setEditing(false);
   }
 
+  const editable = !!onCommit;
+
   return (
-    <div className="edit-field__row">
-      <div className="edit-field__row-label">
-        {Icon && <Icon size={12} className="edit-field__row-icon" />}
+    <div className="fdp-edit__row">
+      <div className="fdp-edit__row-label">
+        {Icon && <Icon size={11} strokeWidth={2.2} />}
         <span>{label}</span>
       </div>
       {editing ? (
         <input
           ref={inputRef}
-          className="edit-field__row-input"
+          className={`fdp-edit__row-input${mono ? ' fdp-edit__row-input--mono' : ''}`}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -80,45 +84,31 @@ function EditableRow({
           placeholder={placeholder}
         />
       ) : (
-        <button
-          type="button"
-          className={`edit-field__row-value${mono ? ' edit-field__row-value--mono' : ''}${!value ? ' edit-field__row-value--empty' : ''}`}
-          onClick={() => {
-            if (onCommit) {
-              setDraft(value);
-              setEditing(true);
-            }
-          }}
-          style={onCommit ? { cursor: 'text' } : { cursor: 'default' }}
+        <div
+          className={`fdp-edit__row-value${mono ? ' fdp-edit__row-value--mono' : ''}${!value ? ' fdp-edit__row-value--empty' : ''}${editable ? ' fdp-edit__row-value--editable' : ''}`}
+          onClick={editable ? () => { setDraft(value); setEditing(true); } : undefined}
+          role={editable ? "button" : undefined}
+          tabIndex={editable ? 0 : undefined}
+          onKeyDown={editable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { setDraft(value); setEditing(true); } } : undefined}
         >
-          {value || placeholder || '—'}
-        </button>
+          <span>{value || placeholder || '—'}</span>
+          {editable && <Pencil size={10} strokeWidth={2} className="fdp-edit__row-pencil" />}
+        </div>
       )}
     </div>
   );
 }
 
-/* ── Read-only stat row ── */
+/* ── Read-only stat ── */
 
 function StatRow({ label, value, icon: Icon }: { label: string; value: string; icon?: typeof MapPin }) {
   return (
-    <div className="edit-field__row">
-      <div className="edit-field__row-label">
-        {Icon && <Icon size={12} className="edit-field__row-icon" />}
+    <div className="fdp-edit__row">
+      <div className="fdp-edit__row-label">
+        {Icon && <Icon size={11} strokeWidth={2.2} />}
         <span>{label}</span>
       </div>
-      <span className="edit-field__row-value edit-field__row-value--mono">{value || '—'}</span>
-    </div>
-  );
-}
-
-/* ── Section header ── */
-
-function SectionHeader({ label, icon: Icon }: { label: string; icon?: typeof MapPin }) {
-  return (
-    <div className="edit-field__section-header">
-      {Icon && <Icon size={13} className="edit-field__section-icon" />}
-      <span>{label}</span>
+      <span className="fdp-edit__row-value fdp-edit__row-value--mono">{value || '—'}</span>
     </div>
   );
 }
@@ -143,99 +133,115 @@ export function EditFieldPanel({
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [localName, setLocalName] = useState(fieldName);
 
-  /* Reset local state when field changes */
   useEffect(() => {
     setLocalName(fieldName);
     setDeleteConfirm(false);
   }, [fieldId, fieldName]);
 
   return (
-    <div className="edit-field">
+    <div className="fdp">
       {/* ── Header ── */}
-      <div className="edit-field__header">
-        <div className="edit-field__header-top">
-          <div className="edit-field__header-titles">
-            <span className="edit-field__header-label">Edit field</span>
-            <h2 className="edit-field__header-name">{localName}</h2>
+      <div className="fdp__header">
+        <div className="fdp__header-top">
+          <div>
+            <span className="fdp-lbl fdp-lbl--muted" style={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Edit Field</span>
+            <h2 className="fdp__field-name" style={{ fontSize: 17, marginTop: 2 }}>{localName}</h2>
           </div>
-          <button
-            type="button"
-            className="edit-field__close"
-            onClick={onClose}
-            aria-label="Close"
-          >
+          <button type="button" className="fdp__close" onClick={onClose} aria-label="Close">
             <X size={14} />
           </button>
         </div>
       </div>
 
-      {/* ── Body ── */}
-      <div className="edit-field__body">
+      {/* ── Scrollable body ── */}
+      <div className="fdp__body">
 
-        {/* ── Field identity ── */}
-        <div className="edit-field__section">
-          <SectionHeader label="Field details" icon={MapPin} />
-          <EditableRow
-            label="Name"
-            value={localName}
-            onCommit={(v) => {
-              setLocalName(v);
-              onRename?.(fieldId, v);
-            }}
-          />
-          <EditableRow
-            label="Legal land description"
-            value={lld ?? ''}
-            placeholder="e.g. NE-25-010-17-W4"
-            mono
-            onCommit={onUpdateLld ? (v) => onUpdateLld(fieldId, v) : undefined}
-          />
-          <StatRow label="Area" value={areaHaLabel} icon={Ruler} />
+        {/* ── Field identity card ── */}
+        <div className="fdp-card fdp-card--span-full">
+          <div className="fdp-edit__card-header">
+            <MapPin size={13} strokeWidth={2.2} />
+            <span className="fdp-lbl" style={{ letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: 10.5 }}>Field Details</span>
+          </div>
+          <div className="fdp-edit__rows">
+            <InlineEdit
+              label="Name"
+              value={localName}
+              onCommit={(v) => { setLocalName(v); onRename?.(fieldId, v); }}
+            />
+            <InlineEdit
+              label="Legal land"
+              value={lld ?? ''}
+              placeholder="e.g. NE-25-010-17-W4"
+              mono
+              onCommit={onUpdateLld ? (v) => onUpdateLld(fieldId, v) : undefined}
+              icon={MapPin}
+            />
+            <StatRow label="Area" value={areaHaLabel} icon={Ruler} />
+          </div>
         </div>
 
-        {/* ── Crop context ── */}
-        <div className="edit-field__section">
-          <SectionHeader label="Crop" icon={Leaf} />
-          <EditableRow
-            label="Crop type"
-            value={crop ?? ''}
-            placeholder="e.g. Canola"
-            onCommit={onUpdateCrop ? (v) => onUpdateCrop(fieldId, { cropName: v }) : undefined}
-          />
-          <StatRow label="Stage" value={cropStage ?? '—'} icon={Activity} />
-          {growthStageLabel ? (
-            <StatRow label="Growth stage" value={growthStageLabel} />
-          ) : null}
-          {accumulatedGdd ? (
-            <StatRow label="Accumulated GDD" value={accumulatedGdd} icon={Calendar} />
-          ) : null}
+        {/* ── Crop context card ── */}
+        <div className="fdp-card fdp-card--span-full">
+          <div className="fdp-edit__card-header">
+            <Leaf size={13} strokeWidth={2.2} />
+            <span className="fdp-lbl" style={{ letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: 10.5 }}>Crop Context</span>
+          </div>
+          <div className="fdp-edit__rows">
+            <InlineEdit
+              label="Crop type"
+              value={crop ?? ''}
+              placeholder="e.g. Canola"
+              onCommit={onUpdateCrop ? (v) => onUpdateCrop(fieldId, { cropName: v }) : undefined}
+              icon={Leaf}
+            />
+            <StatRow label="Stage" value={cropStage ?? '—'} icon={Activity} />
+            {growthStageLabel && <StatRow label="Growth stage" value={growthStageLabel} />}
+            {accumulatedGdd && <StatRow label="GDD accumulated" value={accumulatedGdd} icon={Calendar} />}
+          </div>
+        </div>
+
+        {/* ── Quick actions card ── */}
+        <div className="fdp-card fdp-card--span-full">
+          <div className="fdp-edit__card-header">
+            <Download size={13} strokeWidth={2.2} />
+            <span className="fdp-lbl" style={{ letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: 10.5 }}>Quick Actions</span>
+          </div>
+          <div className="fdp-edit__actions">
+            <a
+              className="fdp-edit__action-btn"
+              href={`/api/fields/${fieldId}/report-export`}
+              download
+            >
+              <Download size={12} />
+              Export Field Report (PDF)
+            </a>
+          </div>
         </div>
 
         {/* ── Danger zone ── */}
         {onDelete && (
-          <div className="edit-field__danger">
-            <div className="edit-field__danger-separator" />
-            <span className="edit-field__danger-label">Danger zone</span>
+          <div className="fdp-card fdp-card--span-full fdp-edit__danger-card">
+            <div className="fdp-edit__card-header fdp-edit__card-header--danger">
+              <Trash2 size={13} strokeWidth={2.2} />
+              <span className="fdp-lbl" style={{ letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: 10.5 }}>Danger Zone</span>
+            </div>
             {deleteConfirm ? (
-              <div className="edit-field__danger-confirm">
-                <p className="edit-field__danger-warning">
-                  This will permanently remove <strong>{localName}</strong> and all
-                  associated data. This cannot be undone.
+              <div className="fdp-edit__danger-confirm">
+                <p className="fdp-edit__danger-text">
+                  Permanently remove <strong>{localName}</strong> and all associated data. This cannot be undone.
                 </p>
-                <div className="edit-field__danger-actions">
+                <div className="fdp-edit__danger-btns">
                   <button
                     type="button"
-                    className="edit-field__danger-btn edit-field__danger-btn--delete"
-                    onClick={() => {
-                      onDelete(fieldId);
-                    }}
+                    className="fdp-edit__danger-btn fdp-edit__danger-btn--confirm"
+                    onClick={() => onDelete(fieldId)}
                   >
-                    <Trash2 size={12} />
+                    <Trash2 size={11} />
                     Delete permanently
                   </button>
                   <button
                     type="button"
-                    className="edit-field__danger-btn edit-field__danger-btn--cancel"
+                    className="fdp-edit__danger-btn fdp-edit__danger-btn--cancel"
                     onClick={() => setDeleteConfirm(false)}
                   >
                     Cancel
@@ -245,11 +251,11 @@ export function EditFieldPanel({
             ) : (
               <button
                 type="button"
-                className="edit-field__danger-btn edit-field__danger-btn--trigger"
+                className="fdp-edit__danger-btn fdp-edit__danger-btn--trigger"
                 onClick={() => setDeleteConfirm(true)}
               >
-                <Trash2 size={12} />
-                Delete field
+                <Trash2 size={11} />
+                Delete this field…
               </button>
             )}
           </div>

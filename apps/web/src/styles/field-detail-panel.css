@@ -1209,6 +1209,347 @@
   border-left: 3px solid #ef4444;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   Edit Field Panel — fdp-edit__* classes
+   Uses fdp shell + fdp-card for consistent theming
+   ═══════════════════════════════════════════════════════════════════ */
+
+.fdp-edit__card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-light, rgba(0,0,0,0.06));
+  color: var(--text-secondary, rgba(0,0,0,0.45));
+}
+
+.fdp-edit__card-header--danger {
+  color: rgba(239, 68, 68, 0.7);
+  border-bottom-color: rgba(239, 68, 68, 0.12);
+}
+
+[data-theme="dark"] .fdp-edit__card-header {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.40);
+}
+
+[data-theme="dark"] .fdp-edit__card-header--danger {
+  color: rgba(252, 165, 165, 0.7);
+  border-bottom-color: rgba(239, 68, 68, 0.15);
+}
+
+/* ── Rows ── */
+
+.fdp-edit__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.fdp-edit__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-light, rgba(0,0,0,0.04));
+  min-height: 36px;
+}
+
+.fdp-edit__row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.fdp-edit__row:first-child {
+  padding-top: 0;
+}
+
+[data-theme="dark"] .fdp-edit__row {
+  border-bottom-color: rgba(255, 255, 255, 0.05);
+}
+
+.fdp-edit__row-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body, 'Sintony', sans-serif);
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-secondary, rgba(0,0,0,0.45));
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 90px;
+}
+
+[data-theme="dark"] .fdp-edit__row-label {
+  color: rgba(255, 255, 255, 0.40);
+}
+
+/* ── Row values ── */
+
+.fdp-edit__row-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body, 'Sintony', sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, rgba(0,0,0,0.82));
+  text-align: right;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.fdp-edit__row-value--mono {
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.fdp-edit__row-value--empty {
+  color: var(--text-muted, rgba(0,0,0,0.25));
+  font-weight: 400;
+  font-style: italic;
+}
+
+.fdp-edit__row-value--editable {
+  cursor: text;
+  border: 1px dashed transparent;
+}
+
+.fdp-edit__row-value--editable:hover {
+  background: var(--color-slate-50, rgba(0,0,0,0.03));
+  border-color: var(--border-light, rgba(0,0,0,0.08));
+}
+
+.fdp-edit__row-value--editable:hover .fdp-edit__row-pencil {
+  opacity: 1;
+}
+
+[data-theme="dark"] .fdp-edit__row-value {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+[data-theme="dark"] .fdp-edit__row-value--empty {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+[data-theme="dark"] .fdp-edit__row-value--editable:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+.fdp-edit__row-pencil {
+  opacity: 0;
+  color: var(--text-muted, rgba(0,0,0,0.30));
+  transition: opacity 150ms ease;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .fdp-edit__row-pencil {
+  color: rgba(255, 255, 255, 0.30);
+}
+
+/* ── Row input (active editing) ── */
+
+.fdp-edit__row-input {
+  font-family: var(--font-body, 'Sintony', sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, rgba(0,0,0,0.82));
+  background: var(--color-slate-50, rgba(0,0,0,0.03));
+  border: 1px solid var(--status-healthy, rgba(22, 163, 74, 0.4));
+  border-radius: 6px;
+  padding: 5px 8px;
+  text-align: right;
+  outline: none;
+  min-width: 120px;
+  max-width: 200px;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.08);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.fdp-edit__row-input--mono {
+  font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.fdp-edit__row-input:focus {
+  border-color: var(--status-healthy, #16a34a);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+}
+
+[data-theme="dark"] .fdp-edit__row-input {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.90);
+  border-color: rgba(74, 222, 128, 0.35);
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.06);
+}
+
+[data-theme="dark"] .fdp-edit__row-input:focus {
+  border-color: rgba(74, 222, 128, 0.55);
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.12);
+}
+
+/* ── Quick actions ── */
+
+.fdp-edit__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fdp-edit__action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-family: var(--font-body, 'Sintony', sans-serif);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary, rgba(0,0,0,0.72));
+  background: var(--color-slate-50, rgba(0,0,0,0.03));
+  border: 1px solid var(--border-light, rgba(0,0,0,0.06));
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.fdp-edit__action-btn:hover {
+  background: var(--color-slate-100, rgba(0,0,0,0.06));
+  border-color: var(--border-medium, rgba(0,0,0,0.10));
+}
+
+[data-theme="dark"] .fdp-edit__action-btn {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .fdp-edit__action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* ── Danger zone ── */
+
+.fdp-edit__danger-card {
+  border-color: rgba(239, 68, 68, 0.15) !important;
+}
+
+[data-theme="dark"] .fdp-edit__danger-card {
+  border-color: rgba(239, 68, 68, 0.12) !important;
+  background: rgba(239, 68, 68, 0.03);
+}
+
+.fdp-edit__danger-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fdp-edit__danger-text {
+  font-family: var(--font-body, 'Sintony', sans-serif);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary, rgba(0,0,0,0.55));
+  margin: 0;
+}
+
+.fdp-edit__danger-text strong {
+  color: var(--text-primary, rgba(0,0,0,0.82));
+  font-weight: 600;
+}
+
+[data-theme="dark"] .fdp-edit__danger-text {
+  color: rgba(255, 255, 255, 0.50);
+}
+
+[data-theme="dark"] .fdp-edit__danger-text strong {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.fdp-edit__danger-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.fdp-edit__danger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-family: var(--font-body, 'Sintony', sans-serif);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.fdp-edit__danger-btn--trigger {
+  color: rgba(239, 68, 68, 0.75);
+  background: rgba(239, 68, 68, 0.06);
+  border-color: rgba(239, 68, 68, 0.12);
+}
+
+.fdp-edit__danger-btn--trigger:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.fdp-edit__danger-btn--confirm {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.fdp-edit__danger-btn--confirm:hover {
+  background: #b91c1c;
+}
+
+.fdp-edit__danger-btn--cancel {
+  color: var(--text-secondary, rgba(0,0,0,0.45));
+  background: var(--color-slate-50, rgba(0,0,0,0.03));
+  border-color: var(--border-light, rgba(0,0,0,0.06));
+}
+
+.fdp-edit__danger-btn--cancel:hover {
+  background: var(--color-slate-100, rgba(0,0,0,0.06));
+  color: var(--text-primary, rgba(0,0,0,0.72));
+}
+
+[data-theme="dark"] .fdp-edit__danger-btn--trigger {
+  color: rgba(252, 165, 165, 0.8);
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.15);
+}
+
+[data-theme="dark"] .fdp-edit__danger-btn--trigger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+[data-theme="dark"] .fdp-edit__danger-btn--cancel {
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .fdp-edit__danger-btn--cancel:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+}
+
 [data-theme="dark"] .panel .fdp-card--warning {
   background: rgba(245, 158, 11, 0.06);
   border: none;
