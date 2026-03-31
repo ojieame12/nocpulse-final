@@ -1,5 +1,4 @@
 import { createSupabaseWorkspaceRepository } from "@fieldpulse/module-workspaces";
-import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import { NextResponse } from "next/server";
 import { createRouteHandlerSupabaseClient } from "../../../../server/auth/createRouteHandlerSupabaseClient";
 import { sanitizeNextPath } from "../../../../server/auth/sanitizeNextPath";
@@ -7,6 +6,7 @@ import { resolveUniqueWorkspaceSlug } from "../../../../server/auth/workspacePro
 import { jsonError, jsonOk, readJsonObject } from "../../../../server/http/json";
 import { getWebServerRuntime } from "../../../../server/runtime/getWebServerRuntime";
 import { RequestContextError } from "../../../../server/runtime/resolveRequestContext";
+import { createServerDatabaseClient } from "../../../../server/runtime/createServerDatabaseClient";
 
 function readWorkspaceName(body: Record<string, unknown>) {
   const value = typeof body.name === "string" ? body.name.trim() : "";
@@ -56,10 +56,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const databaseClient = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
+    const databaseClient = createServerDatabaseClient(runtime);
     const workspaceRepository = createSupabaseWorkspaceRepository(databaseClient);
     const { slug, adjusted } = resolveUniqueWorkspaceSlug(
       await workspaceRepository.listAll(),

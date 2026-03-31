@@ -358,6 +358,7 @@ export function PreviewShell({
   const [sidebarFields, setSidebarFields] = useState(initial.sidebarFields);
   const [revealedFieldId, setRevealedFieldId] = useState<string | null>(null);
   const [isLoadingField, setIsLoadingField] = useState(false);
+  const [fieldSwitchError, setFieldSwitchError] = useState<string | null>(null);
   const [workspaceFieldFeatures] = useState(
     initial.mapPreview.workspaceFieldFeatures ?? [],
   );
@@ -490,7 +491,32 @@ export function PreviewShell({
     setFieldData(nextField);
     setSidebarFields(nextField.sidebarFields);
     setWorkspaceId(nextField.workspaceId);
+    setFieldSwitchError(null);
   }, []);
+
+  const resolveFieldSelectionLabel = useCallback(
+    (fieldId: string) => (
+      fieldCacheRef.current.get(fieldId)?.fieldName
+      ?? sidebarFields.find((field) => field.id === fieldId)?.name
+      ?? 'the previous field'
+    ),
+    [sidebarFields],
+  );
+
+  const revertFailedFieldSwitch = useCallback(
+    (failedFieldId: string, fallbackFieldId: string) => {
+      setActiveFieldId(fallbackFieldId);
+      const failedSummary =
+        failedRequestsRef.current.get(failedFieldId)?.summary
+        ?? 'Unable to load field data right now.';
+      const failedLabel = resolveFieldSelectionLabel(failedFieldId);
+      const fallbackLabel = resolveFieldSelectionLabel(fallbackFieldId);
+      setFieldSwitchError(
+        `Couldn't load ${failedLabel}. ${failedSummary}. Showing ${fallbackLabel} instead.`,
+      );
+    },
+    [resolveFieldSelectionLabel],
+  );
 
   const fetchFieldOverview = useCallback(
     (
@@ -596,6 +622,7 @@ export function PreviewShell({
     fieldIds: string[];
   }) => {
     const preferredFieldId = result.preferredFieldId ?? null;
+    const previousFieldId = activeFieldId;
     const revealedFieldId = preferredFieldId ?? result.fieldIds[0] ?? null;
     setRevealedFieldId(revealedFieldId);
 
@@ -605,6 +632,7 @@ export function PreviewShell({
       preferredFieldId !== activeFieldId
     ) {
       setActiveFieldId(preferredFieldId);
+      setFieldSwitchError(null);
       setActivePanel('detail');
       setPanelAnim('entering');
       const requestSequence = fieldRequestSequenceRef.current + 1;
@@ -614,7 +642,11 @@ export function PreviewShell({
       void (async () => {
         try {
           const nextField = await fetchFieldOverview(preferredFieldId, { force: true });
-          if (!nextField || fieldRequestSequenceRef.current !== requestSequence) {
+          if (fieldRequestSequenceRef.current !== requestSequence) {
+            return;
+          }
+          if (!nextField) {
+            revertFailedFieldSwitch(preferredFieldId, previousFieldId);
             return;
           }
           applyFieldData(nextField);
@@ -637,7 +669,7 @@ export function PreviewShell({
       setPanelAnim('entering');
     }
     applyFieldData(nextField);
-  }, [activeFieldId, applyFieldData, fetchFieldOverview]);
+  }, [activeFieldId, applyFieldData, fetchFieldOverview, revertFailedFieldSwitch]);
 
   const handleOnboardingTracked = useCallback((watch: PendingOnboardingWatch) => {
     if (watch.dispatchIds.length === 0) {
@@ -728,6 +760,8 @@ export function PreviewShell({
   const handleFieldSelect = useCallback(
     (id: string) => {
       if (id === activeFieldId) return;
+      const previousFieldId = activeFieldId;
+      setFieldSwitchError(null);
       setActiveFieldId(id);
       setActivePanel('detail');
       setPanelAnim('entering');
@@ -755,7 +789,11 @@ export function PreviewShell({
       void (async () => {
         try {
           const nextField = await fetchFieldOverview(id, { force: true });
-          if (!nextField || fieldRequestSequenceRef.current !== requestSequence) {
+          if (fieldRequestSequenceRef.current !== requestSequence) {
+            return;
+          }
+          if (!nextField) {
+            revertFailedFieldSwitch(id, previousFieldId);
             return;
           }
           applyFieldData(nextField);
@@ -766,7 +804,7 @@ export function PreviewShell({
         }
       })();
     },
-    [activeFieldId, applyFieldData, fetchFieldOverview],
+    [activeFieldId, applyFieldData, fetchFieldOverview, revertFailedFieldSwitch],
   );
 
   const handleFieldPrefetch = useCallback(
@@ -841,6 +879,20 @@ export function PreviewShell({
       cancelled = true;
     };
   }, [activeFieldId, applyFieldData, fetchFieldOverview]);
+
+  useEffect(() => {
+    if (!fieldSwitchError) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setFieldSwitchError(null);
+    }, 6000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [fieldSwitchError]);
 
   useEffect(() => {
     setHoveredCell(null);
@@ -1180,6 +1232,15 @@ export function PreviewShell({
                 <span className="map-area__loading-dot" />
               </div>
             )}
+            {fieldSwitchError ? (
+              <div
+                className="map-area__error-indicator"
+                role="status"
+                aria-live="polite"
+              >
+                {fieldSwitchError}
+              </div>
+            ) : null}
           </div>
 
           {/* Field strip — horizontal bottom dock */}

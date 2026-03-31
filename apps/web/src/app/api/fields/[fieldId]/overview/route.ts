@@ -1,52 +1,11 @@
 import { jsonError, jsonOk } from "../../../../../server/http/json";
-import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 import { logServerError } from "../../../../../server/runtime/installServerCrashLogging";
 import { resolveGuestShareSessionFromRequest } from "../../../../../server/auth/guestShareSession";
 import { buildFieldOverviewViewModel } from "../../../../../features/fields/buildFieldOverviewViewModel";
+import { resolvePreferredWorkspaceId } from "../../../../../server/fields/resolvePreferredWorkspaceId";
 
 export const dynamic = "force-dynamic";
-
-function isUuidLike(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value,
-  );
-}
-
-async function resolvePreferredWorkspaceId(
-  runtime: ReturnType<typeof getWebServerRuntime>,
-  workspaceHeader: string | null,
-) {
-  const rawValue = workspaceHeader?.trim() ?? "";
-
-  if (!rawValue) {
-    return undefined;
-  }
-
-  if (isUuidLike(rawValue)) {
-    return rawValue;
-  }
-
-  if (runtime.mode !== "supabase") {
-    return undefined;
-  }
-
-  const client = createSupabaseDatabaseClient({
-    url: runtime.env.supabase.url!,
-    serviceKey: runtime.env.supabase.serviceRoleKey!,
-  });
-  const result = await client
-    .from("workspaces")
-    .select("id")
-    .eq("slug", rawValue)
-    .maybeSingle();
-
-  if (result.error) {
-    throw result.error;
-  }
-
-  return result.data?.id ?? undefined;
-}
 
 function buildNormalizedRequest(
   request: Request,

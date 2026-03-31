@@ -3,7 +3,6 @@ import {
   createSupabaseWorkspaceMembershipRepository,
   createSupabaseWorkspaceRepository,
 } from "@fieldpulse/module-workspaces";
-import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import {
   canChangeWorkspaceMemberRole,
   canRemoveWorkspaceMember,
@@ -26,6 +25,7 @@ import {
   loadSupabaseAuthUsersById,
 } from "../../../../server/auth/workspaceAccessProvisioning";
 import { upsertWorkspaceEmailProvision } from "../../../../server/auth/workspaceEmailProvisioning";
+import { createServerDatabaseClient } from "../../../../server/runtime/createServerDatabaseClient";
 
 function readRequestedWorkspaceId(
   request: Request,
@@ -140,10 +140,7 @@ export async function GET(request: Request) {
     const actor = await resolveRequestActor(request, runtime, {
       preferredWorkspaceId: requestedWorkspaceId,
     });
-    const databaseClient = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
+    const databaseClient = createServerDatabaseClient(runtime);
     const accessState = await loadWorkspaceAccessState({
       actor,
       workspaceRepository: createSupabaseWorkspaceRepository(databaseClient),
@@ -199,10 +196,7 @@ export async function POST(request: Request) {
 
     const email = readInviteEmail(body);
     const inviteRole = normalizeWorkspaceInviteRole(body.role, actor.role);
-    const databaseClient = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
+    const databaseClient = createServerDatabaseClient(runtime);
     const workspaceMemberships = createSupabaseWorkspaceMembershipRepository(
       databaseClient,
     );
@@ -307,10 +301,7 @@ export async function PATCH(request: Request) {
     }
 
     const userId = readMemberUserId(body);
-    const databaseClient = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
+    const databaseClient = createServerDatabaseClient(runtime);
     const workspaceMemberships = createSupabaseWorkspaceMembershipRepository(
       databaseClient,
     );
@@ -394,10 +385,7 @@ export async function DELETE(request: Request) {
     }
 
     const userId = readMemberUserId(body);
-    const databaseClient = createSupabaseDatabaseClient({
-      url: runtime.env.supabase.url!,
-      serviceKey: runtime.env.supabase.serviceRoleKey!,
-    });
+    const databaseClient = createServerDatabaseClient(runtime);
     const workspaceMemberships = createSupabaseWorkspaceMembershipRepository(
       databaseClient,
     );
