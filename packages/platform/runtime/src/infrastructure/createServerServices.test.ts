@@ -235,7 +235,10 @@ function createWeatherObservation(input: {
     relativeHumidityPct: 54,
     soilMoisturePct: 33,
     evapotranspirationMm: 2.1,
-    provenance: {},
+    provenance: {
+      soilDataset: "open-meteo-hourly",
+      forecastModel: "open-meteo-best-match",
+    },
     createdAt: input.observedAt,
   };
 }
@@ -590,6 +593,108 @@ test("createServerServices moisture rebuild estimate overlaps field lookup with 
   assert.equal(rasterStartedWhileFieldPending, true);
   assert.equal(weatherStartedWhileFieldPending, true);
   assert.equal(result.snapshot.id, "snapshot-1");
+});
+
+test("createServerServices moisture rebuild estimate persists a weather baseline dataset", async () => {
+  let capturedInputs: Record<string, unknown> | null = null;
+
+  const services = createServerServices({
+    fields: {
+      async getById() {
+        return createField();
+      },
+    } as unknown as ServerRepositories["fields"],
+    imageryRasterObservations: {
+      async getLatestByField() {
+        return {
+          id: "raster-1",
+          workspaceId: WORKSPACE_ID,
+          fieldId: FIELD_ID,
+          capturedAt: "2026-03-31T09:00:00.000Z",
+          sourceKey: "sentinel-hub-stats-v1:sentinel-2",
+          cells: [
+            {
+              cellKey: "cell-a",
+              rowIndex: 0,
+              columnIndex: 0,
+              measurements: {
+                ndmi: 0.58,
+                ndvi: 0.67,
+              },
+              boundary: {
+                type: "Polygon",
+                coordinates: [[
+                  [-109.6, 51.3],
+                  [-109.59, 51.3],
+                  [-109.59, 51.29],
+                  [-109.6, 51.29],
+                  [-109.6, 51.3],
+                ]],
+              },
+            },
+          ],
+          createdAt: "2026-03-31T09:01:00.000Z",
+        };
+      },
+    } as unknown as ServerRepositories["imageryRasterObservations"],
+    weatherObservations: {
+      async getLatestByField() {
+        return createWeatherObservation({
+          id: "weather-1",
+          workspaceId: WORKSPACE_ID,
+          fieldId: FIELD_ID,
+          observedAt: "2026-03-31T09:00:00.000Z",
+          updatedAt: "2026-03-31T09:01:00.000Z",
+        });
+      },
+    } as unknown as ServerRepositories["weatherObservations"],
+    moistureSnapshots: {
+      async getLatestByField() {
+        return null;
+      },
+      async upsertSnapshot(input: {
+        workspaceId: string;
+        fieldId: string;
+        observedAt: string;
+        sourceKey: string;
+        rootZonePct: number;
+        surfacePct: number;
+        confidence: "low" | "medium" | "high";
+        inputs: Record<string, unknown>;
+      }) {
+        capturedInputs = input.inputs;
+        return {
+          id: "snapshot-2",
+          workspaceId: input.workspaceId,
+          fieldId: input.fieldId,
+          observedAt: input.observedAt,
+          sourceKey: input.sourceKey,
+          rootZonePct: input.rootZonePct,
+          surfacePct: input.surfacePct,
+          confidence: input.confidence,
+          inputs: input.inputs,
+          createdAt: input.observedAt,
+        };
+      },
+    } as unknown as ServerRepositories["moistureSnapshots"],
+    moistureCellSnapshots: {
+      async replaceSnapshotCells() {
+        return [];
+      },
+    } as unknown as ServerRepositories["moistureCellSnapshots"],
+  } as unknown as ServerRepositories);
+
+  const result = await services.moisture.rebuildFieldEstimate({
+    workspaceId: WORKSPACE_ID,
+    fieldId: FIELD_ID,
+  });
+
+  assert.equal(result.snapshot.inputs.baselineDataset, "open-meteo-hourly");
+  assert.equal(capturedInputs?.baselineDataset, "open-meteo-hourly");
+  assert.match(
+    String(result.snapshot.inputs.confidenceReason ?? ""),
+    /baseline soil moisture/,
+  );
 });
 
 test("createServerServices moisture rebuild cells overlaps field lookup with snapshot lookup", async () => {
