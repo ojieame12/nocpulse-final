@@ -1,4 +1,4 @@
-import type { JsonValue } from "@fieldpulse/platform-db";
+import type { DatabaseClient, JsonValue } from "@fieldpulse/platform-db";
 import type { ServerRuntime } from "@fieldpulse/platform-runtime";
 import { logServerError } from "../runtime/installServerCrashLogging";
 import { createServerDatabaseClient } from "../runtime/createServerDatabaseClient";
@@ -29,7 +29,7 @@ function normalizeAuditValue(value: unknown): AuditValue | undefined {
     typeof value === "number" ||
     typeof value === "boolean"
   ) {
-    return value;
+    return value as AuditValue;
   }
 
   if (value instanceof Date) {
@@ -60,6 +60,7 @@ function normalizeAuditValue(value: unknown): AuditValue | undefined {
 }
 
 export async function logAuditEvent(input: {
+  client?: Pick<DatabaseClient, "from">;
   runtime?: ServerRuntime;
   action: string;
   actorUserId: string;
@@ -101,12 +102,17 @@ export async function logAuditEvent(input: {
     }),
   );
 
-  if (!input.runtime || input.runtime.mode !== "supabase") {
+  const client =
+    input.client ??
+    (input.runtime && input.runtime.mode === "supabase"
+      ? createServerDatabaseClient(input.runtime)
+      : null);
+
+  if (!client) {
     return;
   }
 
   try {
-    const client = createServerDatabaseClient(input.runtime);
     const { error } = await client.from("audit_events").insert({
       action: input.action,
       actor_user_id: input.actorUserId,

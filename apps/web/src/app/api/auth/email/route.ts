@@ -4,6 +4,11 @@ import {
   jsonServerError,
   readJsonObject,
 } from "../../../../server/http/json";
+import {
+  parseWithSchema,
+  requiredTrimmedString,
+  z,
+} from "../../../../server/http/validation";
 import { createAdminSupabaseClient } from "../../../../server/auth/createAdminSupabaseClient";
 import { renderMagicLinkEmail } from "../../../../server/auth/magicLinkEmail";
 import { getAppOrigin } from "../../../../server/auth/getAppOrigin";
@@ -17,6 +22,7 @@ import { sanitizeNextPath } from "../../../../server/auth/sanitizeNextPath";
 import { resolveEmailSignInPolicy } from "../../../../server/auth/emailSignInEligibility";
 import { readAppEnv } from "@fieldpulse/platform-config";
 import { createServerDatabaseClient } from "../../../../server/runtime/createServerDatabaseClient";
+import { RequestContextError } from "../../../../server/runtime/resolveRequestContext";
 
 const AUTH_EMAIL_IP_RATE_LIMIT = {
   scope: "auth-email:ip",
@@ -32,6 +38,12 @@ const AUTH_EMAIL_ADDRESS_RATE_LIMIT = {
 
 const REQUEST_ACCESS_REQUIRED_MESSAGE =
   "This email has not been provisioned for NocPulse yet.";
+
+const AuthEmailBodySchema = z.object({
+  email: requiredTrimmedString("Field `email` is required."),
+  allowSignup: z.boolean().optional(),
+  next: z.unknown().optional(),
+});
 
 function jsonRequestAccessRequired(email: string, nextPath: string) {
   return jsonOk({
@@ -57,14 +69,21 @@ export async function POST(request: Request) {
     return jsonError(400, "Expected a JSON request body.");
   }
 
-  const email = typeof body.email === "string" ? body.email.trim() : "";
-  const allowSignup =
-    typeof body.allowSignup === "boolean" ? body.allowSignup : true;
-  const nextPath = sanitizeNextPath(body.next, "/preview");
+  let payload: z.infer<typeof AuthEmailBodySchema>;
 
-  if (!email) {
-    return jsonError(400, "Field `email` is required.");
+  try {
+    payload = parseWithSchema(AuthEmailBodySchema, body);
+  } catch (error) {
+    if (error instanceof RequestContextError) {
+      return jsonError(error.status, error.message);
+    }
+
+    throw error;
   }
+
+  const email = payload.email;
+  const allowSignup = payload.allowSignup ?? true;
+  const nextPath = sanitizeNextPath(payload.next, "/preview");
 
   const env = readAppEnv(process.env);
   const resendApiKey = env.email.resendApiKey;

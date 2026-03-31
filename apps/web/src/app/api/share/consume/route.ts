@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { readJsonObject } from "../../../../server/http/json";
 import {
+  parseWithSchema,
+  requiredTrimmedString,
+  z,
+} from "../../../../server/http/validation";
+import {
   GUEST_SHARE_COOKIE_NAME,
   buildGuestShareCookieAttributes,
   buildGuestShareCookiePayload,
@@ -16,12 +21,17 @@ import {
 } from "../../../../server/auth/rateLimit";
 import { getWebServerRuntime } from "../../../../server/runtime/getWebServerRuntime";
 import { createServerDatabaseClient } from "../../../../server/runtime/createServerDatabaseClient";
+import { RequestContextError } from "../../../../server/runtime/resolveRequestContext";
 
 const SHARE_CONSUME_IP_RATE_LIMIT = {
   scope: "share-consume:ip",
   maxAttempts: 20,
   windowSeconds: 10 * 60,
 } as const;
+
+const ShareConsumeBodySchema = z.object({
+  token: requiredTrimmedString("A share token is required."),
+});
 
 function buildJsonError(status: number, message: string) {
   return NextResponse.json(
@@ -50,7 +60,28 @@ function clearGuestShareCookie(response: NextResponse) {
 
 export async function POST(request: Request) {
   const body = await readJsonObject(request);
-  const token = typeof body?.token === "string" ? body.token.trim() : "";
+
+  if (!body) {
+    return clearGuestShareCookie(
+      buildJsonError(400, "Expected a JSON request body."),
+    );
+  }
+
+  let payload: z.infer<typeof ShareConsumeBodySchema>;
+
+  try {
+    payload = parseWithSchema(ShareConsumeBodySchema, body);
+  } catch (error) {
+    if (error instanceof RequestContextError) {
+      return clearGuestShareCookie(
+        buildJsonError(error.status, error.message),
+      );
+    }
+
+    throw error;
+  }
+
+  const token = payload.token;
 
   if (!token) {
     return clearGuestShareCookie(
