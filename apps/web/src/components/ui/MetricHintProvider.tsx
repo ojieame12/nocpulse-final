@@ -156,7 +156,7 @@ export function MetricHintProvider({ children }: { children: ReactNode }) {
   const pos = useComputePosition(active, containerRef, cardRef);
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
       {children}
       <div
         ref={cardRef}
