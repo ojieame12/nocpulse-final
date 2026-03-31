@@ -2105,9 +2105,7 @@ img {
 /* ── Kebab dropdown menu ── */
 
 .field-strip__kebab-menu {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  right: 0;
+  position: fixed;
   min-width: 160px;
   padding: 4px;
   border-radius: 10px;
