@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { SidebarFieldItem } from "./Sidebar";
 import { FieldStatusDot } from "../ui/FieldStatusDot";
 import type { FieldHealthStatus } from "../ui/FieldStatusDot";
+import { HydrationToast } from "../ui/HydrationToast";
 
 /* ── Crop icons (tiny inline SVG‑free labels) ── */
 const CROP_ICONS: Record<string, string> = {
@@ -345,6 +346,36 @@ export function FieldStrip({
     }
     prevOnboardingRef.current = onboardingProgress;
   }, [onboardingProgress]);
+
+  /* ── Hydration toast state ── */
+  const [toastData, setToastData] = useState<{
+    message: string;
+    subtitle?: string;
+    key: number;
+  } | null>(null);
+
+  // Fire toast when completion is detected
+  useEffect(() => {
+    if (completedFieldIds.size === 0) return;
+
+    const completedNames = fields
+      .filter((f) => completedFieldIds.has(f.id))
+      .map((f) => f.name);
+
+    if (completedNames.length === 0) return;
+
+    if (completedNames.length === 1) {
+      setToastData({
+        message: `${completedNames[0]} is ready`,
+        key: Date.now(),
+      });
+    } else {
+      setToastData({
+        message: `All ${completedNames.length} fields ready`,
+        key: Date.now(),
+      });
+    }
+  }, [completedFieldIds, fields]);
 
   /* ── Kebab menu + inline rename state ── */
   const [kebabFieldId, setKebabFieldId] = useState<string | null>(null);
@@ -920,7 +951,7 @@ export function FieldStrip({
                     borderBottom: '2px solid transparent',
                     borderImage: `linear-gradient(to right, rgba(22,163,74,0.35) ${progressPct}%, transparent ${progressPct}%) 1`,
                   } : {}),
-                  ...(entranceDelay ? { animationDelay: entranceDelay } : {}),
+                  ...(entranceDelay ? { '--card-entrance-delay': entranceDelay, animationDelay: entranceDelay } as React.CSSProperties : {}),
                 }}
               >
                 <FieldStatusDot
@@ -1081,6 +1112,17 @@ export function FieldStrip({
           document.body,
         );
       })()}
+
+      {/* ── Hydration completion toast ── */}
+      {toastData && createPortal(
+        <HydrationToast
+          key={toastData.key}
+          message={toastData.message}
+          subtitle={toastData.subtitle}
+          onDismiss={() => setToastData(null)}
+        />,
+        document.body,
+      )}
     </div>
   );
 }

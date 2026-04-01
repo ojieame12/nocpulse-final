@@ -2015,6 +2015,23 @@ export type DatabaseSchema = {
           bbox_west: number | string;
         }[];
       };
+      replay_field_hydration_from_source: {
+        Args: {
+          source_field_id: string;
+          target_workspace_id: string;
+          target_field_id: string;
+          target_crop_type?: string | null;
+        };
+        Returns: {
+          copied_crop_context: boolean;
+          weather_observation_count: number;
+          weather_forecast_count: number;
+          weather_signal_set: boolean;
+          moisture_snapshot_count: number;
+          moisture_cell_count: number;
+          raster_observation: boolean;
+        }[];
+      };
     };
     Enums: {
       workspace_role: "owner" | "manager" | "member" | "viewer";

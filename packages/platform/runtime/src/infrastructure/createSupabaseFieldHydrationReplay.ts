@@ -25,6 +25,8 @@ type WorkspaceRow = Pick<
   DatabaseSchema["app"]["Tables"]["workspaces"]["Row"],
   "id" | "slug"
 >;
+type ReplayFieldHydrationRpcRow =
+  DatabaseSchema["app"]["Functions"]["replay_field_hydration_from_source"]["Returns"][number];
 
 type ReplaySourceData = {
   candidate: SourceFieldRow;
@@ -120,14 +122,6 @@ function buildReplaySourceScore(source: Omit<ReplaySourceData, "score" | "hydrat
     (source.latestCells.length > 0 ? 1 : 0) +
     (source.latestRasterObservation ? 1 : 0)
   );
-}
-
-function buildObservationKey(observedAt: string, sourceKey: string) {
-  return `${observedAt}::${sourceKey}`;
-}
-
-function buildSnapshotKey(observedAt: string, sourceKey: string) {
-  return `${observedAt}::${sourceKey}`;
 }
 
 function selectLatestForecasts(
@@ -327,6 +321,18 @@ function compareReplaySources(left: ReplaySourceData, right: ReplaySourceData) {
   return 0;
 }
 
+function mapReplayResult(row: ReplayFieldHydrationRpcRow) {
+  return {
+    cropContext: row.copied_crop_context,
+    weatherObservationCount: row.weather_observation_count,
+    weatherForecastCount: row.weather_forecast_count,
+    weatherSignalSet: row.weather_signal_set,
+    moistureSnapshotCount: row.moisture_snapshot_count,
+    moistureCellCount: row.moisture_cell_count,
+    rasterObservation: row.raster_observation,
+  };
+}
+
 export function createSupabaseFieldHydrationReplay(
   client: DatabaseClient,
   repositories: Pick<
@@ -396,191 +402,28 @@ export function createSupabaseFieldHydrationReplay(
         };
       }
 
-      const weatherObservationIds = new Map<string, string>();
-      const sortedWeatherObservations = [...bestSource.weatherObservations].sort(
-        (left, right) =>
-          toTimestamp(left.observedAt) - toTimestamp(right.observedAt),
+      const replayResult = await client
+        .rpc("replay_field_hydration_from_source", {
+          source_field_id: bestSource.candidate.id,
+          target_workspace_id: input.targetWorkspaceId,
+          target_field_id: input.targetFieldId,
+          target_crop_type: input.cropType ?? null,
+        })
+        .single();
+
+      const replayedCounts = mapReplayResult(
+        requireSupabaseData(
+          replayResult,
+          "fieldHydrationReplay.replayFromImportCandidate.rpc",
+        ) as ReplayFieldHydrationRpcRow,
       );
-
-      for (const observation of sortedWeatherObservations) {
-        const replayedObservation =
-          await repositories.weatherObservations.upsertObservation({
-            workspaceId: input.targetWorkspaceId,
-            fieldId: input.targetFieldId,
-            observedAt: observation.observedAt,
-            sourceKey: observation.sourceKey,
-            providerKey: observation.providerKey,
-            airTemperatureC: observation.airTemperatureC,
-            precipitationMm: observation.precipitationMm,
-            windSpeedKph: observation.windSpeedKph,
-            relativeHumidityPct: observation.relativeHumidityPct,
-            soilMoisturePct: observation.soilMoisturePct,
-            evapotranspirationMm: observation.evapotranspirationMm,
-            provenance: observation.provenance,
-          });
-
-        weatherObservationIds.set(
-          buildObservationKey(observation.observedAt, observation.sourceKey),
-          replayedObservation.id,
-        );
-      }
-
-      let replayedSignalSetId: string | null = null;
-      if (bestSource.latestSignalSet) {
-        const observationId =
-          bestSource.latestSignalSet.weatherObservationId == null
-            ? null
-            : weatherObservationIds.get(
-                buildObservationKey(
-                  bestSource.latestSignalSet.observedAt,
-                  bestSource.latestSignalSet.sourceKey,
-                ),
-              ) ?? null;
-        const replayedSignalSet =
-          await repositories.weatherSignalSets.upsertSignalSet({
-            workspaceId: input.targetWorkspaceId,
-            fieldId: input.targetFieldId,
-            weatherObservationId: observationId,
-            observedAt: bestSource.latestSignalSet.observedAt,
-            forecastRunAt: bestSource.latestSignalSet.forecastRunAt,
-            sourceKey: bestSource.latestSignalSet.sourceKey,
-            providerKey: bestSource.latestSignalSet.providerKey,
-            signalVersion: bestSource.latestSignalSet.signalVersion,
-            currentVpdKpa: bestSource.latestSignalSet.currentVpdKpa,
-            peakForecastVpdKpa24h:
-              bestSource.latestSignalSet.peakForecastVpdKpa24h,
-            netWaterBalance24hMm:
-              bestSource.latestSignalSet.netWaterBalance24hMm,
-            netWaterBalance72hMm:
-              bestSource.latestSignalSet.netWaterBalance72hMm,
-            leafWetHours24h: bestSource.latestSignalSet.leafWetHours24h,
-            sprayWindowCount24h:
-              bestSource.latestSignalSet.sprayWindowCount24h,
-            frostRiskMinTempC: bestSource.latestSignalSet.frostRiskMinTempC,
-            gdd24h: bestSource.latestSignalSet.gdd24h,
-            gdd72h: bestSource.latestSignalSet.gdd72h,
-            gddBaseC: bestSource.latestSignalSet.gddBaseC,
-            provenance: bestSource.latestSignalSet.provenance,
-          });
-        replayedSignalSetId = replayedSignalSet.id;
-      }
-
-      if (bestSource.latestForecasts.length > 0) {
-        const sourceForecast = bestSource.latestForecasts[0]!;
-        await repositories.weatherForecasts.replaceForecastSet({
-          workspaceId: input.targetWorkspaceId,
-          fieldId: input.targetFieldId,
-          forecastRunAt: sourceForecast.forecastRunAt,
-          sourceKey: sourceForecast.sourceKey,
-          providerKey: sourceForecast.providerKey,
-          entries: bestSource.latestForecasts.map((forecast) => ({
-            validAt: forecast.validAt,
-            airTemperatureMinC: forecast.airTemperatureMinC,
-            airTemperatureMaxC: forecast.airTemperatureMaxC,
-            precipitationMm: forecast.precipitationMm,
-            windSpeedKph: forecast.windSpeedKph,
-            relativeHumidityPct: forecast.relativeHumidityPct,
-            evapotranspirationMm: forecast.evapotranspirationMm,
-            precipitationProbabilityPct:
-              forecast.precipitationProbabilityPct,
-          })),
-        });
-      }
-
-      if (bestSource.cropContext) {
-        await repositories.fieldCropContexts.upsertContext({
-          workspaceId: input.targetWorkspaceId,
-          fieldId: input.targetFieldId,
-          seasonYear: bestSource.cropContext.seasonYear,
-          cropType: input.cropType ?? bestSource.cropContext.cropType,
-          growthStage: bestSource.cropContext.growthStage,
-          growthStageSource: bestSource.cropContext.growthStageSource,
-          accumulatedGdd: bestSource.cropContext.accumulatedGdd,
-          lastGddObservedOn: bestSource.cropContext.lastGddObservedOn,
-          lastWeatherSignalSetId: replayedSignalSetId,
-          lastStageUpdatedAt: bestSource.cropContext.lastStageUpdatedAt,
-          sourceKey: "field-intake:hydration-replay",
-          metadata: {
-            replaySourceFieldId: bestSource.candidate.id,
-            replaySourceWorkspaceId: bestSource.candidate.workspace_id,
-            replaySourceWorkspaceSlug: bestSource.workspaceSlug,
-            replaySourceKey: bestSource.cropContext.sourceKey,
-          },
-        });
-      }
-
-      let latestTargetSnapshot: FieldMoistureSnapshot | null = null;
-      const sortedSnapshots = [...bestSource.recentSnapshots].sort(
-        (left, right) => toTimestamp(left.observedAt) - toTimestamp(right.observedAt),
-      );
-
-      for (const snapshot of sortedSnapshots) {
-        latestTargetSnapshot = await repositories.moistureSnapshots.upsertSnapshot({
-          workspaceId: input.targetWorkspaceId,
-          fieldId: input.targetFieldId,
-          observedAt: snapshot.observedAt,
-          sourceKey: snapshot.sourceKey,
-          rootZonePct: snapshot.rootZonePct,
-          surfacePct: snapshot.surfacePct,
-          confidence: snapshot.confidence,
-          inputs: snapshot.inputs,
-        });
-      }
-
-      if (latestTargetSnapshot && bestSource.latestCells.length > 0) {
-        await repositories.moistureCellSnapshots.replaceSnapshotCells({
-          workspaceId: input.targetWorkspaceId,
-          fieldId: input.targetFieldId,
-          snapshotId: latestTargetSnapshot.id,
-          observedAt: latestTargetSnapshot.observedAt,
-          sourceKey: latestTargetSnapshot.sourceKey,
-          confidence: latestTargetSnapshot.confidence,
-          cells: bestSource.latestCells.map((cell) => ({
-            cellKey: cell.cellKey,
-            rowIndex: cell.rowIndex,
-            columnIndex: cell.columnIndex,
-            centroid: cell.centroid,
-            boundary: cell.boundary,
-            rootZonePct: cell.rootZonePct,
-            surfacePct: cell.surfacePct,
-          })),
-        });
-      }
-
-      if (bestSource.latestRasterObservation) {
-        await repositories.imageryRasterObservations.replaceObservation({
-          workspaceId: input.targetWorkspaceId,
-          fieldId: input.targetFieldId,
-          observedAt: bestSource.latestRasterObservation.observedAt,
-          sourceKey: bestSource.latestRasterObservation.sourceKey,
-          providerKey: bestSource.latestRasterObservation.providerKey,
-          artifactKey: bestSource.latestRasterObservation.artifactKey,
-          metadata: bestSource.latestRasterObservation.metadata,
-          cells: bestSource.latestRasterObservation.cells.map((cell) => ({
-            cellKey: cell.cellKey,
-            rowIndex: cell.rowIndex,
-            columnIndex: cell.columnIndex,
-            centroid: cell.centroid,
-            boundary: cell.boundary,
-            measurements: cell.measurements,
-          })),
-        });
-      }
 
       return {
         action: "replayed",
         sourceFieldId: bestSource.candidate.id,
         sourceWorkspaceId: bestSource.candidate.workspace_id,
         sourceWorkspaceSlug: bestSource.workspaceSlug,
-        copied: {
-          cropContext: bestSource.cropContext != null,
-          weatherObservationCount: bestSource.weatherObservations.length,
-          weatherForecastCount: bestSource.latestForecasts.length,
-          weatherSignalSet: bestSource.latestSignalSet != null,
-          moistureSnapshotCount: bestSource.recentSnapshots.length,
-          moistureCellCount: bestSource.latestCells.length,
-          rasterObservation: bestSource.latestRasterObservation != null,
-        },
+        copied: replayedCounts,
       };
     },
   };

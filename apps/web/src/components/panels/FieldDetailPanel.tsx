@@ -76,6 +76,7 @@ import {
   vitalValueColor,
 } from "./fieldDetailColorSystem";
 import { MetricHintProvider } from "../ui/MetricHintProvider";
+import { HydrationStageTracker } from "../ui/HydrationStageTracker";
 
 /** Resolve footer badge data: count + color for each sub-page section */
 function resolveFooterBadge(
@@ -767,6 +768,14 @@ export interface FieldDetailPanelProps {
   initialPage?: string | null;
   onInitialPageClose?: (() => void) | null;
   onClose?: (() => void) | null;
+  /** Onboarding status for this field — passed from PreviewShell. Null = not onboarding. */
+  onboardingStatus?: {
+    status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+    progressPct: number | null;
+    phaseLabel: string | null;
+  } | null;
+  /** Raw worker progressMessage for deriving hydration stages. */
+  progressMessage?: string | null;
 }
 
 /* Types and MODE_TO_METRIC_KEY imported from ./fieldDetailTypes */
@@ -862,6 +871,8 @@ export function FieldDetailPanel({
   initialPage,
   onInitialPageClose,
   onClose,
+  onboardingStatus,
+  progressMessage,
 }: FieldDetailPanelProps) {
   const [internalMode, setInternalMode] = useState<ModeKey>("moisture");
   const [page, setPage] = useState<string | null>(initialPage ?? null);
@@ -1326,6 +1337,15 @@ export function FieldDetailPanel({
           </div>
         )}
       </div>
+
+      {/* ── HYDRATION STAGE TRACKER ── */}
+      {onboardingStatus && !page && (
+        <HydrationStageTracker
+          fieldName={fieldName}
+          onboardingStatus={onboardingStatus}
+          progressMessage={progressMessage}
+        />
+      )}
 
       {/* ── CONTENT ── */}
       {page ? (

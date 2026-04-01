@@ -1751,6 +1751,8 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       onMarketScenarioSaved={handleMarketScenarioSaved}
       initialPage={initialPage}
       onInitialPageClose={onInitialPageClose}
+      onboardingStatus={fieldOnboardingProgress.get(fieldData.fieldId) ?? null}
+      progressMessage={fieldOnboardingProgress.get(fieldData.fieldId)?.phaseLabel ?? null}
     />
   );
 
