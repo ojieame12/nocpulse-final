@@ -17,6 +17,8 @@ interface AddFieldPanelProps {
     workspaceId?: string | null;
     /** Per-dispatch mapping to field context for progress derivation */
     trackedJobs: readonly { dispatchId: string; fieldId: string; fieldLabel: string }[];
+    /** Pre-built hydration summaries from the commit response (if available). */
+    fieldHydrationSummaries?: readonly CommitFieldHydrationSummary[];
   }) => void;
   /** Dispatch statuses owned by the parent — AddFieldPanel reads these instead of polling. */
   jobStatuses?: ReadonlyMap<string, JobDispatchSnapshot>;
@@ -54,10 +56,38 @@ type SpreadsheetPreviewPayload = {
   fields: Array<{ draft: { name: string; areaHa: number } }>;
 };
 
+/** Mirrors FieldHydrationStageSummary from ServerServices. */
+export type CommitHydrationStageSummary = {
+  key: 'soil' | 'weather' | 'imagery' | 'moisture';
+  label: string;
+  state: 'pending' | 'completed';
+  statusText: string;
+};
+
+/** Mirrors FieldHydrationSummary from ServerServices (subset used by frontend). */
+export type CommitFieldHydrationSummary = {
+  fieldId: string;
+  fieldName: string;
+  status: 'queued' | 'completed';
+  progressPct: number;
+  phaseLabel: string;
+  stages: readonly CommitHydrationStageSummary[];
+};
+
+/** Mirrors BatchHydrationSummary from ServerServices (subset). */
+export type CommitBatchHydrationSummary = {
+  totalFields: number;
+  completedFields: number;
+  queuedFields: number;
+  highConfidenceFields: number;
+};
+
 type SpreadsheetCommitPayload = {
   batch: { status: string };
   candidates: Array<{ field: { id: string; name: string }; action: string }>;
   onboardingDispatches: Array<{ fieldId: string; action: string; receipts: Array<{ result: { id: string; key?: string; status?: string } }> }>;
+  fieldHydrationSummaries?: readonly CommitFieldHydrationSummary[];
+  batchHydrationSummary?: CommitBatchHydrationSummary;
 };
 
 type ManualFieldCreatePayload = {
@@ -985,6 +1015,7 @@ export function AddFieldPanel({
       dispatchIds: Array.from(new Set(nextTrackedJobs.map((job) => job.dispatchId))),
       workspaceId: effectiveWorkspaceId,
       trackedJobs: nextTrackedJobs,
+      fieldHydrationSummaries: committed.fieldHydrationSummaries,
     });
     onFieldsChanged?.({
       preferredFieldId:

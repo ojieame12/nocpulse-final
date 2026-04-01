@@ -24,7 +24,7 @@ import { EvidencePanel } from '../../components/panels/EvidencePanel';
 import { SpotInspectorPanel } from '../../components/panels/SpotInspectorPanel';
 import { SettingsPanel } from '../../components/panels/SettingsPanel';
 import { EditFieldPanel } from '../../components/panels/EditFieldPanel';
-import { AddFieldPanel } from '../../components/panels/AddFieldPanel';
+import { AddFieldPanel, type CommitFieldHydrationSummary } from '../../components/panels/AddFieldPanel';
 import type { FieldActionProps } from '../../components/panels/ActionTab';
 import type { FieldNotesProps } from '../../components/panels/NotesTab';
 import { AlertsPanel, type AlertsPanelProps } from '../../components/panels/AlertsPanel';
@@ -1280,6 +1280,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     dispatchIds: string[];
     workspaceId?: string | null;
     trackedJobs?: readonly { dispatchId: string; fieldId: string; fieldLabel: string }[];
+    fieldHydrationSummaries?: readonly CommitFieldHydrationSummary[];
   }) => {
     if (result.dispatchIds.length === 0) {
       setPendingOnboardingWatch(null);
@@ -1316,6 +1317,37 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         dispatchFieldMap: merged,
       };
     });
+
+    /* ── Seed onboarding statuses for fields already hydrated at commit time ── */
+    if (result.fieldHydrationSummaries && result.fieldHydrationSummaries.length > 0) {
+      setOnboardingStatuses((prev) => {
+        const next = new Map(prev);
+        for (const summary of result.fieldHydrationSummaries!) {
+          if (summary.status !== 'completed') continue;
+          /* Find the dispatch ID for this field so the fieldOnboardingProgress
+             derivation (which keys by dispatchId → fieldId) picks it up. */
+          const dispatchId = (result.trackedJobs ?? []).find(
+            (job) => job.fieldId === summary.fieldId,
+          )?.dispatchId;
+          if (!dispatchId) continue;
+          next.set(dispatchId, {
+            id: dispatchId,
+            key: `hydration-seed:${summary.fieldId}`,
+            status: 'completed',
+            activePhaseLabel: summary.phaseLabel,
+            progressPct: 100,
+            progressMessage: summary.phaseLabel,
+            updatedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            failedAt: null,
+            cancelledAt: null,
+            lastError: null,
+            fieldId: summary.fieldId,
+          });
+        }
+        return next;
+      });
+    }
   }, []);
 
   useEffect(() => {

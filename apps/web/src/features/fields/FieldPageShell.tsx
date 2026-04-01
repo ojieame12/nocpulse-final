@@ -60,7 +60,10 @@ import {
   type ModeKey,
 } from "../../components/panels/FieldDetailPanel";
 import { SettingsPanel } from "../../components/panels/SettingsPanel";
-import { AddFieldPanel } from "../../components/panels/AddFieldPanel";
+import {
+  AddFieldPanel,
+  type CommitFieldHydrationSummary,
+} from "../../components/panels/AddFieldPanel";
 
 export interface FieldPageShellProps {
   workspaceId?: string | null;
@@ -95,6 +98,25 @@ type PendingOnboardingWatch = {
 type OnboardingDispatchSnapshot = {
   id: string;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  activePhaseLabel?: string | null;
+  progressPct?: number | null;
+  progressMessage?: string | null;
+  fieldId?: string | null;
+};
+
+type JobDispatchSnapshot = {
+  id: string;
+  key: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  activePhaseLabel: string | null;
+  progressPct: number | null;
+  progressMessage: string | null;
+  updatedAt: string | null;
+  completedAt: string | null;
+  failedAt: string | null;
+  cancelledAt: string | null;
+  lastError: string | null;
+  fieldId: string | null;
 };
 
 function parsePendingOnboardingWatch(raw: string | null): PendingOnboardingWatch | null {
@@ -1117,6 +1139,8 @@ export function FieldPageShell({
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [pendingOnboardingWatch, setPendingOnboardingWatch] =
     useState<PendingOnboardingWatch | null>(null);
+  const [onboardingStatuses, setOnboardingStatuses] =
+    useState<Map<string, JobDispatchSnapshot>>(new Map());
   const [zoneDetailReturnView, setZoneDetailReturnView] = useState<"detail" | "activity">(
     "detail",
   );
@@ -1190,7 +1214,23 @@ export function FieldPageShell({
         }
 
         const dispatchById = new Map(
-          (payload.result?.dispatches ?? []).map((dispatch) => [dispatch.id, dispatch] as const),
+          (payload.result?.dispatches ?? []).map((dispatch) => [
+            dispatch.id,
+            {
+              id: dispatch.id,
+              key: dispatch.id,
+              status: dispatch.status,
+              activePhaseLabel: dispatch.activePhaseLabel ?? null,
+              progressPct: dispatch.progressPct ?? null,
+              progressMessage: dispatch.progressMessage ?? null,
+              updatedAt: null,
+              completedAt: dispatch.status === "completed" ? new Date().toISOString() : null,
+              failedAt: dispatch.status === "failed" ? new Date().toISOString() : null,
+              cancelledAt: dispatch.status === "cancelled" ? new Date().toISOString() : null,
+              lastError: null,
+              fieldId: dispatch.fieldId ?? null,
+            } satisfies JobDispatchSnapshot,
+          ] as const),
         );
         const shouldContinue = pendingOnboardingWatch!.dispatchIds.some((dispatchId) => {
           const status = dispatchById.get(dispatchId)?.status ?? "queued";
@@ -1200,6 +1240,8 @@ export function FieldPageShell({
         if (cancelled) {
           return;
         }
+
+        setOnboardingStatuses(dispatchById);
 
         if (shouldContinue) {
           timeoutId = setTimeout(() => {
@@ -1295,13 +1337,56 @@ export function FieldPageShell({
     router.refresh();
   }, [activeFieldId, router]);
 
-  const handleOnboardingTracked = useCallback((watch: PendingOnboardingWatch) => {
+  const handleOnboardingTracked = useCallback((watch: PendingOnboardingWatch & {
+    trackedJobs?: readonly { dispatchId: string; fieldId: string; fieldLabel: string }[];
+    fieldHydrationSummaries?: readonly CommitFieldHydrationSummary[];
+  }) => {
     if (watch.dispatchIds.length === 0) {
       setPendingOnboardingWatch(null);
+      setOnboardingStatuses(new Map());
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem(PENDING_ONBOARDING_STORAGE_KEY);
       }
       return;
+    }
+
+    const hydrationSummaries = watch.fieldHydrationSummaries;
+
+    if (hydrationSummaries && hydrationSummaries.length > 0) {
+      setOnboardingStatuses((prev) => {
+        const next = new Map(prev);
+
+        for (const summary of hydrationSummaries) {
+          if (summary.status !== "completed") {
+            continue;
+          }
+
+          const dispatchId = (watch.trackedJobs ?? []).find(
+            (job) => job.fieldId === summary.fieldId,
+          )?.dispatchId;
+
+          if (!dispatchId) {
+            continue;
+          }
+
+          next.set(dispatchId, {
+            id: dispatchId,
+            key: `hydration-seed:${summary.fieldId}`,
+            status: "completed",
+            activePhaseLabel: summary.phaseLabel,
+            progressPct: 100,
+            progressMessage: summary.phaseLabel,
+            updatedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            failedAt: null,
+            cancelledAt: null,
+            lastError: null,
+            fieldId: summary.fieldId,
+          });
+        }
+
+        return next;
+      });
     }
 
     setPendingOnboardingWatch(watch);
@@ -1494,6 +1579,7 @@ export function FieldPageShell({
       <AddFieldPanel
         onFieldsChanged={handleFieldsChanged}
         onOnboardingTracked={handleOnboardingTracked}
+        jobStatuses={onboardingStatuses}
         workspaceId={workspaceId}
         onClose={() => setPanelView("detail")}
       />
