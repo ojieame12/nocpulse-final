@@ -52,7 +52,7 @@ export function renderMagicLinkEmail(options: {
           <!-- Logo -->
           <tr>
             <td align="center" style="padding: 36px 32px 0 32px;">
-              <img src="https://www.nocpulse.org/logo-light.svg" alt="NocPulse" width="102" height="16" style="display:block; width:102px; height:16px; opacity:0.85;" />
+              <img src="https://www.nocpulse.org/nocpulse-logo-light.png" alt="NocPulse" width="120" height="19" style="display:block; width:120px; height:auto;" />
             </td>
           </tr>
 

@@ -168,7 +168,7 @@ export function renderRequestAccessNotificationEmail(
             <td style="padding: 28px 32px 0 32px;">
               <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
                 <tr>
-                  <td><img src="https://www.nocpulse.org/logo-light.svg" alt="NocPulse" width="102" height="16" style="display:block; width:102px; height:16px; opacity:0.7;" /></td>
+                  <td><img src="https://www.nocpulse.org/nocpulse-logo-light.png" alt="NocPulse" width="120" height="19" style="display:block; width:120px; height:auto;" /></td>
                   <td align="right" style="font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,0.25);">New Lead</td>
                 </tr>
               </table>
