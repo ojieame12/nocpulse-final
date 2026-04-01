@@ -9,6 +9,11 @@ export function AccessExpiredScreen() {
   return (
     <main style={styles.page}>
       <div style={styles.card}>
+        {/* ── Logo ── */}
+        <div style={{ marginBottom: 8 }}>
+          <img src="/logo-light.svg" alt="NocPulse" style={{ height: 14, opacity: 0.5 }} />
+        </div>
+
         {/* ── Icon ── */}
         <div style={styles.iconWrap}>
           <Clock

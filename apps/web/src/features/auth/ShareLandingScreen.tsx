@@ -74,22 +74,7 @@ export function ShareLandingScreen({ token }: ShareLandingScreenProps) {
       <div style={styles.card}>
         {/* ── Logo mark ── */}
         <div style={styles.logoRow}>
-          <svg
-            width="32"
-            height="32"
-            viewBox="0 0 32 32"
-            fill="none"
-            aria-hidden="true"
-            style={{ flexShrink: 0 }}
-          >
-            <rect width="32" height="32" rx="8" fill="#004726" />
-            <path
-              d="M16 6c-1 4-4 7-8 9 2 1 4 3 5 6 1-3 4-6 8-8-2-1-4-4-5-7z"
-              fill="#22c55e"
-            />
-            <circle cx="20" cy="22" r="3" fill="#6ee7a0" opacity="0.6" />
-          </svg>
-          <span style={styles.logoText}>NocPulse</span>
+          <img src="/logo-light.svg" alt="NocPulse" style={{ height: 16, opacity: 0.85 }} />
         </div>
 
         {invalid ? (

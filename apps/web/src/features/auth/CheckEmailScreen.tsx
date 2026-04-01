@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mail, Leaf } from "lucide-react";
+import { Mail } from "lucide-react";
 
 type CheckEmailScreenProps = {
   email?: string;
@@ -23,11 +23,8 @@ export function CheckEmailScreen({
         textAlign: "center",
       }}>
         {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Leaf size={20} strokeWidth={2.25} style={{ color: "#16a34a" }} />
-          <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.5)" }}>
-            NocPulse
-          </span>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <img src="/logo-light.svg" alt="NocPulse" style={{ height: 14, opacity: 0.6 }} />
         </div>
 
         {/* Mail icon */}

@@ -15,6 +15,7 @@ type AuthNoticeScreenProps = {
   detail?: ReactNode;
   actions?: readonly AuthNoticeAction[];
   footer?: ReactNode;
+  showLogo?: boolean;
 };
 
 export function AuthNoticeScreen({
@@ -25,6 +26,7 @@ export function AuthNoticeScreen({
   detail,
   actions = [],
   footer,
+  showLogo = true,
 }: AuthNoticeScreenProps) {
   return (
     <main
@@ -47,6 +49,11 @@ export function AuthNoticeScreen({
           overflow: "hidden",
         }}
       >
+        {showLogo && (
+          <div style={{ padding: "16px 20px 0", display: "flex", alignItems: "center" }}>
+            <img src="/logo.svg" alt="NocPulse" style={{ height: 14, opacity: 0.5 }} />
+          </div>
+        )}
         <header
           style={{
             minHeight: "var(--panel-header-h)",

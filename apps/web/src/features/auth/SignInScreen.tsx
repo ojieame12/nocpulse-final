@@ -1,4 +1,3 @@
-import { Leaf } from "lucide-react";
 import { EmailSignInForm } from "./EmailSignInForm";
 
 type SignInScreenProps = {
@@ -18,11 +17,8 @@ export function SignInScreen({ nextPath = "/preview" }: SignInScreenProps) {
         boxShadow: "0 8px 40px rgba(0,0,0,0.4), 0 2px 10px rgba(0,0,0,0.2)",
       }}>
         {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Leaf size={24} strokeWidth={2.25} style={{ color: "#16a34a" }} />
-          <span style={{ fontFamily: "var(--font-body)", fontSize: 18, fontWeight: 700, color: "rgba(255,255,255,0.78)" }}>
-            NocPulse
-          </span>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <img src="/logo-light.svg" alt="NocPulse" style={{ height: 16, opacity: 0.85 }} />
         </div>
 
         {/* Heading */}
