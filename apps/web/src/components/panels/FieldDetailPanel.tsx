@@ -351,7 +351,7 @@ function SubPageView({
       ? {
           label: `Tracked ${Math.round(trackedPocketPct)}%`,
           color:
-            mc.riskLevel === "Tracked Critical" || trackedPocketPct >= 12
+            mc.riskLevel === "Zone Critical" || trackedPocketPct >= 12
               ? ("red" as const)
               : trackedPocketPct > 0
                 ? ("yellow" as const)
@@ -416,9 +416,9 @@ function SubPageView({
       : focusedZone?.status === "critical"
         ? "Urgent"
         : trackedPocketPct != null && trackedPocketPct > 0
-          ? "Tracked Watch"
+          ? "Zone Watch"
           : outsideZonePct != null && outsideZonePct > 0
-            ? "Untracked Watch"
+            ? "Emerging"
             : action?.urgency ?? "—";
   const actionContextText = [
     contextOnlyOptical

@@ -174,11 +174,11 @@ export function buildFieldDetailModeData({
     localizedCriticalPct >= 12 || (!fieldRelativeMode && stressedPct >= 30)
       ? "High"
       : trackedZoneFocusSignal && localizedCriticalInZonesPct >= 4
-        ? "Tracked Critical"
+        ? "Zone Critical"
         : trackedZoneFocusSignal
-          ? "Tracked Watch"
+          ? "Zone Watch"
           : untrackedPocketSignal
-            ? "Untracked Watch"
+            ? "Emerging"
     : broadStressSignal
       ? "Broad Stress"
       : localizedContrastSignal
