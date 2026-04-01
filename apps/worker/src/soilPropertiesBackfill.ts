@@ -100,7 +100,10 @@ async function main() {
     return;
   }
 
-  const soilProvider: SoilPropertiesProvider = createSoilPropertiesProvider();
+  const soilProvider: SoilPropertiesProvider = createSoilPropertiesProvider({
+    enableRestFallback: true,
+    restBaseUrl: runtime.env.soil.soilGridsBaseUrl,
+  });
 
   const logger = {
     info(msg: string) {
