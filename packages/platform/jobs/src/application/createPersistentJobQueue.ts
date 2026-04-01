@@ -126,7 +126,36 @@ function toJsonValue(value: unknown): JsonValue {
 }
 
 function serializeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (error && typeof error === "object") {
+    const candidate = error as {
+      message?: unknown;
+      details?: unknown;
+      hint?: unknown;
+      code?: unknown;
+    };
+    const parts = [
+      typeof candidate.message === "string" ? candidate.message : null,
+      typeof candidate.details === "string" ? candidate.details : null,
+      typeof candidate.hint === "string" ? candidate.hint : null,
+      typeof candidate.code === "string" ? `code=${candidate.code}` : null,
+    ].filter((part): part is string => part !== null && part.length > 0);
+
+    if (parts.length > 0) {
+      return parts.join(" | ");
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error);
 }
 
 function isStabilityDebugEnabled(): boolean {
@@ -859,55 +888,25 @@ async function recordPhaseProgress(
   },
 ): Promise<void> {
   const now = new Date().toISOString();
-  const existing = await client
+  const upsertResult = await client
     .from("job_dispatch_phase_runs")
-    .select("*")
-    .eq("dispatch_id", input.dispatchId)
-    .eq("attempt", input.attempt)
-    .eq("phase_key", input.phaseKey)
-    .maybeSingle();
-
-  if (existing.error) {
-    throw existing.error;
-  }
-
-  if (!existing.data) {
-    const insertResult = await client
-      .from("job_dispatch_phase_runs")
-      .insert({
-        dispatch_id: input.dispatchId,
-        attempt: input.attempt,
-        phase_key: input.phaseKey,
-        phase_label: input.phaseLabel,
-        status: "running",
-        worker_name: input.workerName,
-        started_at: input.phaseStartedAt,
-        latest_progress_pct: input.progressPct,
-        latest_progress_message: input.progressMessage,
-        updated_at: now,
-      });
-
-    if (insertResult.error) {
-      throw insertResult.error;
-    }
-
-    return;
-  }
-
-  const updateResult = await client
-    .from("job_dispatch_phase_runs")
-    .update({
+    .upsert({
+      dispatch_id: input.dispatchId,
+      attempt: input.attempt,
+      phase_key: input.phaseKey,
       phase_label: input.phaseLabel,
       status: "running",
       worker_name: input.workerName,
+      started_at: input.phaseStartedAt,
       latest_progress_pct: input.progressPct,
       latest_progress_message: input.progressMessage,
       updated_at: now,
-    })
-    .eq("id", existing.data.id);
+    }, {
+      onConflict: "dispatch_id,attempt,phase_key",
+    });
 
-  if (updateResult.error) {
-    throw updateResult.error;
+  if (upsertResult.error) {
+    throw upsertResult.error;
   }
 }
 
@@ -930,61 +929,28 @@ async function finalizePhaseRun(
     return;
   }
 
-  const existing = await client
-    .from("job_dispatch_phase_runs")
-    .select("*")
-    .eq("dispatch_id", input.dispatchId)
-    .eq("attempt", input.attempt)
-    .eq("phase_key", input.phaseKey)
-    .maybeSingle();
-
-  if (existing.error) {
-    throw existing.error;
-  }
-
   const durationMs = getPhaseDurationMs(input.phaseStartedAt, input.endedAt);
-
-  if (!existing.data) {
-    const insertResult = await client
-      .from("job_dispatch_phase_runs")
-      .insert({
-        dispatch_id: input.dispatchId,
-        attempt: input.attempt,
-        phase_key: input.phaseKey,
-        phase_label: input.phaseLabel,
-        status: input.status,
-        worker_name: input.workerName,
-        started_at: input.phaseStartedAt ?? input.endedAt,
-        ended_at: input.endedAt,
-        duration_ms: durationMs,
-        latest_progress_pct: input.progressPct,
-        latest_progress_message: input.progressMessage,
-        updated_at: input.endedAt,
-      });
-
-    if (insertResult.error) {
-      throw insertResult.error;
-    }
-
-    return;
-  }
-
-  const updateResult = await client
+  const upsertResult = await client
     .from("job_dispatch_phase_runs")
-    .update({
+    .upsert({
+      dispatch_id: input.dispatchId,
+      attempt: input.attempt,
+      phase_key: input.phaseKey,
       phase_label: input.phaseLabel,
       status: input.status,
       worker_name: input.workerName,
+      started_at: input.phaseStartedAt ?? input.endedAt,
       ended_at: input.endedAt,
       duration_ms: durationMs,
       latest_progress_pct: input.progressPct,
       latest_progress_message: input.progressMessage,
       updated_at: input.endedAt,
-    })
-    .eq("id", existing.data.id);
+    }, {
+      onConflict: "dispatch_id,attempt,phase_key",
+    });
 
-  if (updateResult.error) {
-    throw updateResult.error;
+  if (upsertResult.error) {
+    throw upsertResult.error;
   }
 }
 
