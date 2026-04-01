@@ -151,6 +151,7 @@ async function main() {
   const fieldId = readStringFlag(args, "field-id");
   const maxFields = readNumberFlag(args, "max-fields") ?? readNumberFlag(args, "limit") ?? 25;
   const targetCount = readNumberFlag(args, "target-count") ?? 2;
+  const minOpticalCount = readNumberFlag(args, "min-optical-count") ?? 0;
   const windows = readNumberFlag(args, "windows") ?? 3;
   const stepDays = readNumberFlag(args, "step-days") ?? 30;
   const lookbackDays = readNumberFlag(args, "lookback-days") ?? 45;
@@ -167,6 +168,10 @@ async function main() {
 
   if (targetCount < 1) {
     throw new Error("[worker-optical-history-backfill] --target-count must be >= 1");
+  }
+
+  if (minOpticalCount < 0) {
+    throw new Error("[worker-optical-history-backfill] --min-optical-count must be >= 0");
   }
 
   if (windows < 1) {
@@ -249,6 +254,7 @@ async function main() {
             ) =>
               targetedQualities.includes(row.quality) &&
               row.vegetationReadiness !== "ready" &&
+              row.opticalObservationCount >= minOpticalCount &&
               row.opticalObservationCount < targetCount,
           )
           .sort((left, right) => {
