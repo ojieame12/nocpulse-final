@@ -507,9 +507,9 @@ export function buildReportProps(
   const usingModelFallback = !usingSarTrend && hasModelTrend;
   const moistureHistoryEmptyText =
     usingSarTrend
-      ? null
+      ? undefined
       : usingModelFallback
-        ? null
+        ? undefined
         : moisture?.latestSnapshot != null
           ? "Waiting for more raster passes to draw a trend."
           : "No moisture observations yet.";
