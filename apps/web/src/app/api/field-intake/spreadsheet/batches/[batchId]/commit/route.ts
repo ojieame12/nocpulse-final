@@ -117,6 +117,11 @@ export async function POST(request: Request, context: RouteContext) {
         createdCount: result.candidates.filter((candidate) => candidate.action === "created").length,
         reusedCount: result.candidates.filter((candidate) => candidate.action === "reused").length,
         onboardingDispatchCount: result.onboardingDispatches.length,
+        hydrationCompletedCount: result.batchHydrationSummary.completedFields,
+        hydrationQueuedCount: result.batchHydrationSummary.queuedFields,
+        highConfidenceFieldCount: result.batchHydrationSummary.highConfidenceFields,
+        mediumConfidenceFieldCount: result.batchHydrationSummary.mediumConfidenceFields,
+        lowConfidenceFieldCount: result.batchHydrationSummary.lowConfidenceFields,
         onboardingDryRun: payload.onboardingDryRun ?? false,
       },
     });

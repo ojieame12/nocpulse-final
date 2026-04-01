@@ -7,6 +7,7 @@ export {
 export { type ServerJobDispatcher } from "./contracts/ServerRuntime";
 export {
   type BuildFieldReportReadModelServiceInput,
+  type BatchHydrationSummary,
   type BuildInitialFieldOnboardingPlanInput,
   type BuildRecentDiseaseRiskReportInput,
   type BuildRecentImageryProviderProbeFallbackReportInput,
@@ -31,6 +32,11 @@ export {
   type BuildFieldIntelligenceZoneActivityReportInput,
   type FieldImportBatch,
   type FieldImportCandidate,
+  type FieldHydrationMode,
+  type FieldHydrationStageSummary,
+  type FieldHydrationStatus,
+  type FieldHydrationSummary,
+  type FieldMoistureConfidenceSummary,
   type FieldOnboardingDispatchReceipt,
   type FieldOnboardingPlan,
   type ClearFieldGrowthStageOverrideInput,

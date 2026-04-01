@@ -108,6 +108,80 @@ function createRepositories(): ServerRepositories {
   const fieldOverview = createFieldOverview();
   const batch = createBatch();
   const candidate = createCandidate();
+  const latestSnapshot = {
+    id: "snapshot-1",
+    workspaceId: WORKSPACE_ID,
+    fieldId: FIELD_ID,
+    observedAt: "2026-04-01T12:00:00.000Z",
+    sourceKey: "sentinel-1",
+    rootZonePct: 31.4,
+    surfacePct: 27.1,
+    confidence: "high" as const,
+    inputs: {
+      derivationMode: "source-backed" as const,
+      rasterMode: "provider" as const,
+      signalBlend: "raster+weather" as const,
+      confidenceScore: 0.82,
+      confidenceReason: "fresh raster + weather pulse",
+      soilDataset: "SoilGrids",
+      baselineDataset: "ERA5-Land",
+      weatherSourceKey: "open-meteo",
+      rasterSourceKey: "sentinel-1",
+      usedSar: true,
+      usedWeather: true,
+      usedWeatherSoilMoisture: true,
+      rootZoneDepthCm: 60,
+      availableWaterMm: 110,
+      fieldCapacityPct: 36,
+      wiltingPointPct: 16,
+    },
+    createdAt: "2026-04-01T12:00:00.000Z",
+  };
+  const latestWeatherObservation = {
+    workspaceId: WORKSPACE_ID,
+    fieldId: FIELD_ID,
+    observedAt: "2026-04-01T12:00:00.000Z",
+    sourceKey: "open-meteo",
+    providerKey: "open-meteo",
+    airTemperatureC: 8.4,
+    precipitationMm: 0.2,
+    windSpeedKph: 18,
+    relativeHumidityPct: 61,
+    soilMoisturePct: 29,
+    evapotranspirationMm: 1.4,
+    provenance: {},
+    createdAt: "2026-04-01T12:00:00.000Z",
+    updatedAt: "2026-04-01T12:00:00.000Z",
+  };
+  const latestRasterObservation = {
+    id: "raster-1",
+    workspaceId: WORKSPACE_ID,
+    fieldId: FIELD_ID,
+    observedAt: "2026-04-01T12:00:00.000Z",
+    sourceKey: "sentinel-1",
+    providerKey: "sentinel-1",
+    artifactKey: "artifact-1",
+    metadata: {},
+    cells: [],
+    createdAt: "2026-04-01T12:00:00.000Z",
+    updatedAt: "2026-04-01T12:00:00.000Z",
+  };
+  const latestForecast = {
+    workspaceId: WORKSPACE_ID,
+    fieldId: FIELD_ID,
+    forecastRunAt: "2026-04-01T12:00:00.000Z",
+    validAt: "2026-04-01T13:00:00.000Z",
+    sourceKey: "open-meteo",
+    providerKey: "open-meteo",
+    airTemperatureMinC: 2.1,
+    airTemperatureMaxC: 10.5,
+    precipitationMm: 0.4,
+    precipitationProbabilityPct: 30,
+    relativeHumidityPct: 55,
+    windSpeedKph: 16,
+    createdAt: "2026-04-01T12:00:00.000Z",
+    updatedAt: "2026-04-01T12:00:00.000Z",
+  };
 
   return {
     fieldImportBatches: {
@@ -117,7 +191,12 @@ function createRepositories(): ServerRepositories {
       async listCandidatesByBatch() {
         return [candidate];
       },
-      async markCandidateCommitted(_workspaceId, _batchId, _candidateId, input) {
+      async markCandidateCommitted(
+        _workspaceId: string,
+        _batchId: string,
+        _candidateId: string,
+        input: { fieldId: string; action: "created" | "reused" },
+      ) {
         return {
           ...candidate,
           status: "committed",
@@ -151,7 +230,11 @@ function createRepositories(): ServerRepositories {
       async listOverviewByWorkspace() {
         return [] as readonly FieldOverview[];
       },
-      async setLegalLandDescription(_workspaceId, _fieldId, legalLandDescription) {
+      async setLegalLandDescription(
+        _workspaceId: string,
+        _fieldId: string,
+        legalLandDescription: string | null,
+      ) {
         return {
           ...fieldDetail,
           legalLandDescription,
@@ -159,7 +242,20 @@ function createRepositories(): ServerRepositories {
       },
     } as unknown as ServerRepositories["fields"],
     fieldCropContexts: {
-      async upsertContext(input) {
+      async upsertContext(input: {
+        workspaceId: string;
+        fieldId: string;
+        seasonYear: number;
+        cropType: string;
+        growthStage?: string | null;
+        growthStageSource?: string | null;
+        accumulatedGdd?: number;
+        lastGddObservedOn?: string | null;
+        lastWeatherSignalSetId?: string | null;
+        lastStageUpdatedAt?: string | null;
+        sourceKey: string;
+        metadata?: Record<string, unknown>;
+      }) {
         return {
           id: "crop-context-1",
           workspaceId: input.workspaceId,
@@ -179,6 +275,53 @@ function createRepositories(): ServerRepositories {
         };
       },
     } as unknown as ServerRepositories["fieldCropContexts"],
+    moistureSnapshots: {
+      async getLatestByField() {
+        return latestSnapshot;
+      },
+      async listRecentByField() {
+        return [latestSnapshot];
+      },
+      async upsertSnapshot() {
+        return latestSnapshot;
+      },
+    } as unknown as ServerRepositories["moistureSnapshots"],
+    weatherObservations: {
+      async getLatestByField() {
+        return latestWeatherObservation;
+      },
+      async listLatestByWorkspace() {
+        return [latestWeatherObservation];
+      },
+      async listRecentObservations() {
+        return [latestWeatherObservation];
+      },
+      async listRecentByField() {
+        return [latestWeatherObservation];
+      },
+      async upsertObservation() {
+        return latestWeatherObservation;
+      },
+    } as unknown as ServerRepositories["weatherObservations"],
+    weatherForecasts: {
+      async listByField() {
+        return [latestForecast];
+      },
+      async replaceForecastSet() {
+        return [latestForecast];
+      },
+    } as unknown as ServerRepositories["weatherForecasts"],
+    imageryRasterObservations: {
+      async getLatestByField() {
+        return latestRasterObservation;
+      },
+      async getLatestByFieldAndProvider() {
+        return latestRasterObservation;
+      },
+      async replaceObservation() {
+        return latestRasterObservation;
+      },
+    } as unknown as ServerRepositories["imageryRasterObservations"],
   } as unknown as ServerRepositories;
 }
 
@@ -233,6 +376,9 @@ test("commitFieldImportBatch uses refresh onboarding after hydration replay", as
 
   assert.equal(result.candidates[0]?.action, "created");
   assert.deepEqual(recordedJobKeys, ["field.refresh-intake"]);
+  assert.equal(result.fieldHydrationSummaries[0]?.status, "completed");
+  assert.equal(result.fieldHydrationSummaries[0]?.moistureConfidence?.level, "high");
+  assert.equal(result.batchHydrationSummary.highConfidenceFields, 1);
 });
 
 test("commitFieldImportBatch uses bootstrap onboarding when hydration replay skips", async () => {
@@ -269,6 +415,8 @@ test("commitFieldImportBatch uses bootstrap onboarding when hydration replay ski
 
   assert.equal(result.candidates[0]?.action, "created");
   assert.deepEqual(recordedJobKeys, ["field.bootstrap-initial"]);
+  assert.equal(result.fieldHydrationSummaries[0]?.status, "queued");
+  assert.equal(result.fieldHydrationSummaries[0]?.moistureConfidence, null);
 });
 
 test("commitFieldImportBatch retries hydration replay before falling back", async () => {
