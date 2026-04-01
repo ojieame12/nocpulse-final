@@ -65,6 +65,8 @@ export interface FieldSummaryProps {
   moistureConfidenceLevel: MoistureConfidenceLevel;
   /** How moisture was derived: source-backed, seeded-range, or unknown. */
   moistureDerivationMode: string;
+  /** Extended source tag with freshness, e.g. "Satellite-derived · SAR 18h ago" */
+  sourceTagExtended?: string;
   precipitation: string;
   precipitationSub: string;
   nextRain: string;
@@ -126,7 +128,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
   const moistureColor = field.moisture < 0.3 ? '#ef4444' : '#16a34a';
   const contextLabel = field.contextLabel ?? 'Field overview';
   const conditionsMeta = field.conditionsMeta ?? 'Field average';
-  const updatedLabel = field.updatedLabel ?? 'UPDATED MAR 27, 2026, 11:34 AM';
+  const updatedLabel = field.updatedLabel ?? '—';
   const ring = CONFIDENCE_RING[field.moistureConfidenceLevel ?? 'unknown'];
 
   return (
@@ -159,7 +161,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
               value={field.moisture}
               size={120}
               color={moistureColor}
-              caption="Root moisture"
+              caption="Soil moisture"
             />
           </div>
           <div className="donut-info">
@@ -173,7 +175,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
             <div className="donut-info__row" data-metric-hint="surface moisture" data-metric-value={field.surfaceMoisture}>
               <Droplets size={12} className="donut-info__icon" />
               <div className="donut-info__text">
-                <span className="donut-info__label">Surface moisture</span>
+                <span className="donut-info__label">Surface wetness</span>
                 <span className="donut-info__value" style={{ color: '#f59e0b' }}>{field.surfaceMoisture}</span>
               </div>
             </div>
@@ -186,7 +188,9 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
             </div>
           </div>
         </div>
-        {field.moistureDerivationMode && field.moistureDerivationMode !== 'unknown' ? (
+        {field.sourceTagExtended ? (
+          <span className="donut-source-tag">{field.sourceTagExtended}</span>
+        ) : field.moistureDerivationMode && field.moistureDerivationMode !== 'unknown' ? (
           <span className="donut-source-tag">
             {field.moistureDerivationMode === 'source-backed' ? 'Satellite-derived' : 'Modeled estimate'}
             {field.confidenceSub && field.confidenceSub !== 'No source' ? ` · ${field.confidenceSub}` : ''}
@@ -202,7 +206,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
             <div className="panel__data-cell" data-metric-hint="root-moisture" data-metric-value={field.rootMoisture}>
               <div className="panel__data-cell-icon-label">
                 <Waves size={12} />
-                <span className="panel__data-cell-label">Root Moisture</span>
+                <span className="panel__data-cell-label">Soil Moisture</span>
               </div>
               <ValueSlot className="panel__data-cell-value">{field.rootMoisture}</ValueSlot>
               <span className="panel__data-cell-sub" style={{ color: 'var(--status-positive)', fontWeight: 600 }}>{field.rootMoistureSub}</span>
@@ -223,7 +227,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
             <div className="panel__data-cell" data-metric-hint="spread" data-metric-value={field.spread}>
               <div className="panel__data-cell-icon-label">
                 <BarChart3 size={12} />
-                <span className="panel__data-cell-label">Spread (σ)</span>
+                <span className="panel__data-cell-label">Field Variation</span>
               </div>
               <ValueSlot className="panel__data-cell-value">{field.spread}</ValueSlot>
               <span className="panel__data-cell-sub">{field.spreadSub}</span>

@@ -300,7 +300,7 @@ function buildWatchlistSummary(input: {
     const severity = rootZonePct < 25 ? "high" : "medium";
     candidates.push({
       score: severity === "high" ? 3 : 2,
-      title: severity === "high" ? "Root moisture watch" : "Dryness watch",
+      title: severity === "high" ? "Soil moisture watch" : "Dryness watch",
       severity,
       urgency: "Watch",
       dueDate: severity === "high" ? "Within 24h" : "Within 48h",
@@ -315,7 +315,7 @@ function buildWatchlistSummary(input: {
         : "Heuristic watchlist",
       signals: [
         {
-          label: `Root moisture ${rootZonePct.toFixed(1)}%`,
+          label: `Soil moisture ${rootZonePct.toFixed(1)}%`,
           color: severity === "high" ? "red" : "yellow",
           detail: [
             typeof input.moisture?.surfacePct === "number"
@@ -627,7 +627,7 @@ export function buildActionProps(
             key: "metric:root-moisture",
             score: 70,
             group: "moisture",
-            label: `Root moisture ${moisture.rootZonePct.toFixed(1)}%`,
+            label: `Soil moisture ${moisture.rootZonePct.toFixed(1)}%`,
             color:
               moisture.rootZonePct < 25
                 ? "red"

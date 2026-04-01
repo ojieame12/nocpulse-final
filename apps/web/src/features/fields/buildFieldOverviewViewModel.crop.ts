@@ -120,7 +120,7 @@ export function buildCropProps(rm: any): FieldCropProps {
 
   const thresholdRows: FieldCropProps["thresholds"] = [
     {
-      param: "Root Moisture (%)",
+      param: "Soil Moisture (%)",
       min: `${resolvedRules.moistureStress.rootZoneCriticalPct}`,
       optimal: `${resolvedRules.moistureStress.rootZoneMonitorPct}–70`,
       optimalColor: "#16a34a",

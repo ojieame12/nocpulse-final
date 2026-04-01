@@ -145,7 +145,9 @@ const READING_ICONS: Record<ReadingIconKey, { Icon: LucideIcon; color: string }>
 
 const CROP_PARAM_ICONS: Record<string, { Icon: LucideIcon; color: string }> = {
   "root moisture":     { Icon: Droplets,     color: "#3b82f6" },
+  "soil moisture":     { Icon: Droplets,     color: "#3b82f6" },
   "surface moisture":  { Icon: Droplets,     color: "#0ea5e9" },
+  "surface wetness":   { Icon: Droplets,     color: "#0ea5e9" },
   "frost min":         { Icon: Snowflake,    color: "#818cf8" },
   "water balance 72h": { Icon: CloudDrizzle, color: "#06b6d4" },
   "water balance":     { Icon: CloudDrizzle, color: "#06b6d4" },

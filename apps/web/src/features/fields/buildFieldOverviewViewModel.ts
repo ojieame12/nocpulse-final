@@ -893,6 +893,7 @@ export async function buildFieldOverviewViewModel(
     confidenceSub: latestMoisture?.sourceKey ?? "No source",
     moistureConfidenceLevel: confidence === "high" || confidence === "medium" || confidence === "low" ? confidence : "unknown",
     moistureDerivationMode: (latestMoisture as any)?.inputs?.derivationMode ?? "unknown",
+    sourceTagExtended: buildSourceTagExtended(latestMoisture),
     precipitation: latestObservation?.precipitationMm != null
       ? `${latestObservation.precipitationMm.toFixed(1)} mm`
       : "—",
@@ -1106,4 +1107,39 @@ function metricTone(input: "danger" | "warning" | "positive" | "info") {
     case "info":
       return { valueColor: "#3b82f6", bg: "#eff6ff", border: "#bfdbfe" };
   }
+}
+
+/** Build an extended source tag with freshness for the donut caption. */
+function buildSourceTagExtended(
+  snapshot: { observedAt?: string; sourceKey?: string; inputs?: { derivationMode?: string } } | null | undefined,
+): string | undefined {
+  if (!snapshot) return undefined;
+  const derivation = snapshot.inputs?.derivationMode;
+  if (!derivation || derivation === "unknown") return undefined;
+
+  const sourceKey = snapshot.sourceKey?.toLowerCase() ?? "";
+  const isSatellite = derivation === "source-backed";
+
+  // Provider short name
+  let provider = "";
+  if (sourceKey.includes("sentinel-1")) provider = "SAR";
+  else if (sourceKey.includes("sentinel-2")) provider = "Optical";
+  else if (sourceKey.includes("planet")) provider = "Planet";
+  else if (sourceKey.includes("open-meteo") || sourceKey.includes("weather")) provider = "ERA5";
+  else if (isSatellite) provider = "Satellite";
+
+  // Freshness
+  let freshness = "";
+  if (snapshot.observedAt) {
+    const ageMs = Date.now() - new Date(snapshot.observedAt).getTime();
+    const ageH = Math.floor(ageMs / 3_600_000);
+    if (ageH < 1) freshness = "current";
+    else if (ageH < 24) freshness = `${ageH}h ago`;
+    else if (ageH < 48) freshness = "yesterday";
+    else freshness = `${Math.floor(ageH / 24)}d ago`;
+  }
+
+  const label = isSatellite ? "Satellite-derived" : "Weather-derived";
+  const parts = [label, provider, freshness].filter(Boolean);
+  return parts.join(" · ");
 }

@@ -232,10 +232,10 @@ export function ReportSubPage({
       {(reportReadings.length > 0
         ? reportReadings
         : [
-            { label: "Root moisture", value: summary?.rootMoisture ?? "—", color: ac },
+            { label: "Soil moisture", value: summary?.rootMoisture ?? "—", color: ac },
             { label: "Trend (7d)", value: summary?.trend ?? "—", color: "#f59e0b" },
             {
-              label: "Spread",
+              label: "Field variation",
               value: summary?.spread ?? "—",
               color: "var(--text-primary)",
             },

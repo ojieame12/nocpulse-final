@@ -339,9 +339,9 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
     blocks.push({
       kind: "metric-grid",
       cells: [
-        { label: "Root Moisture", value: s.rootMoisture, sub: s.rootMoistureSub },
+        { label: "Soil Moisture", value: s.rootMoisture, sub: s.rootMoistureSub },
         { label: "Trend (7 days)", value: s.trend, sub: s.trendSub, valueColor: s.trend.startsWith("-") ? AMBER : undefined },
-        { label: "Spread (σ)", value: s.spread, sub: s.spreadSub },
+        { label: "Field Variation", value: s.spread, sub: s.spreadSub },
         { label: "Confidence", value: s.confidence, sub: s.confidenceSub },
       ],
       columns: 4,

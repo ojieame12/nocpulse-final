@@ -205,8 +205,8 @@ export const METRIC_HINTS: Record<string, MetricHintDef> = {
     interpret: surfaceMoistureInterpret,
   },
   "root moisture": {
-    label: "Root Zone Moisture",
-    definition: "Volumetric water content in the 20–60 cm soil profile where most crop roots draw water.",
+    label: "Soil Moisture",
+    definition: "Estimated water content in the root zone (20–60 cm). Derived from satellite and weather observations.",
     interpret: rootMoistureInterpret,
   },
   "radar-wetness": {

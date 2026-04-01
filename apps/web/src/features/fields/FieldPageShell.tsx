@@ -447,7 +447,7 @@ function buildInteractiveReport(
   const attentionTone = attentionColor(attention);
 
   const readings = report.readings.map((reading) => {
-    if (reading.label === "Root Moisture") {
+    if (reading.label === "Soil Moisture" || reading.label === "Root Moisture") {
       const rootZonePct =
         cell?.rootZonePct ??
         (selection.metricKey === "root-zone-moisture-pct" ? selection.metricValuePct : null);

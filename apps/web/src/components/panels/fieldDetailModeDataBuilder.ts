@@ -441,17 +441,17 @@ export function buildFieldDetailModeData({
   };
 
   const subByMode: Record<ModeKey, string> = {
-    moisture: `${summary?.rootMoisture ?? "—"} root moisture · ${summary?.surfaceMoisture ?? "—"} surface · ${sourceSummary}`,
+    moisture: `${summary?.rootMoisture ?? "—"} soil moisture · ${summary?.surfaceMoisture ?? "—"} surface · ${sourceSummary}`,
     ndvi: preseasonOpticalContext
-      ? `${ndviValue} NDVI · ${summary?.rootMoisture ?? "—"} root moisture · ${sourceSummary}`
-      : `${ndviValue} NDVI · ${ndreValue} NDRE · ${summary?.rootMoisture ?? "—"} root moisture · ${sourceSummary}`,
+      ? `${ndviValue} NDVI · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`
+      : `${ndviValue} NDVI · ${ndreValue} NDRE · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`,
     ndre: preseasonOpticalContext
-      ? `${ndreValue} NDRE · ${summary?.rootMoisture ?? "—"} root moisture · ${sourceSummary}`
+      ? `${ndreValue} NDRE · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`
       : `${ndreValue} NDRE · ${ndviValue} NDVI · ${topDiseaseRisk} disease watch · ${sourceSummary}`,
     ndmi: preseasonOpticalContext
-      ? `${ndmiValue} ${ndmiLabel} · ${summary?.rootMoisture ?? "—"} root moisture · ${sourceSummary}`
-      : `${ndmiValue} ${ndmiLabel} · ${summary?.rootMoisture ?? "—"} root moisture · ${waterBalanceTile?.value ?? "—"} balance · ${sourceSummary}`,
-    radarWetness: `${radarWetnessValue} ${radarWetnessLabel} · ${summary?.rootMoisture ?? "—"} root moisture · ${waterBalanceTile?.value ?? "—"} balance · ${sourceSummary}`,
+      ? `${ndmiValue} ${ndmiLabel} · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`
+      : `${ndmiValue} ${ndmiLabel} · ${summary?.rootMoisture ?? "—"} soil moisture · ${waterBalanceTile?.value ?? "—"} balance · ${sourceSummary}`,
+    radarWetness: `${radarWetnessValue} ${radarWetnessLabel} · ${summary?.rootMoisture ?? "—"} soil moisture · ${waterBalanceTile?.value ?? "—"} balance · ${sourceSummary}`,
   };
   const hoveredSub =
     hoveredMetricMatches && hoveredCell

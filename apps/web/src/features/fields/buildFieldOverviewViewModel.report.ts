@@ -202,7 +202,7 @@ export function buildReportProps(
     },
     {
       iconKey: "root-moisture" as ReadingIconKey,
-      label: "Root Moisture",
+      label: "Soil Moisture",
       value: rootMoistureAvg != null ? `${rootMoistureAvg.toFixed(1)}%` : "—",
       sourceTag: moistureSourceTag,
     },
@@ -386,7 +386,7 @@ export function buildReportProps(
 
   const cropParams: ReportCropParam[] = [
     {
-      label: "Root Moisture",
+      label: "Soil Moisture",
       value: rootMoistureAvg != null ? `${rootMoistureAvg.toFixed(1)}%` : "—",
       rangeLow: `${resolvedRules.moistureStress.rootZoneCriticalPct}%`,
       rangeHigh: "70%",
