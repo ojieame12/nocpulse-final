@@ -103,6 +103,25 @@ type PendingOnboardingWatch = {
 type OnboardingDispatchSnapshot = {
   id: string;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  activePhaseLabel?: string | null;
+  progressPct?: number | null;
+  progressMessage?: string | null;
+  fieldId?: string | null;
+};
+
+type JobDispatchSnapshot = {
+  id: string;
+  key: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  activePhaseLabel: string | null;
+  progressPct: number | null;
+  progressMessage: string | null;
+  updatedAt: string | null;
+  completedAt: string | null;
+  failedAt: string | null;
+  cancelledAt: string | null;
+  lastError: string | null;
+  fieldId: string | null;
 };
 
 function parsePendingOnboardingWatch(raw: string | null): PendingOnboardingWatch | null {
@@ -1322,6 +1341,8 @@ export function FieldPageShell({
           return;
         }
 
+        setOnboardingStatuses(dispatchById);
+
         if (shouldContinue) {
           timeoutId = setTimeout(() => {
             void poll();
@@ -1683,6 +1704,7 @@ export function FieldPageShell({
       <AddFieldPanel
         onFieldsChanged={handleFieldsChanged}
         onOnboardingTracked={handleOnboardingTracked}
+        jobStatuses={onboardingStatuses}
         workspaceId={workspaceId}
         onClose={() => setPanelView("detail")}
       />
