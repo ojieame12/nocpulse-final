@@ -60,7 +60,10 @@ import {
   type ModeKey,
 } from "../../components/panels/FieldDetailPanel";
 import { SettingsPanel } from "../../components/panels/SettingsPanel";
-import { AddFieldPanel } from "../../components/panels/AddFieldPanel";
+import {
+  AddFieldPanel,
+  type CommitFieldHydrationSummary,
+} from "../../components/panels/AddFieldPanel";
 
 export interface FieldPageShellProps {
   workspaceId?: string | null;

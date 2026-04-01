@@ -24,7 +24,7 @@ import { EvidencePanel } from '../../components/panels/EvidencePanel';
 import { SpotInspectorPanel } from '../../components/panels/SpotInspectorPanel';
 import { SettingsPanel } from '../../components/panels/SettingsPanel';
 import { EditFieldPanel } from '../../components/panels/EditFieldPanel';
-import { AddFieldPanel } from '../../components/panels/AddFieldPanel';
+import { AddFieldPanel, type CommitFieldHydrationSummary } from '../../components/panels/AddFieldPanel';
 import type { FieldActionProps } from '../../components/panels/ActionTab';
 import type { FieldNotesProps } from '../../components/panels/NotesTab';
 import { AlertsPanel, type AlertsPanelProps } from '../../components/panels/AlertsPanel';
