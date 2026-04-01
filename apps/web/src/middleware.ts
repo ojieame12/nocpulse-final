@@ -127,6 +127,6 @@ export const config = {
      *   - Negative lookahead (?!...) excludes the listed prefixes.
      *   - The trailing /:path* matches everything else.
      */
-    "/((?!_next|fonts|logo\\.svg|favicon\\.ico|api|auth|request-access|share).*)",
+    "/((?!_next|fonts|logo[^/]*\\.svg|nocpulse[^/]*\\.png|favicon\\.ico|api|auth|request-access|share).*)",
   ],
 };
