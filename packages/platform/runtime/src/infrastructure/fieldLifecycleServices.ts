@@ -30,6 +30,38 @@ import type {
 import { createDefaultMoistureCellDerivationStrategy } from "./createDefaultMoistureCellDerivationStrategy";
 import type { FieldHydrationReplay } from "./createSupabaseFieldHydrationReplay";
 
+const HYDRATION_REPLAY_MAX_ATTEMPTS = 4;
+const HYDRATION_REPLAY_RETRY_DELAYS_MS = [150, 400, 900] as const;
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function replayFieldHydrationWithRetry(
+  hydrationReplay: FieldHydrationReplay,
+  input: Parameters<FieldHydrationReplay["replayFromImportCandidate"]>[0],
+) {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < HYDRATION_REPLAY_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await hydrationReplay.replayFromImportCandidate(input);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= HYDRATION_REPLAY_RETRY_DELAYS_MS.length) {
+        break;
+      }
+      await delay(HYDRATION_REPLAY_RETRY_DELAYS_MS[attempt]!);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(String(lastError ?? "Unknown hydration replay error"));
+}
+
 export async function requireFieldDetail(
   repositories: ServerRepositories,
   workspaceId: string,
@@ -172,7 +204,7 @@ export async function commitFieldImportBatch(
     if (candidate.action === "created" && options.hydrationReplay) {
       try {
         const replayResult =
-          await options.hydrationReplay.replayFromImportCandidate({
+          await replayFieldHydrationWithRetry(options.hydrationReplay, {
             targetWorkspaceId: candidate.field.workspaceId,
             targetFieldId: candidate.field.id,
             fieldName: candidate.field.name,

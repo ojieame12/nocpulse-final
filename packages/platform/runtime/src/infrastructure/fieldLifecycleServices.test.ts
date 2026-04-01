@@ -251,3 +251,39 @@ test("commitFieldImportBatch uses bootstrap onboarding when hydration replay ski
   assert.equal(result.candidates[0]?.action, "created");
   assert.deepEqual(recordedJobKeys, ["field.bootstrap-initial"]);
 });
+
+test("commitFieldImportBatch retries hydration replay before falling back", async () => {
+  const recordedJobKeys: string[] = [];
+  const repositories = createRepositories();
+  let attempts = 0;
+
+  const result = await commitFieldImportBatch(
+    repositories,
+    {
+      jobDispatcher: createDispatcher(recordedJobKeys),
+      hydrationReplay: {
+        async replayFromImportCandidate() {
+          attempts += 1;
+          if (attempts < 3) {
+            throw new Error("transient replay failure");
+          }
+
+          return {
+            action: "replayed",
+            sourceFieldId: "source-field-1",
+            sourceWorkspaceId: "source-workspace-1",
+          };
+        },
+      },
+    },
+    {
+      actorUserId: ACTOR_USER_ID,
+      workspaceId: WORKSPACE_ID,
+      batchId: BATCH_ID,
+    },
+  );
+
+  assert.equal(result.candidates[0]?.action, "created");
+  assert.equal(attempts, 3);
+  assert.deepEqual(recordedJobKeys, ["field.refresh-intake"]);
+});
