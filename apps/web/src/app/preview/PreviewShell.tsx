@@ -580,6 +580,11 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
   /* Onboarding dispatch statuses — owned here so they survive panel switches */
   const [onboardingStatuses, setOnboardingStatuses] = useState<Map<string, PreviewJobDispatchSnapshot>>(new Map());
 
+  /** Pre-built stage arrays from the commit response, keyed by fieldId. */
+  const [prebuiltStagesByField, setPrebuiltStagesByField] = useState<
+    ReadonlyMap<string, CommitFieldHydrationSummary["stages"]>
+  >(new Map());
+
   /** Derived per-field progress for the field strip */
   const fieldOnboardingProgress = useMemo(() => {
     if (!pendingOnboardingWatch || onboardingStatuses.size === 0) return new Map<string, FieldOnboardingStatus>();
@@ -1280,6 +1285,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     dispatchIds: string[];
     workspaceId?: string | null;
     trackedJobs?: readonly { dispatchId: string; fieldId: string; fieldLabel: string }[];
+    fieldHydrationSummaries?: readonly CommitFieldHydrationSummary[];
   }) => {
     if (result.dispatchIds.length === 0) {
       setPendingOnboardingWatch(null);
@@ -1316,6 +1322,49 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         dispatchFieldMap: merged,
       };
     });
+
+    /* ── Seed onboarding statuses for fields already hydrated at commit time ── */
+    if (result.fieldHydrationSummaries && result.fieldHydrationSummaries.length > 0) {
+      setOnboardingStatuses((prev) => {
+        const next = new Map(prev);
+        for (const summary of result.fieldHydrationSummaries!) {
+          if (summary.status !== 'completed') continue;
+          /* Find the dispatch ID for this field so the fieldOnboardingProgress
+             derivation (which keys by dispatchId → fieldId) picks it up. */
+          const dispatchId = (result.trackedJobs ?? []).find(
+            (job) => job.fieldId === summary.fieldId,
+          )?.dispatchId;
+          if (!dispatchId) continue;
+          next.set(dispatchId, {
+            id: dispatchId,
+            key: `hydration-seed:${summary.fieldId}`,
+            status: 'completed',
+            activePhaseLabel: summary.phaseLabel,
+            progressPct: 100,
+            progressMessage: summary.phaseLabel,
+            updatedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            failedAt: null,
+            cancelledAt: null,
+            lastError: null,
+            fieldId: summary.fieldId,
+          });
+        }
+        return next;
+      });
+
+      /* Store pre-built stage arrays so HydrationStageTracker can use
+         authoritative backend data instead of substring-parsing progressMessages. */
+      setPrebuiltStagesByField((prev) => {
+        const next = new Map(prev);
+        for (const summary of result.fieldHydrationSummaries!) {
+          if (summary.stages && summary.stages.length > 0) {
+            next.set(summary.fieldId, summary.stages);
+          }
+        }
+        return next;
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -1753,6 +1802,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       onInitialPageClose={onInitialPageClose}
       onboardingStatus={fieldOnboardingProgress.get(fieldData.fieldId) ?? null}
       progressMessage={fieldOnboardingProgress.get(fieldData.fieldId)?.phaseLabel ?? null}
+      prebuiltStages={prebuiltStagesByField.get(fieldData.fieldId) ?? null}
     />
   );
 
