@@ -1246,10 +1246,18 @@ export function FieldDetailPanel({
             summary?.rainChanceSub ??
             "No weather signal",
         };
+  const dataQuality = summary?.dataQuality ?? null;
+  const dataQualityChipLabel = dataQuality?.label
+    ? `Data quality: ${dataQuality.label}`
+    : null;
+  const dataQualityChipTitle = dataQuality
+    ? [dataQuality.summary, ...dataQuality.reasons].filter(Boolean).join(" · ")
+    : undefined;
   const sourceChips = Array.from(
     new Set(
       [
         liveModeData.sourceSummary,
+        dataQualityChipLabel,
         opticalValidityLabel ? `Optical ${opticalValidityLabel}` : null,
         stageSourceLabel ? `Stage ${stageSourceLabel}` : null,
         lastCaptureLabel ? `Captured ${lastCaptureLabel}` : null,
@@ -1674,8 +1682,14 @@ export function FieldDetailPanel({
             <LblM>Source</LblM>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {sourceChips.map((chip, i) => (
-                <span key={i} className="fdp__chip">
-                  {i === 0 ? (
+                <span
+                  key={i}
+                  className="fdp__chip"
+                  title={chip === dataQualityChipLabel ? dataQualityChipTitle : undefined}
+                >
+                  {chip === dataQualityChipLabel ? (
+                    <ShieldCheck size={10} color="var(--text-secondary)" />
+                  ) : i === 0 ? (
                     <Satellite size={10} color="var(--text-secondary)" />
                   ) : i === 1 ? (
                     <Clock size={10} color="var(--text-secondary)" />
