@@ -331,3 +331,84 @@ test("moisture surfaces expose field-relative percentile and anomaly context", (
   assert.equal(highCell.percentileInField, 100);
   assert.equal(highCell.anomalyClass, "above-field");
 });
+
+test("moisture surface stamps provenance context onto every cell when provided", () => {
+  const provenance = {
+    depletionPct: 34.5,
+    freshnessFactor: 0.82,
+    rasterAgeHours: 6.2,
+    agreementFlag: "agree" as const,
+    resolutionTier: "sub-field" as const,
+    availableWaterMm: 48.1,
+    rootZoneDepthCm: 30,
+  };
+
+  const model = buildFieldMoistureSurfaceRenderModel({
+    fieldId: "field-1",
+    boundaryFeature,
+    bbox: [-108.181, 51.889, -108.171, 51.899],
+    rootZonePct: 42,
+    surfacePct: 30,
+    confidence: "high",
+    sourceLabel: "sentinel-hub-stats-v1:sentinel-1",
+    persistedCells: [
+      {
+        cellKey: "cell-prov-a",
+        centroid: [-108.179, 51.891],
+        boundary: {
+          type: "Polygon",
+          coordinates: [[
+            [-108.181, 51.889],
+            [-108.176, 51.889],
+            [-108.176, 51.894],
+            [-108.181, 51.894],
+            [-108.181, 51.889],
+          ]],
+        },
+        rootZonePct: 40,
+        surfacePct: 28,
+        sourceKey: "sentinel-hub-stats-v1:sentinel-1",
+      },
+      {
+        cellKey: "cell-prov-b",
+        centroid: [-108.176, 51.896],
+        boundary: {
+          type: "Polygon",
+          coordinates: [[
+            [-108.176, 51.894],
+            [-108.171, 51.894],
+            [-108.171, 51.899],
+            [-108.176, 51.899],
+            [-108.176, 51.894],
+          ]],
+        },
+        rootZonePct: 44,
+        surfacePct: 32,
+        sourceKey: "sentinel-hub-stats-v1:sentinel-1",
+      },
+    ],
+    provenance,
+  });
+
+  assert.ok(model.cells.length >= 2, "should have at least 2 cells");
+  for (const cell of model.cells) {
+    assert.deepEqual(cell.provenance, provenance, `cell ${cell.id} should carry the provenance context`);
+  }
+});
+
+test("moisture surface omits provenance when not provided", () => {
+  const model = buildFieldMoistureSurfaceRenderModel({
+    fieldId: "field-1",
+    boundaryFeature,
+    bbox: [-108.181, 51.889, -108.171, 51.899],
+    rootZonePct: 42,
+    surfacePct: 30,
+    confidence: "medium",
+    sourceLabel: "synthetic-preview",
+  });
+
+  assert.ok(model.cells.length > 0, "should have cells");
+  for (const cell of model.cells) {
+    assert.equal(cell.provenance, undefined, `cell ${cell.id} should have no provenance`);
+  }
+});

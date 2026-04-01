@@ -8,6 +8,9 @@ import {
   resolveCanopySignalPresentation,
   resolveCropStagePresentation,
   resolveOpticalSeasonality,
+  deriveSummaryStatusLabel,
+  deriveSummaryConfidenceBreakdown,
+  deriveSummaryDataSources,
 } from "./buildFieldOverviewViewModel";
 import { buildActionProps } from "./buildFieldOverviewViewModel.action";
 import { resolveHistoricalAnomalyFromReadModel } from "./buildFieldOverviewViewModel.shared";
@@ -1010,4 +1013,220 @@ test("resolveHistoricalAnomalyFromReadModel boundary: percentile exactly 25 is n
     historicalAnomalyPercentile: 25,
   });
   assert.equal(result!.anomalyClass, "normal");
+});
+
+/* ── deriveSummaryStatusLabel ── */
+
+test("deriveSummaryStatusLabel: depletionPct 10 → Adequate", () => {
+  assert.equal(deriveSummaryStatusLabel(10, null), "Adequate");
+});
+
+test("deriveSummaryStatusLabel: depletionPct 30 → Adequate (boundary)", () => {
+  assert.equal(deriveSummaryStatusLabel(30, null), "Adequate");
+});
+
+test("deriveSummaryStatusLabel: depletionPct 31 → Watch", () => {
+  assert.equal(deriveSummaryStatusLabel(31, null), "Watch");
+});
+
+test("deriveSummaryStatusLabel: depletionPct 50 → Watch (boundary)", () => {
+  assert.equal(deriveSummaryStatusLabel(50, null), "Watch");
+});
+
+test("deriveSummaryStatusLabel: depletionPct 51 → Stress", () => {
+  assert.equal(deriveSummaryStatusLabel(51, null), "Stress");
+});
+
+test("deriveSummaryStatusLabel: depletionPct 75 → Stress (boundary)", () => {
+  assert.equal(deriveSummaryStatusLabel(75, null), "Stress");
+});
+
+test("deriveSummaryStatusLabel: depletionPct 76 → Critical", () => {
+  assert.equal(deriveSummaryStatusLabel(76, null), "Critical");
+});
+
+test("deriveSummaryStatusLabel: depletionPct null falls back to rootZonePct 65 → Adequate", () => {
+  assert.equal(deriveSummaryStatusLabel(null, 65), "Adequate");
+});
+
+test("deriveSummaryStatusLabel: depletionPct null falls back to rootZonePct 45 → Watch", () => {
+  assert.equal(deriveSummaryStatusLabel(null, 45), "Watch");
+});
+
+test("deriveSummaryStatusLabel: depletionPct null falls back to rootZonePct 25 → Stress", () => {
+  assert.equal(deriveSummaryStatusLabel(null, 25), "Stress");
+});
+
+test("deriveSummaryStatusLabel: depletionPct null falls back to rootZonePct 10 → Critical", () => {
+  assert.equal(deriveSummaryStatusLabel(null, 10), "Critical");
+});
+
+test("deriveSummaryStatusLabel: both null → undefined", () => {
+  assert.equal(deriveSummaryStatusLabel(null, null), undefined);
+});
+
+test("deriveSummaryStatusLabel: depletionPct takes priority over rootZonePct", () => {
+  // depletionPct 80 → Critical even though rootZonePct 65 would be Adequate
+  assert.equal(deriveSummaryStatusLabel(80, 65), "Critical");
+});
+
+/* ── deriveSummaryConfidenceBreakdown ── */
+
+test("deriveSummaryConfidenceBreakdown: maps provenance fields correctly", () => {
+  const result = deriveSummaryConfidenceBreakdown({
+    inputs: {
+      freshnessFactor: 0.9,
+      agreementFlag: true,
+      resolutionTier: "high",
+      scaleFitScore: 0.85,
+    },
+  });
+  assert.ok(result);
+  assert.equal(result.freshness, "Fresh (< 6h)");
+  assert.equal(result.agreement, "Signals agree");
+  assert.equal(result.resolution, "Sub-field (10m)");
+  assert.equal(result.scaleFit, "Well-matched");
+});
+
+test("deriveSummaryConfidenceBreakdown: stale freshness factor", () => {
+  const result = deriveSummaryConfidenceBreakdown({
+    inputs: {
+      freshnessFactor: 0.1,
+      agreementFlag: false,
+      resolutionTier: "low",
+      scaleFitScore: 0.3,
+    },
+  });
+  assert.ok(result);
+  assert.equal(result.freshness, "Stale (> 3d)");
+  assert.equal(result.agreement, "Signals diverge");
+  assert.equal(result.resolution, "Regional (250m+)");
+  assert.equal(result.scaleFit, "Poor fit");
+});
+
+test("deriveSummaryConfidenceBreakdown: medium resolution and acceptable scale", () => {
+  const result = deriveSummaryConfidenceBreakdown({
+    inputs: {
+      freshnessFactor: 0.6,
+      agreementFlag: true,
+      resolutionTier: "medium",
+      scaleFitScore: 0.6,
+    },
+  });
+  assert.ok(result);
+  assert.equal(result.freshness, "Recent (< 24h)");
+  assert.equal(result.resolution, "Field-level (30m)");
+  assert.equal(result.scaleFit, "Acceptable");
+});
+
+test("deriveSummaryConfidenceBreakdown: scaleFitLabel overrides score", () => {
+  const result = deriveSummaryConfidenceBreakdown({
+    inputs: {
+      freshnessFactor: 0.9,
+      agreementFlag: true,
+      resolutionTier: "sub-field",
+      scaleFitLabel: "Precision-mapped",
+      scaleFitScore: 0.3, // would produce "Poor fit" but label overrides
+    },
+  });
+  assert.ok(result);
+  assert.equal(result.scaleFit, "Precision-mapped");
+});
+
+test("deriveSummaryConfidenceBreakdown: null when no inputs", () => {
+  assert.equal(deriveSummaryConfidenceBreakdown(null), null);
+  assert.equal(deriveSummaryConfidenceBreakdown({}), null);
+  assert.equal(deriveSummaryConfidenceBreakdown(undefined), null);
+});
+
+test("deriveSummaryConfidenceBreakdown: defaults to Unknown for missing sub-fields", () => {
+  const result = deriveSummaryConfidenceBreakdown({ inputs: {} });
+  assert.ok(result);
+  assert.equal(result.freshness, "Unknown");
+  assert.equal(result.agreement, "Unknown");
+  assert.equal(result.resolution, "Unknown");
+  assert.equal(result.scaleFit, "Unknown");
+});
+
+/* ── deriveSummaryDataSources ── */
+
+test("deriveSummaryDataSources: identifies Sentinel-1 satellite source", () => {
+  const result = deriveSummaryDataSources(
+    { sourceKey: "sentinel-hub-stats-v1:sentinel-1" },
+    { latestObservation: true, forecasts: true },
+  );
+  assert.ok(result);
+  assert.equal(result.satellite, "Sentinel-1 (SAR)");
+  assert.equal(result.weather, "Available");
+  assert.equal(result.soil, null);
+});
+
+test("deriveSummaryDataSources: identifies Sentinel-2 satellite source", () => {
+  const result = deriveSummaryDataSources(
+    { sourceKey: "sentinel-hub:sentinel-2" },
+    { latestObservation: false, forecasts: false },
+  );
+  assert.ok(result);
+  assert.equal(result.satellite, "Sentinel-2 (Optical)");
+  assert.equal(result.weather, null);
+});
+
+test("deriveSummaryDataSources: identifies Planet satellite source", () => {
+  const result = deriveSummaryDataSources(
+    { sourceKey: "planet-scope:planet-daily" },
+    null,
+  );
+  assert.ok(result);
+  assert.equal(result.satellite, "Planet (Optical)");
+});
+
+test("deriveSummaryDataSources: null when both snapshot and weather are absent", () => {
+  assert.equal(deriveSummaryDataSources(null, null), null);
+  assert.equal(deriveSummaryDataSources(undefined, undefined), null);
+});
+
+test("deriveSummaryDataSources: weather only when no snapshot", () => {
+  const result = deriveSummaryDataSources(null, { latestObservation: true });
+  assert.ok(result);
+  assert.equal(result.satellite, null);
+  assert.equal(result.weather, "Available");
+});
+
+test("buildEffectiveMoistureSummary preserves snapshot inputs for provenance mapping", () => {
+  const inputs = {
+    depletionPct: 28.3,
+    freshnessFactor: 0.91,
+    rasterAgeHours: 4.5,
+    agreementFlag: "agree" as const,
+    resolutionTier: "sub-field" as const,
+    availableWaterMm: 52.0,
+    rootZoneDepthCm: 30,
+    derivationMode: "source-backed" as const,
+    confidenceScore: 0.88,
+  };
+
+  const summary = buildEffectiveMoistureSummary({
+    moisture: {
+      latestSnapshot: {
+        rootZonePct: 44.1,
+        surfacePct: 31.2,
+        confidence: "high",
+        sourceKey: "sentinel-hub-stats-v1:sentinel-1",
+        observedAt: "2026-03-28T08:00:00Z",
+        inputs,
+      },
+      latestCells: [],
+    },
+    imagery: {},
+  });
+
+  assert.ok(summary.latestSnapshot, "snapshot should exist");
+  assert.ok(summary.latestSnapshot.inputs, "snapshot should preserve inputs");
+  assert.equal(summary.latestSnapshot.inputs.depletionPct, 28.3);
+  assert.equal(summary.latestSnapshot.inputs.freshnessFactor, 0.91);
+  assert.equal(summary.latestSnapshot.inputs.rasterAgeHours, 4.5);
+  assert.equal(summary.latestSnapshot.inputs.agreementFlag, "agree");
+  assert.equal(summary.latestSnapshot.inputs.resolutionTier, "sub-field");
+  assert.equal(summary.latestSnapshot.inputs.availableWaterMm, 52.0);
+  assert.equal(summary.latestSnapshot.inputs.rootZoneDepthCm, 30);
 });

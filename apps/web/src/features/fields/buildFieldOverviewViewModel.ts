@@ -556,6 +556,17 @@ export async function buildFieldOverviewViewModel(
             surfacePct: cell.surfacePct,
             sourceKey: cell.sourceKey,
           })),
+          provenance: effectiveMoisture.latestSnapshot.inputs
+            ? {
+                depletionPct: effectiveMoisture.latestSnapshot.inputs.depletionPct ?? undefined,
+                freshnessFactor: effectiveMoisture.latestSnapshot.inputs.freshnessFactor ?? undefined,
+                rasterAgeHours: effectiveMoisture.latestSnapshot.inputs.rasterAgeHours ?? undefined,
+                agreementFlag: effectiveMoisture.latestSnapshot.inputs.agreementFlag ?? undefined,
+                resolutionTier: effectiveMoisture.latestSnapshot.inputs.resolutionTier ?? undefined,
+                availableWaterMm: effectiveMoisture.latestSnapshot.inputs.availableWaterMm ?? undefined,
+                rootZoneDepthCm: effectiveMoisture.latestSnapshot.inputs.rootZoneDepthCm ?? undefined,
+              }
+            : undefined,
         }
       : {
           // Synthetic fallback: always render cells even without real data
@@ -941,6 +952,23 @@ export async function buildFieldOverviewViewModel(
         : `${entry.precipitationMm.toFixed(1)}mm`,
     })),
     historicalAnomaly: resolveHistoricalAnomalyFromReadModel(readModel),
+
+    // Depletion model
+    depletionPct: (latestMoisture as any)?.inputs?.depletionPct ?? null,
+    availableWaterMm:
+      (latestMoisture as any)?.inputs?.availableWaterMm != null
+        ? `~${Math.round((latestMoisture as any).inputs.availableWaterMm)}mm`
+        : null,
+    statusLabel: deriveSummaryStatusLabel(
+      (latestMoisture as any)?.inputs?.depletionPct ?? null,
+      hasRootPct ? rootPct : null,
+    ),
+
+    // Confidence breakdown
+    confidenceBreakdown: deriveSummaryConfidenceBreakdown(latestMoisture),
+
+    // Data sources
+    dataSources: deriveSummaryDataSources(latestMoisture, weatherDataAvailability),
   };
 
   const viewModel = {
@@ -1109,6 +1137,118 @@ function metricTone(input: "danger" | "warning" | "positive" | "info") {
     case "info":
       return { valueColor: "#3b82f6", bg: "#eff6ff", border: "#bfdbfe" };
   }
+}
+
+/* ── Summary enrichment helpers ── */
+
+/**
+ * Derive a human-readable status label from depletion percentage,
+ * falling back to rootZonePct-based thresholds when depletion is absent.
+ */
+export function deriveSummaryStatusLabel(
+  depletionPct: number | null | undefined,
+  rootZonePct: number | null | undefined,
+): string | undefined {
+  if (depletionPct != null && Number.isFinite(depletionPct)) {
+    if (depletionPct <= 30) return "Adequate";
+    if (depletionPct <= 50) return "Watch";
+    if (depletionPct <= 75) return "Stress";
+    return "Critical";
+  }
+  if (rootZonePct != null && Number.isFinite(rootZonePct)) {
+    if (rootZonePct >= 60) return "Adequate";
+    if (rootZonePct >= 40) return "Watch";
+    if (rootZonePct >= 20) return "Stress";
+    return "Critical";
+  }
+  return undefined;
+}
+
+/**
+ * Map provenance/inputs fields from the moisture snapshot into a
+ * structured confidence breakdown suitable for display.
+ */
+export function deriveSummaryConfidenceBreakdown(
+  snapshot: any | null | undefined,
+): { freshness: string; agreement: string; resolution: string; scaleFit: string; sourceAge: string; coverage: string } | null {
+  if (!snapshot?.inputs) return null;
+  const inputs = snapshot.inputs;
+
+  // Freshness
+  let freshness = "Unknown";
+  if (inputs.freshnessFactor != null) {
+    if (inputs.freshnessFactor >= 0.8) freshness = "Fresh (< 6h)";
+    else if (inputs.freshnessFactor >= 0.5) freshness = "Recent (< 24h)";
+    else if (inputs.freshnessFactor >= 0.2) freshness = "Aging (< 3d)";
+    else freshness = "Stale (> 3d)";
+  } else if (snapshot.observedAt) {
+    const ageMs = Date.now() - new Date(snapshot.observedAt).getTime();
+    const ageH = Math.floor(ageMs / 3_600_000);
+    if (ageH < 6) freshness = `Fresh (${ageH}h)`;
+    else if (ageH < 24) freshness = `Recent (${ageH}h)`;
+    else if (ageH < 72) freshness = `Aging (${Math.floor(ageH / 24)}d)`;
+    else freshness = `Stale (${Math.floor(ageH / 24)}d)`;
+  }
+
+  // Agreement
+  let agreement = "Unknown";
+  if (inputs.agreementFlag != null) {
+    agreement = inputs.agreementFlag ? "Signals agree" : "Signals diverge";
+  }
+
+  // Resolution
+  let resolution = "Unknown";
+  if (inputs.resolutionTier != null) {
+    const tier = String(inputs.resolutionTier).toLowerCase();
+    if (tier === "high" || tier === "sub-field") resolution = "Sub-field (10m)";
+    else if (tier === "medium" || tier === "field") resolution = "Field-level (30m)";
+    else if (tier === "low" || tier === "regional") resolution = "Regional (250m+)";
+    else resolution = tier;
+  }
+
+  // Scale fit
+  let scaleFit = "Unknown";
+  if (inputs.scaleFitLabel != null) {
+    scaleFit = String(inputs.scaleFitLabel);
+  } else if (inputs.scaleFitScore != null) {
+    const score = Number(inputs.scaleFitScore);
+    if (score >= 0.8) scaleFit = "Well-matched";
+    else if (score >= 0.5) scaleFit = "Acceptable";
+    else scaleFit = "Poor fit";
+  }
+
+  return { freshness, agreement, resolution, scaleFit, sourceAge: freshness, coverage: resolution };
+}
+
+/**
+ * Derive data-source labels from the moisture snapshot and weather availability.
+ */
+export function deriveSummaryDataSources(
+  snapshot: any | null | undefined,
+  weatherAvailability: { latestObservation?: boolean; forecasts?: boolean } | null | undefined,
+): { satellite: string | null; weather: string | null; soil: string | null } | null {
+  if (!snapshot && !weatherAvailability) return null;
+
+  // Satellite source
+  let satellite: string | null = null;
+  if (snapshot?.sourceKey) {
+    const sk = snapshot.sourceKey.toLowerCase();
+    if (sk.includes("sentinel-1")) satellite = "Sentinel-1 (SAR)";
+    else if (sk.includes("sentinel-2")) satellite = "Sentinel-2 (Optical)";
+    else if (sk.includes("planet")) satellite = "Planet (Optical)";
+    else satellite = snapshot.sourceKey;
+  }
+
+  // Weather source
+  let weather: string | null = null;
+  if (weatherAvailability?.latestObservation || weatherAvailability?.forecasts) {
+    weather = "Available";
+  }
+
+  // Soil source — currently not directly tracked, placeholder for probe integration
+  const soil: string | null = null;
+
+  return { satellite, weather, soil };
 }
 
 /** Build an extended source tag with freshness for the donut caption. */

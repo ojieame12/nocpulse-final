@@ -82,6 +82,29 @@ export interface FieldSummaryProps {
     description: string;
     anomalyClass: 'unusually-dry' | 'normal' | 'unusually-wet';
   } | null;
+  // Depletion model
+  depletionPct?: number | null;
+  availableWaterMm?: string | null;
+  statusLabel?: string; // 'Adequate' | 'Watch' | 'Stress' | 'Critical'
+
+  // Confidence breakdown
+  confidenceBreakdown?: {
+    freshness: string;
+    agreement: string;
+    resolution: string;
+    scaleFit: string;
+    /** @deprecated Alias for freshness — used by existing JSX. */
+    sourceAge: string;
+    /** @deprecated Alias for resolution — used by existing JSX. */
+    coverage: string;
+  } | null;
+
+  // Data sources
+  dataSources?: {
+    satellite: string | null;
+    weather: string | null;
+    soil: string | null;
+  } | null;
 }
 
 /* ── Layer Pills ── */
@@ -166,7 +189,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
               value={field.moisture}
               size={120}
               color={moistureColor}
-              caption="Soil moisture"
+              caption={field.depletionPct != null ? "Water depletion" : "Soil moisture"}
             />
           </div>
           <div className="donut-info">
@@ -194,7 +217,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
           </div>
         </div>
         {field.sourceTagExtended ? (
-          <span className="donut-source-tag">{field.sourceTagExtended}</span>
+          <span className="donut-source-tag">{field.sourceTagExtended}{field.historicalAnomaly ? ` · ${field.historicalAnomaly.description}` : ''}</span>
         ) : field.moistureDerivationMode && field.moistureDerivationMode !== 'unknown' ? (
           <span className="donut-source-tag">
             {field.moistureDerivationMode === 'source-backed' ? 'Satellite-derived' : 'Modeled estimate'}
@@ -213,8 +236,8 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
                 <Waves size={12} />
                 <span className="panel__data-cell-label">Soil Moisture</span>
               </div>
-              <ValueSlot className="panel__data-cell-value">{field.rootMoisture}</ValueSlot>
-              <span className="panel__data-cell-sub" style={{ color: 'var(--status-positive)', fontWeight: 600 }}>{field.rootMoistureSub}</span>
+              <ValueSlot className="panel__data-cell-value">{field.statusLabel ?? field.rootMoisture}</ValueSlot>
+              <span className="panel__data-cell-sub" style={{ color: 'var(--status-positive)', fontWeight: 600 }}>{field.statusLabel ? field.rootMoisture : field.rootMoistureSub}</span>
             </div>
             <div className="panel__data-cell" data-metric-hint="trend" data-metric-value={field.trend}>
               <div className="panel__data-cell-icon-label">
@@ -246,7 +269,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
                 <span className="confidence-dot" style={{ background: ring.color }} />
                 {field.confidence}
               </ValueSlot>
-              <span className="panel__data-cell-sub">{field.confidenceSub}</span>
+              <span className="panel__data-cell-sub">{field.confidenceBreakdown ? `${field.confidenceBreakdown.sourceAge} · ${field.confidenceBreakdown.agreement} · ${field.confidenceBreakdown.coverage}` : field.confidenceSub}</span>
             </div>
           </div>
         </div>
