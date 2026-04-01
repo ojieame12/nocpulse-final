@@ -3,6 +3,8 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { SidebarFieldItem } from "./Sidebar";
+import { FieldStatusDot } from "../ui/FieldStatusDot";
+import type { FieldHealthStatus } from "../ui/FieldStatusDot";
 
 /* ── Crop icons (tiny inline SVG‑free labels) ── */
 const CROP_ICONS: Record<string, string> = {
@@ -873,9 +875,10 @@ export function FieldStrip({
                   borderImage: `linear-gradient(to right, rgba(22,163,74,0.35) ${progressPct}%, transparent ${progressPct}%) 1`,
                 } : undefined}
               >
-                <span
-                  className="field-strip__dot"
-                  style={{ background: statusColor }}
+                <FieldStatusDot
+                  status={(field.status ?? "pending") as FieldHealthStatus}
+                  progressPct={isOnboarding ? progressPct : undefined}
+                  size={8}
                 />
                 {isRenaming ? (
                   <input
@@ -908,7 +911,7 @@ export function FieldStrip({
                   <span className="field-strip__card-name">{field.name}</span>
                 )}
                 {!isRenaming && isOnboarding ? (
-                  <span className="field-strip__card-location">
+                  <span className="field-strip__card-location field-card__phase-label">
                     {onboardingLabel}
                   </span>
                 ) : !isRenaming && locationSummary ? (

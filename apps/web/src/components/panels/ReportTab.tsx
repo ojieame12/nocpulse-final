@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { MetricHintProvider } from '../ui/MetricHintProvider';
+import { ValueSlot } from '../ui/ValueSlot';
 
 /* ── Serializable Types (no React.ReactNode) ── */
 
@@ -214,12 +215,12 @@ function ReadingsSection({ readings }: { readings: ReportReadingCell[] }) {
                     <iconInfo.Icon size={12} color={iconInfo.color} />
                     <span className="panel__data-cell-label">{r.label}</span>
                   </div>
-                  <span
+                  <ValueSlot
                     className="panel__data-cell-value rpt__reading-value"
                     style={r.valueColor ? { color: r.valueColor } : undefined}
                   >
                     {r.value}
-                  </span>
+                  </ValueSlot>
                   {r.sourceTag ? (
                     <span className="panel__data-cell-source">{r.sourceTag}</span>
                   ) : null}

@@ -20,6 +20,7 @@ import {
 import { DonutChart, SectionHeader } from '../ui';
 import { Button } from '../ui/Button';
 import { MetricHintProvider } from '../ui/MetricHintProvider';
+import { ValueSlot } from '../ui/ValueSlot';
 
 /* ── Types ── */
 
@@ -203,7 +204,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
                 <Waves size={12} />
                 <span className="panel__data-cell-label">Root Moisture</span>
               </div>
-              <span className="panel__data-cell-value">{field.rootMoisture}</span>
+              <ValueSlot className="panel__data-cell-value">{field.rootMoisture}</ValueSlot>
               <span className="panel__data-cell-sub" style={{ color: 'var(--status-positive)', fontWeight: 600 }}>{field.rootMoistureSub}</span>
             </div>
             <div className="panel__data-cell" data-metric-hint="trend" data-metric-value={field.trend}>
@@ -211,10 +212,10 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
                 <TrendingDown size={12} />
                 <span className="panel__data-cell-label">Trend (7d)</span>
               </div>
-              <span className="panel__data-cell-value panel__data-cell-value--text">
+              <ValueSlot className="panel__data-cell-value panel__data-cell-value--text">
                 <TrendingDown size={14} style={{ color: '#f59e0b' }} />
                 <span style={{ color: '#f59e0b' }}>{field.trend}</span>
-              </span>
+              </ValueSlot>
               <span className="panel__data-cell-sub">{field.trendSub}</span>
             </div>
           </div>
@@ -224,7 +225,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
                 <BarChart3 size={12} />
                 <span className="panel__data-cell-label">Spread (σ)</span>
               </div>
-              <span className="panel__data-cell-value">{field.spread}</span>
+              <ValueSlot className="panel__data-cell-value">{field.spread}</ValueSlot>
               <span className="panel__data-cell-sub">{field.spreadSub}</span>
             </div>
             <div className="panel__data-cell" data-metric-hint="confidence" data-metric-value={field.confidence}>
@@ -232,10 +233,10 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
                 <ShieldCheck size={12} />
                 <span className="panel__data-cell-label">Confidence</span>
               </div>
-              <span className="panel__data-cell-value panel__data-cell-value--text" style={{ color: ring.color }}>
+              <ValueSlot className="panel__data-cell-value panel__data-cell-value--text" style={{ color: ring.color }}>
                 <span className="confidence-dot" style={{ background: ring.color }} />
                 {field.confidence}
-              </span>
+              </ValueSlot>
               <span className="panel__data-cell-sub">{field.confidenceSub}</span>
             </div>
           </div>
@@ -252,7 +253,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
                 <Droplets size={12} />
                 <span className="panel__data-cell-label">Precipitation</span>
               </div>
-              <span className="panel__data-cell-value">{field.precipitation}</span>
+              <ValueSlot className="panel__data-cell-value">{field.precipitation}</ValueSlot>
               <span className="panel__data-cell-sub">{field.precipitationSub}</span>
             </div>
             <div className="panel__data-cell" data-metric-hint="precipitation" data-metric-value={field.nextRain}>
@@ -260,7 +261,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
                 <Cloud size={12} />
                 <span className="panel__data-cell-label">Next Rain</span>
               </div>
-              <span className="panel__data-cell-value">{field.nextRain}</span>
+              <ValueSlot className="panel__data-cell-value">{field.nextRain}</ValueSlot>
               <span className="panel__data-cell-sub">{field.nextRainSub}</span>
             </div>
           </div>
@@ -270,7 +271,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
                 <Droplets size={12} />
                 <span className="panel__data-cell-label">Rain Chance</span>
               </div>
-              <span className="panel__data-cell-value">{field.rainChance}</span>
+              <ValueSlot className="panel__data-cell-value">{field.rainChance}</ValueSlot>
               <span className="panel__data-cell-sub">{field.rainChanceSub}</span>
             </div>
             <div className="panel__data-cell" data-metric-hint="precipitation" data-metric-value={field.sevenDayTotal}>
@@ -278,7 +279,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
                 <Droplets size={12} />
                 <span className="panel__data-cell-label">7-Day Total</span>
               </div>
-              <span className="panel__data-cell-value">{field.sevenDayTotal}</span>
+              <ValueSlot className="panel__data-cell-value">{field.sevenDayTotal}</ValueSlot>
               <span className="panel__data-cell-sub" style={{ color: '#f59e0b', fontWeight: 600 }}>{field.sevenDayTotalSub}</span>
             </div>
           </div>
