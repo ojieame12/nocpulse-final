@@ -15,7 +15,7 @@ const DEFAULT_APPEEARS_BASE_URL =
 const DEFAULT_APPEEARS_PRODUCT = "SPL4SMGP.008";
 const DEFAULT_APPEEARS_LAYER = "Geophysical_Data_sm_rootzone";
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
-const DEFAULT_TASK_TIMEOUT_MS = 20 * 60_000;
+const DEFAULT_TASK_TIMEOUT_MS = 60 * 60_000;
 const DEFAULT_POLL_INTERVAL_MS = 10_000;
 const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 
@@ -50,6 +50,22 @@ export type CreateAppEearsSmapSourceOptions = {
   taskTimeoutMs?: number;
   productAndVersion?: string;
   layer?: string;
+  existingTaskId?: string;
+  onTaskSubmitted?: (taskId: string) => void;
+  onTaskResumed?: (taskId: string) => void;
+  onProgress?: (update: AppEearsProgressUpdate) => void;
+};
+
+export type AppEearsProgressUpdate = {
+  taskId: string;
+  taskStatus: string | null;
+  statusUpdatedAt: string | null;
+  summaryPct: number | null;
+  steps: Array<{
+    desc: string;
+    step: number | null;
+    pctComplete: number | null;
+  }>;
 };
 
 type AppEearsLoginResponse = {
@@ -74,6 +90,23 @@ type AppEearsTaskRecord = {
   params?: unknown;
   task_name?: string;
 };
+
+type AppEearsTaskStatusEntry = {
+  task_id?: string;
+  updated?: string;
+  progress?: {
+    summary?: number;
+    details?: Array<{
+      desc?: string;
+      step?: number;
+      pct_complete?: number;
+    }>;
+  };
+};
+
+type AppEearsTaskStatusResponse =
+  | AppEearsTaskStatusEntry
+  | AppEearsTaskStatusEntry[];
 
 type AppEearsBundleResponse = {
   files?: Array<{
@@ -598,6 +631,87 @@ async function submitAppEearsPointTask(
   return response.task_id;
 }
 
+async function fetchAppEearsTaskRecord(
+  fetchImpl: typeof fetch,
+  input: {
+    token: string;
+    baseUrl: string;
+    requestTimeoutMs: number;
+    taskId: string;
+  },
+) {
+  return fetchJson<AppEearsTaskRecord>(
+    fetchImpl,
+    `${input.baseUrl}/task/${input.taskId}`,
+    {
+      headers: {
+        authorization: `Bearer ${input.token}`,
+      },
+    },
+    {
+      timeoutMs: input.requestTimeoutMs,
+      action: `AppEEARS task lookup (${input.taskId})`,
+    },
+  );
+}
+
+async function fetchAppEearsTaskStatus(
+  fetchImpl: typeof fetch,
+  input: {
+    token: string;
+    baseUrl: string;
+    requestTimeoutMs: number;
+    taskId: string;
+  },
+) {
+  const response = await fetchJson<AppEearsTaskStatusResponse>(
+    fetchImpl,
+    `${input.baseUrl}/status/${input.taskId}`,
+    {
+      headers: {
+        authorization: `Bearer ${input.token}`,
+      },
+    },
+    {
+      timeoutMs: input.requestTimeoutMs,
+      action: `AppEEARS task status (${input.taskId})`,
+    },
+  );
+
+  if (Array.isArray(response)) {
+    return response[0] ?? null;
+  }
+
+  return response ?? null;
+}
+
+function toProgressUpdate(
+  taskRecord: AppEearsTaskRecord,
+  taskStatusEntry: AppEearsTaskStatusEntry | null,
+): AppEearsProgressUpdate {
+  const steps = (taskStatusEntry?.progress?.details ?? []).map((detail) => ({
+    desc: detail.desc ?? "Unknown",
+    step: typeof detail.step === "number" ? detail.step : null,
+    pctComplete:
+      typeof detail.pct_complete === "number" ? detail.pct_complete : null,
+  }));
+
+  return {
+    taskId: taskRecord.task_id ?? taskStatusEntry?.task_id ?? "unknown",
+    taskStatus: taskRecord.status ?? null,
+    statusUpdatedAt: taskStatusEntry?.updated ?? taskRecord.updated ?? null,
+    summaryPct:
+      typeof taskStatusEntry?.progress?.summary === "number"
+        ? taskStatusEntry.progress.summary
+        : null,
+    steps,
+  };
+}
+
+function buildProgressSignature(update: AppEearsProgressUpdate) {
+  return JSON.stringify(update);
+}
+
 async function pollAppEearsTaskUntilDone(
   fetchImpl: typeof fetch,
   input: {
@@ -607,24 +721,26 @@ async function pollAppEearsTaskUntilDone(
     pollIntervalMs: number;
     taskTimeoutMs: number;
     taskId: string;
+    onProgress?: (update: AppEearsProgressUpdate) => void;
   },
 ) {
   const startedAt = Date.now();
+  let lastProgressSignature: string | null = null;
 
   while (Date.now() - startedAt <= input.taskTimeoutMs) {
-    const record = await fetchJson<AppEearsTaskRecord>(
-      fetchImpl,
-      `${input.baseUrl}/task/${input.taskId}`,
-      {
-        headers: {
-          authorization: `Bearer ${input.token}`,
-        },
-      },
-      {
-        timeoutMs: input.requestTimeoutMs,
-        action: `AppEEARS task lookup (${input.taskId})`,
-      },
-    );
+    const [record, statusEntry] = await Promise.all([
+      fetchAppEearsTaskRecord(fetchImpl, input),
+      fetchAppEearsTaskStatus(fetchImpl, input).catch(() => null),
+    ]);
+
+    if (input.onProgress) {
+      const update = toProgressUpdate(record, statusEntry);
+      const signature = buildProgressSignature(update);
+      if (signature !== lastProgressSignature) {
+        lastProgressSignature = signature;
+        input.onProgress(update);
+      }
+    }
 
     const status = record.status?.toLowerCase();
     if (status === "done") {
@@ -642,7 +758,7 @@ async function pollAppEearsTaskUntilDone(
   }
 
   throw new Error(
-    `[smap-validation] AppEEARS task ${input.taskId} did not complete within ${input.taskTimeoutMs}ms.`,
+    `[smap-validation] AppEEARS task ${input.taskId} did not complete within ${input.taskTimeoutMs}ms. Resume with existing task id ${input.taskId}.`,
   );
 }
 
@@ -829,21 +945,27 @@ export function createAppEearsSmapSource(
       endDate: string,
     ): Promise<SmapObservation[]> {
       const token = await getAccessToken();
-      const taskPayload = buildAppEearsPointTaskRequest({
-        lat,
-        lng,
-        startDate,
-        endDate,
-        productAndVersion: options.productAndVersion,
-        layer: options.layer,
-      });
+      const taskId =
+        options.existingTaskId ??
+        (await submitAppEearsPointTask(fetchImpl, {
+          token,
+          baseUrl,
+          requestTimeoutMs,
+          payload: buildAppEearsPointTaskRequest({
+            lat,
+            lng,
+            startDate,
+            endDate,
+            productAndVersion: options.productAndVersion,
+            layer: options.layer,
+          }),
+        }));
 
-      const taskId = await submitAppEearsPointTask(fetchImpl, {
-        token,
-        baseUrl,
-        requestTimeoutMs,
-        payload: taskPayload,
-      });
+      if (options.existingTaskId) {
+        options.onTaskResumed?.(taskId);
+      } else {
+        options.onTaskSubmitted?.(taskId);
+      }
 
       await pollAppEearsTaskUntilDone(fetchImpl, {
         token,
@@ -852,6 +974,7 @@ export function createAppEearsSmapSource(
         pollIntervalMs,
         taskTimeoutMs,
         taskId,
+        onProgress: options.onProgress,
       });
 
       const files = await listAppEearsBundleFiles(fetchImpl, {
