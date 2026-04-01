@@ -38,7 +38,12 @@ export function jsonServerError(
     context?: Record<string, unknown>;
   },
 ) {
-  logServerError(input.event, error, input.context);
+  try {
+    logServerError(input.event, error, input.context);
+  } catch {
+    // Logging must never prevent the error response from being sent.
+    console.error(`[server][${input.event}] logServerError threw — error suppressed`);
+  }
 
   return jsonError(input.status ?? 500, input.message);
 }

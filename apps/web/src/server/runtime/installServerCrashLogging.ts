@@ -13,17 +13,39 @@ function resolveLogFilePath() {
   );
 }
 
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    // Fallback: strip non-serializable fields and retry
+    try {
+      return JSON.stringify(value, (_key, v) => {
+        if (typeof v === "bigint") return String(v);
+        if (typeof v === "function") return "[function]";
+        if (typeof v === "symbol") return String(v);
+        return v;
+      });
+    } catch {
+      return JSON.stringify({ _fallback: true, message: String(value) });
+    }
+  }
+}
+
 function writeServerLog(level: "error" | "warn", event: string, payload: Record<string, unknown>) {
-  const logPath = resolveLogFilePath();
-  mkdirSync(path.dirname(logPath), { recursive: true });
-  const line = JSON.stringify({
-    ts: new Date().toISOString(),
-    level,
-    event,
-    pid: process.pid,
-    ...payload,
-  });
-  appendFileSync(logPath, `${line}\n`, "utf8");
+  try {
+    const logPath = resolveLogFilePath();
+    mkdirSync(path.dirname(logPath), { recursive: true });
+    const line = safeStringify({
+      ts: new Date().toISOString(),
+      level,
+      event,
+      pid: process.pid,
+      ...payload,
+    });
+    appendFileSync(logPath, `${line}\n`, "utf8");
+  } catch {
+    // Logging must never throw — silently drop if file I/O also fails.
+  }
 }
 
 function serializeUnknownError(error: unknown) {
@@ -55,7 +77,9 @@ function serializeUnknownError(error: unknown) {
           ? record.message
           : json ?? String(error),
       stack: typeof record.stack === "string" ? record.stack : null,
-      details: record,
+      // Store the serialized string, not the raw object — avoids circular-ref
+      // explosions when writeServerLog JSON.stringifies the outer payload.
+      details: json ?? String(error),
     };
   }
 
