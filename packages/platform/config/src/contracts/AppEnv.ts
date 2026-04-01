@@ -69,6 +69,14 @@ export const AppEnvSchema = z.object({
   SOILGRIDS_BASE_URL: optionalString(),
   /** Open-Meteo historical archive API base hostname. Default: archive-api.open-meteo.com */
   OPEN_METEO_ARCHIVE_BASE_URL: optionalString(),
+  /** Pin a specific Open-Meteo weather model (e.g. "era5_land", "era5", "ecmwf_ifs"). When absent, uses Best Match. */
+  OPEN_METEO_WEATHER_MODEL: optionalString(),
+  /** NASA Earthdata username for AppEEARS SMAP data access. */
+  EARTHDATA_USERNAME: optionalString(),
+  /** NASA Earthdata password for AppEEARS SMAP data access. */
+  EARTHDATA_PASSWORD: optionalString(),
+  /** AppEEARS API base URL. Default: https://appeears.earthdatacloud.nasa.gov/api */
+  APPEEARS_BASE_URL: optionalUrl(),
 });
 
 export type AppEnv = z.infer<typeof AppEnvSchema>;

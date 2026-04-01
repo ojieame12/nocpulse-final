@@ -27,6 +27,8 @@ type CreateOpenMeteoWeatherProviderClientOptions = {
   timeoutMs?: number;
   retries?: number;
   sourceKey?: string;
+  /** Pin a specific Open-Meteo weather model (e.g. "era5_land", "era5"). When absent, uses Best Match. */
+  weatherModel?: string;
 };
 
 const DEFAULT_FORECAST_HOURS = 48;
@@ -102,14 +104,20 @@ function toIso(value: string): string {
   return new Date(value).toISOString();
 }
 
-function buildSearchParams(input: FetchFieldWeatherInput, forecastHours: number) {
-  return new URLSearchParams({
+function buildSearchParams(input: FetchFieldWeatherInput, forecastHours: number, weatherModel?: string) {
+  const params = new URLSearchParams({
     latitude: input.latitude.toString(),
     longitude: input.longitude.toString(),
     hourly: HOURLY_FIELDS,
     forecast_hours: forecastHours.toString(),
     timezone: "UTC",
   });
+
+  if (weatherModel) {
+    params.set("models", weatherModel);
+  }
+
+  return params;
 }
 
 async function fetchPayloadFromBaseUrl(
@@ -185,6 +193,7 @@ async function fetchOpenMeteoPayload(
   const searchParams = buildSearchParams(
     input,
     Math.max(1, options.forecastHours ?? input.forecastHours ?? DEFAULT_FORECAST_HOURS),
+    options.weatherModel,
   );
   const publicBaseUrl = "https://api.open-meteo.com/v1/forecast";
   const paidBaseUrl = "https://customer-api.open-meteo.com/v1/forecast";
@@ -247,6 +256,7 @@ function toFieldWeatherResult(
     ),
     provenance: {
       forecastModel: "open-meteo-best-match",
+      weatherModel: options.weatherModel ?? "best_match",
       soilDataset: "open-meteo-hourly",
     },
   };

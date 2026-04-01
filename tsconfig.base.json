@@ -31,6 +31,7 @@
       "@fieldpulse/module-integrations": ["packages/modules/integrations/src/index.ts"],
       "@fieldpulse/module-market": ["packages/modules/market/src/index.ts"],
       "@fieldpulse/module-moisture": ["packages/modules/moisture/src/index.ts"],
+      "@fieldpulse/module-validation": ["packages/modules/validation/src/index.ts"],
       "@fieldpulse/module-reports": ["packages/modules/reports/src/index.ts"],
       "@fieldpulse/module-weather": ["packages/modules/weather/src/index.ts"],
       "@fieldpulse/module-workspaces": ["packages/modules/workspaces/src/index.ts"],

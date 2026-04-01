@@ -85,6 +85,15 @@ export type FieldReportReadModel = {
   summary: FieldReportSummary;
 
   /**
+   * Depletion fields extracted from the latest moisture snapshot's inputs.
+   * Populated during the overview_rebuild phase when the snapshot includes
+   * soil-property-backed depletion data.
+   */
+  depletionPct?: number | null;
+  availableWaterMm?: number | null;
+  statusLabel?: string;
+
+  /**
    * Pre-computed historical anomaly fields, populated by the worker during
    * the overview_rebuild phase. Optional — absent until the worker has run
    * the historical comparison for this field.

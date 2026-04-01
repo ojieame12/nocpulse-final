@@ -109,6 +109,23 @@ function buildMoistureSummary(input: {
   };
 }
 
+/**
+ * Derive a human-readable status label from the depletion percentage.
+ *
+ * Thresholds:
+ *   0–30  → Adequate
+ *  30–50  → Watch
+ *  50–75  → Stress
+ *   >75   → Critical
+ */
+function deriveDepletionStatusLabel(depletionPct: number | null | undefined): string | undefined {
+  if (depletionPct == null) return undefined;
+  if (depletionPct <= 30) return "Adequate";
+  if (depletionPct <= 50) return "Watch";
+  if (depletionPct <= 75) return "Stress";
+  return "Critical";
+}
+
 function buildImagerySummary(input: {
   latestRasterObservation: FieldRasterObservation | null;
 }) {
@@ -357,7 +374,12 @@ export async function buildFieldReportReadModel(
     latestRasterObservation,
   });
 
-  const readModel = {
+  // ── Depletion fields from moisture snapshot inputs ──────────────────
+  const snapshotDepletionPct = latestSnapshot?.inputs?.depletionPct ?? null;
+  const snapshotAvailableWaterMm = latestSnapshot?.inputs?.availableWaterMm ?? null;
+  const statusLabel = deriveDepletionStatusLabel(snapshotDepletionPct);
+
+  const readModel: FieldReportReadModel = {
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     reportDate: input.reportDate,
     field,
@@ -404,6 +426,15 @@ export async function buildFieldReportReadModel(
         weatherProfile.latestObservation?.observedAt ??
         null,
     },
+    depletionPct: snapshotDepletionPct,
+    availableWaterMm: snapshotAvailableWaterMm,
+    statusLabel,
+    // Historical anomaly fields are left undefined here — they are populated
+    // by the worker's overview_rebuild phase when Open-Meteo archive data has
+    // been fetched. If the worker has not yet run, these remain absent.
+    // TODO: Wire historical anomaly fetch into the worker overview_rebuild
+    // phase so that historicalAnomalyPercentile, historicalAnomalyDescription,
+    // and historicalAnomalyClass are populated from the archive API response.
   };
 
   if (debugPerfEnabled) {

@@ -112,6 +112,9 @@ importers:
       '@fieldpulse/module-soil':
         specifier: workspace:*
         version: link:../../packages/modules/soil
+      '@fieldpulse/module-validation':
+        specifier: workspace:*
+        version: link:../../packages/modules/validation
       '@fieldpulse/platform-config':
         specifier: workspace:*
         version: link:../../packages/platform/config
@@ -314,6 +317,12 @@ importers:
       geotiff:
         specifier: ^3.0.5
         version: 3.0.5
+
+  packages/modules/validation:
+    dependencies:
+      '@fieldpulse/platform-db':
+        specifier: workspace:*
+        version: link:../../platform/db
 
   packages/modules/weather:
     dependencies:

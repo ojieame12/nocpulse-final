@@ -7,6 +7,8 @@ import type { WeatherProvider } from "./WeatherProvider";
 
 export type FieldWeatherObservationProvenance = {
   forecastModel?: string;
+  /** The specific Open-Meteo model used (e.g. "era5_land", "best_match"). */
+  weatherModel?: string;
   radarDataset?: string;
   soilDataset?: string;
   stationId?: string;
