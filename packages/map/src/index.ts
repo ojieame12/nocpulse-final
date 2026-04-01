@@ -35,6 +35,7 @@ export {
   type FieldAgronomicAlternateCellRenderModel,
   type FieldAgronomicAlternateSurfaceRenderModel,
   type CellAnomalyClass,
+  type CellProvenanceContext,
 } from "./domain/render/FieldAgronomicSurfaceRenderModel";
 export {
   type FieldBoundaryPreviewRenderModel,

@@ -9,7 +9,10 @@ import type { MapLightingPresetId } from "../contracts/lighting";
 import type { MapTerrainContextMode } from "../contracts/terrain";
 import { buildFieldMoistureSurfaceRenderModel } from "./buildFieldMoistureSurfaceRenderModel";
 import { buildFieldAgronomicSurfaceRenderModel } from "./buildFieldAgronomicSurfaceRenderModel";
-import type { FieldAgronomicSurfaceMetricKey } from "../domain/render/FieldAgronomicSurfaceRenderModel";
+import type {
+  FieldAgronomicSurfaceMetricKey,
+  CellProvenanceContext,
+} from "../domain/render/FieldAgronomicSurfaceRenderModel";
 
 type ReadonlyMapGeoPoint = readonly [longitude: number, latitude: number];
 type ReadonlyMapMultiPolygon = {
@@ -59,6 +62,8 @@ type BuildFieldBoundaryPreviewRenderModelInput = {
       surfacePct: number;
       sourceKey: string;
     }[];
+    /** Field-level provenance from the moisture model snapshot. */
+    provenance?: CellProvenanceContext | null;
   } | null;
 };
 
@@ -186,6 +191,7 @@ export function buildFieldBoundaryPreviewRenderModel({
             surfacePct: cell.surfacePct,
             sourceKey: cell.sourceKey,
           })),
+          provenance: moistureSurface.provenance,
         })
       : null;
 

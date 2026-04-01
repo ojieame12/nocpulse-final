@@ -6,6 +6,7 @@ import type {
   CellSourceTier,
   CellVarianceBucket,
   CellSeverityLabel,
+  CellProvenanceContext,
 } from "../domain/render/FieldAgronomicSurfaceRenderModel";
 import type {
   FieldBoundaryFeature,
@@ -37,6 +38,8 @@ type BuildFieldMoistureSurfaceRenderModelInput = {
     surfacePct: number;
     sourceKey: string;
   }[];
+  /** Field-level provenance from the moisture model snapshot. Stamped onto every cell. */
+  provenance?: CellProvenanceContext | null;
 };
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -258,6 +261,7 @@ export function buildFieldMoistureSurfaceRenderModel({
   confidence,
   sourceLabel,
   persistedCells = [],
+  provenance = null,
 }: BuildFieldMoistureSurfaceRenderModelInput): FieldAgronomicSurfaceRenderModel {
   const numericConfidence = CONFIDENCE_MAP[confidence] ?? 0.5;
 
@@ -365,6 +369,7 @@ export function buildFieldMoistureSurfaceRenderModel({
       anomalyClass: relativeAnalytics.anomalyClass,
       zoneId: null,
       severityLabel: classifySeverity(cell.metricValuePct),
+      provenance: provenance ?? undefined,
     };
   });
 

@@ -4,6 +4,7 @@ import type {
   CellSeverityLabel,
   CellSourceTier,
   CellAnomalyClass,
+  CellProvenanceContext,
 } from "../render/FieldAgronomicSurfaceRenderModel";
 
 /**
@@ -28,6 +29,8 @@ export type CellHoverEvent = {
   varianceBucket: CellVarianceBucket;
   severityLabel: CellSeverityLabel;
   zoneId: string | null;
+  /** Field-level provenance context, when available from the moisture model. */
+  provenance?: CellProvenanceContext | null;
 };
 
 /**
@@ -53,4 +56,6 @@ export type CellClickEvent = {
   varianceBucket: CellVarianceBucket;
   severityLabel: CellSeverityLabel;
   zoneId: string | null;
+  /** Field-level provenance context, when available from the moisture model. */
+  provenance?: CellProvenanceContext | null;
 };

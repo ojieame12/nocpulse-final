@@ -776,6 +776,7 @@ export function createFieldBoundaryPreviewRuntime({
         varianceBucket: cell.varianceBucket,
         severityLabel: cell.severityLabel,
         zoneId: cell.zoneId,
+        provenance: cell.provenance,
       });
     } else {
       // Debounce hover-out: wait a beat before committing to null
@@ -818,6 +819,7 @@ export function createFieldBoundaryPreviewRuntime({
         varianceBucket: cell.varianceBucket,
         severityLabel: cell.severityLabel,
         zoneId: cell.zoneId,
+        provenance: cell.provenance,
       });
     }
   }

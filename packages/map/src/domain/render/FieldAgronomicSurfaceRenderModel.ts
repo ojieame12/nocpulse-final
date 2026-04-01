@@ -21,6 +21,29 @@ export type CellSourceTier =
   | "sentinel-stale"
   | "synthetic";
 
+/**
+ * Field-level moisture provenance stamped onto each cell so interaction
+ * events can surface data-quality context without a second lookup.
+ * All fields are optional — omitted when the upstream snapshot does not
+ * provide them (e.g. synthetic or preview surfaces).
+ */
+export type CellProvenanceContext = {
+  /** Plant-available-water depletion 0–100 (field-level). */
+  depletionPct?: number | null;
+  /** Raster freshness factor 0–1 (1 = just acquired, 0 = fully stale). */
+  freshnessFactor?: number | null;
+  /** Hours since the most recent raster observation. */
+  rasterAgeHours?: number | null;
+  /** Multi-source agreement classification. */
+  agreementFlag?: "agree" | "neutral" | "divergent" | null;
+  /** Spatial resolution tier of the primary data source. */
+  resolutionTier?: "sub-field" | "field-level" | "regional" | null;
+  /** Available water in mm (field-level). */
+  availableWaterMm?: number | null;
+  /** Root-zone depth used for the estimate in cm. */
+  rootZoneDepthCm?: number;
+};
+
 export type FieldAgronomicCellRenderModel = {
   id: string;
   centroid: MapGeoPoint;
@@ -47,6 +70,8 @@ export type FieldAgronomicCellRenderModel = {
   zoneId: string | null;
   /** Agronomic severity classification. */
   severityLabel: CellSeverityLabel;
+  /** Field-level provenance context, when available from the moisture model. */
+  provenance?: CellProvenanceContext | null;
 };
 
 export type FieldAgronomicSurfaceRenderModel = {
