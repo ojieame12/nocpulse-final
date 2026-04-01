@@ -585,6 +585,11 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     ReadonlyMap<string, CommitFieldHydrationSummary["stages"]>
   >(new Map());
 
+  /** Commit-time moisture confidence/provenance data, keyed by fieldId. */
+  const [hydrationConfidenceByField, setHydrationConfidenceByField] = useState<
+    ReadonlyMap<string, CommitFieldHydrationSummary["moistureConfidence"]>
+  >(new Map());
+
   /** Derived per-field progress for the field strip */
   const fieldOnboardingProgress = useMemo(() => {
     if (!pendingOnboardingWatch || onboardingStatuses.size === 0) return new Map<string, FieldOnboardingStatus>();
@@ -1363,6 +1368,17 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         }
         return next;
       });
+
+      /* Store commit-time moisture confidence for provenance display. */
+      setHydrationConfidenceByField((prev) => {
+        const next = new Map(prev);
+        for (const summary of result.fieldHydrationSummaries!) {
+          if (summary.moistureConfidence) {
+            next.set(summary.fieldId, summary.moistureConfidence);
+          }
+        }
+        return next;
+      });
     }
   }, []);
 
@@ -1802,6 +1818,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       onboardingStatus={fieldOnboardingProgress.get(fieldData.fieldId) ?? null}
       progressMessage={fieldOnboardingProgress.get(fieldData.fieldId)?.phaseLabel ?? null}
       prebuiltStages={prebuiltStagesByField.get(fieldData.fieldId) ?? null}
+      hydrationConfidence={hydrationConfidenceByField.get(fieldData.fieldId) ?? null}
     />
   );
 
