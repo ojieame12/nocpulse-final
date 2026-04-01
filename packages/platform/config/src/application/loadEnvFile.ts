@@ -7,6 +7,20 @@ type LoadEnvFileOptions = {
   override?: boolean;
 };
 
+function normalizeEnvValue(rawValue: string) {
+  let value = rawValue.trim();
+
+  while (
+    value.length >= 2 &&
+    ((value.startsWith("\"") && value.endsWith("\"")) ||
+      (value.startsWith("'") && value.endsWith("'")))
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+
+  return value;
+}
+
 function populateEnv(
   envPath: string,
   override: boolean,
@@ -25,7 +39,7 @@ function populateEnv(
     }
 
     const key = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1).trim();
+    const value = normalizeEnvValue(line.slice(separatorIndex + 1));
 
     if (!override && process.env[key] !== undefined) {
       continue;
