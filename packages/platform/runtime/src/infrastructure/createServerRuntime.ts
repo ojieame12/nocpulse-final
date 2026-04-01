@@ -53,6 +53,7 @@ import { createDefaultHailProviderClient } from "./createDefaultHailProviderClie
 import { createDefaultWeatherProviderClient } from "./createDefaultWeatherProviderClient";
 import { createPersistentServerJobDispatcher } from "./createPersistentServerJobDispatcher";
 import { createServerServices } from "./createServerServices";
+import { createSupabaseFieldHydrationReplay } from "./createSupabaseFieldHydrationReplay";
 
 export function createServerRuntime(
   source: Record<string, string | undefined>,
@@ -131,6 +132,7 @@ export function createServerRuntime(
       weatherProviderClient,
       reportArtifactStore,
       lldGeocodeCache: createSupabaseLldGeocodeCache(client),
+      hydrationReplay: createSupabaseFieldHydrationReplay(client, repositories),
     }),
   };
 }
