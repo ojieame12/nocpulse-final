@@ -10,6 +10,20 @@ import type { ReportAlertItem, ReportFindingItem, ReportZoneItem } from "./Repor
 import type { FieldActivityZoneItem, FieldActivityFamilySummary } from "../../features/fields/FieldActivityPanelModel";
 import { Card, Lbl, LblM, Big, Sub, Mono } from "./fieldDetailCardPrimitives";
 
+/** Format an ISO timestamp into a short human-readable string, e.g. "30 Mar, 4:52 pm". */
+function formatShortDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+      + ", "
+      + d.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true }).toLowerCase();
+  } catch {
+    return "—";
+  }
+}
+
 export function ZonesSubPage({
   reportZones,
   reportFindings,
@@ -116,11 +130,10 @@ export function ZonesSubPage({
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {[
                 { k: "Affected cells", v: String(focusedZone.affectedCellCount) },
-                { k: "Detections", v: focusedActivityZone ? String(focusedActivityZone.detectionCount) : "—" },
-                { k: "Last seen", v: focusedZone.lastSeenAt },
-                { k: "Linked findings", v: focusedZoneFindings.length > 0 ? focusedZoneFindings.map((finding) => finding.title).join(" · ") : "None linked" },
-                { k: "Linked alerts", v: focusedZoneAlerts.length > 0 ? focusedZoneAlerts.map((alert) => alert.text).join(" · ") : "No linked alerts" },
-                { k: "Family pressure", v: focusedFamilySummary ? `${focusedFamilySummary.activeZoneCount}/${focusedFamilySummary.totalZoneCount} active in ${focusedZone.family.replace(/_/g, " ")}` : "No family summary" },
+                { k: "Last seen", v: formatShortDate(focusedZone.lastSeenAt) },
+                { k: "Findings", v: focusedZoneFindings.length > 0 ? focusedZoneFindings.map((finding) => finding.title).join(" · ") : "None" },
+                { k: "Alerts", v: focusedZoneAlerts.length > 0 ? `${focusedZoneAlerts.length} active` : "None" },
+                { k: "Related zones", v: focusedFamilySummary ? `${focusedFamilySummary.activeZoneCount} of ${focusedFamilySummary.totalZoneCount} active` : "—" },
               ].map((detail, index) => (
                 <div key={index} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                   <Sub>{detail.k}</Sub>
@@ -201,14 +214,13 @@ export function ZonesSubPage({
         <LblM>Zone Summary</LblM>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {[
-            { k: "Tracked families", v: Array.from(new Set(reportZones.map((zone) => zone.family.replace(/_/g, " ")))).join(" · ") || "—" },
-            { k: "Tracked pockets", v: trackedPocketPct != null ? `${Math.round(trackedPocketPct)}%` : "—" },
+            { k: "Families", v: Array.from(new Set(reportZones.map((zone) => zone.family.replace(/_/g, " ")))).join(" · ") || "—" },
+            { k: "In-zone stress", v: trackedPocketPct != null ? `${Math.round(trackedPocketPct)}%` : "—" },
             { k: "Outside zones", v: outsideZonePct != null ? `${Math.round(outsideZonePct)}%` : "—" },
-            { k: "Focused zone", v: focusedZone ? focusedZone.trackingKey : "No current focus" },
+            { k: "Focus", v: focusedZone ? focusedZone.trackingKey : "None" },
             { k: "Affected cells", v: String(affectedCellTotal) },
-            { k: "Top finding", v: reportFindings[0]?.title ?? "No active finding" },
-            { k: "Hover context", v: hoveredCell?.zoneId ? "Cell linked to tracked zone" : "No hovered zone link" },
-            { k: "Latest observation", v: reportZones[0]?.lastSeenAt ?? updatedDate ?? "—" },
+            { k: "Top finding", v: reportFindings[0]?.title ?? "None" },
+            { k: "Last observed", v: formatShortDate(reportZones[0]?.lastSeenAt ?? updatedDate) },
           ].map((d, i) => (
             <div key={i} style={{ display: "flex", justifyContent: "space-between" }}>
               <Sub>{d.k}</Sub>
