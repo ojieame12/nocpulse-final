@@ -78,3 +78,12 @@ export { createOpenMeteoWeatherProviderClient } from "./infrastructure/createOpe
 export { createSupabaseFieldWeatherObservationRepository } from "./infrastructure/createSupabaseFieldWeatherObservationRepository";
 export { createSupabaseFieldWeatherForecastRepository } from "./infrastructure/createSupabaseFieldWeatherForecastRepository";
 export { createSupabaseFieldWeatherDerivedSignalSetRepository } from "./infrastructure/createSupabaseFieldWeatherDerivedSignalSetRepository";
+export {
+  type CanonicalDepthRange,
+  type DepthSchema,
+  type DepthLayer,
+  CANONICAL_RANGES,
+  getLayersForSchema,
+  resolveCanonicalMoisture,
+  resolveRootZoneMoisture,
+} from "./domain/depthTranslation";

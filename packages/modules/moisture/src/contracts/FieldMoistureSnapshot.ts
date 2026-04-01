@@ -29,6 +29,12 @@ export type MoistureInputProvenance = {
   agreementFlag?: "agree" | "neutral" | "divergent";
   resolutionTier?: "sub-field" | "field-level" | "regional";
   scaleFitPenalty?: number;
+  depletionPct?: number | null;
+  availableWaterMm?: number | null;
+  fieldCapacityPct?: number | null;
+  wiltingPointPct?: number | null;
+  rootZoneDepthCm?: number;
+  waterStorageMm?: number | null;
 };
 
 export type FieldMoistureSnapshot = WorkspaceScoped &

@@ -4,6 +4,8 @@ import type { MoistureInputProvenance } from "../contracts/FieldMoistureSnapshot
 import type { RebuildFieldMoistureEstimateInput } from "../contracts/RebuildFieldMoistureEstimateInput";
 import type { RebuildFieldMoistureEstimateResult } from "../contracts/RebuildFieldMoistureEstimateResult";
 import { computeKc } from "../domain/crop/computeKc";
+import { computeDrainageMm, inferTextureClass } from "../domain/drainage/computeDrainage";
+import type { SoilTextureClass } from "../domain/drainage/computeDrainage";
 import { resolveStageWeights } from "../domain/crop/resolveStageWeights";
 import { ensureFieldMoistureSnapshot } from "./ensureFieldMoistureSnapshot";
 
@@ -62,6 +64,16 @@ export type RebuildFieldMoistureEstimateSources = {
   cropType?: string | null;
   /** Growth stage (e.g. "vegetative", "flowering"), used for Kc phase and satellite weights. */
   growthStage?: string | null;
+  /** Field capacity volumetric %, from SoilGrids (0-100). */
+  fieldCapacityPct?: number | null;
+  /** Wilting point volumetric %, from SoilGrids (0-100). */
+  wiltingPointPct?: number | null;
+  /** Root zone depth in cm, default 30. */
+  rootZoneDepthCm?: number;
+  /** Hours since the last observation, used for drainage decay timing. Defaults to 24 if not provided. */
+  hoursSinceLastObservation?: number | null;
+  /** Explicit soil texture class override; inferred from FC if not provided. */
+  soilTextureClass?: SoilTextureClass | null;
 };
 
 export type RebuildFieldMoistureEstimateOptions = {
@@ -318,7 +330,7 @@ function deriveSourceBackedEstimate(
   const thermalSurfaceContrib =
     thermalSignal !== null ? -((thermalSignal - 0.5) * 14) : 0;
 
-  const rootZonePct = clamp(
+  let rootZonePct = clamp(
     rootBase +
       ((moistureSignal ?? 0.5) - 0.5) * 38 +
       ((vigorSignal ?? 0.5) - 0.5) * 12 +
@@ -330,7 +342,7 @@ function deriveSourceBackedEstimate(
     100,
   );
 
-  const surfacePct = clamp(
+  let surfacePct = clamp(
     surfaceBase +
       ((moistureSignal ?? 0.5) - 0.5) * 32 +
       ((vigorSignal ?? 0.5) - 0.5) * 6 +
@@ -341,6 +353,32 @@ function deriveSourceBackedEstimate(
     0,
     100,
   );
+
+  // -----------------------------------------------------------------------
+  // Post-rain drainage decay — exponential decay of excess above FC
+  // -----------------------------------------------------------------------
+
+  const fcPct = sources.fieldCapacityPct ?? null;
+  const wpPct = sources.wiltingPointPct ?? null;
+  const textureClass =
+    sources.soilTextureClass ?? inferTextureClass(fcPct, wpPct);
+  const hoursSinceLastObs = sources.hoursSinceLastObservation ?? 24;
+
+  if (fcPct !== null && rootZonePct > fcPct) {
+    const drainedRoot = computeDrainageMm(rootZonePct, fcPct, hoursSinceLastObs, textureClass);
+    rootZonePct = rootZonePct - drainedRoot;
+  }
+
+  if (fcPct !== null && surfacePct > fcPct) {
+    const drainedSurface = computeDrainageMm(surfacePct, fcPct, hoursSinceLastObs, textureClass);
+    surfacePct = surfacePct - drainedSurface;
+  }
+
+  // Floor at wilting point
+  if (wpPct !== null) {
+    rootZonePct = Math.max(rootZonePct, wpPct);
+    surfacePct = Math.max(surfacePct, wpPct);
+  }
 
   // -----------------------------------------------------------------------
   // Confidence scoring — freshness-weighted with agreement & scale-fit
@@ -442,11 +480,51 @@ function deriveSourceBackedEstimate(
     confidenceReasonParts.push("scale-fit-penalty");
   }
 
+  // -----------------------------------------------------------------------
+  // Depletion computation (mm-based water storage)
+  // -----------------------------------------------------------------------
+
+  const fieldCapacityPct = sources.fieldCapacityPct ?? null;
+  const wiltingPointPct = sources.wiltingPointPct ?? null;
+  const rootZoneDepthCm = sources.rootZoneDepthCm ?? 30;
+
+  let depletionPct: number | null = null;
+  let availableWaterMm: number | null = null;
+  let waterStorageMm: number | null = null;
+
+  const hasSoilProps =
+    fieldCapacityPct != null &&
+    wiltingPointPct != null &&
+    fieldCapacityPct > wiltingPointPct;
+
+  if (hasSoilProps && weatherSoilMoisture !== null) {
+    const rootZoneDepthMm = rootZoneDepthCm * 10;
+    const fcMm = (fieldCapacityPct / 100) * rootZoneDepthMm;
+    const wpMm = (wiltingPointPct / 100) * rootZoneDepthMm;
+
+    // Current storage from weather baseline (volumetric % -> mm)
+    const baseStorageMm = (weatherSoilMoisture / 100) * rootZoneDepthMm;
+
+    // Net water balance and drainage (already in mm)
+    const netWaterBalanceMm = weatherSignalSet?.netWaterBalance24hMm ?? 0;
+    const drainageMm = 0; // placeholder for future drainage model
+
+    let storageMm = baseStorageMm + netWaterBalanceMm - drainageMm;
+    storageMm = clamp(storageMm, wpMm, fcMm);
+
+    waterStorageMm = Number(storageMm.toFixed(1));
+    depletionPct = Number((((fcMm - storageMm) / (fcMm - wpMm)) * 100).toFixed(1));
+    availableWaterMm = Number((storageMm - wpMm).toFixed(1));
+  }
+
   return {
     rootZonePct: Number(rootZonePct.toFixed(1)),
     surfacePct: Number(surfacePct.toFixed(1)),
     confidence,
     confidenceScore: Number(confidenceScore.toFixed(2)),
+    depletionPct,
+    availableWaterMm,
+    waterStorageMm,
     provenance: {
       moistureModelVersion: "derived-moisture-v1",
       derivationMode: "source-backed",
@@ -473,6 +551,12 @@ function deriveSourceBackedEstimate(
       agreementFlag: agreement?.flag ?? undefined,
       resolutionTier,
       scaleFitPenalty: scaleFitPenalty < 0 ? scaleFitPenalty : undefined,
+      depletionPct,
+      availableWaterMm,
+      fieldCapacityPct: hasSoilProps ? fieldCapacityPct : undefined,
+      wiltingPointPct: hasSoilProps ? wiltingPointPct : undefined,
+      rootZoneDepthCm,
+      waterStorageMm,
     } satisfies Partial<MoistureInputProvenance>,
   } as const;
 }

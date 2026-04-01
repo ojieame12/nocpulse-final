@@ -52,6 +52,11 @@ export { isReliableMoistureEstimate } from "./domain/policies/isReliableMoisture
 export { computeKc } from "./domain/crop/computeKc";
 export { resolveStageWeights, type StageWeights } from "./domain/crop/resolveStageWeights";
 export { describeMoistureEstimate } from "./application/describeMoistureEstimate";
+export {
+  computeDrainageMm,
+  inferTextureClass,
+  type SoilTextureClass,
+} from "./domain/drainage/computeDrainage";
 export { type FieldMoistureSnapshotRepository } from "./infrastructure/FieldMoistureSnapshotRepository";
 export { type FieldMoistureCellSnapshotRepository } from "./infrastructure/FieldMoistureCellSnapshotRepository";
 export { type MoistureEstimateStore } from "./infrastructure/MoistureEstimateStore";

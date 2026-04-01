@@ -380,3 +380,186 @@ test("output always contains rootZonePct and surfacePct fields", async () => {
   assert.ok(result.snapshot.surfacePct >= 0);
   assert.ok(result.snapshot.surfacePct <= 100);
 });
+
+// ---------------------------------------------------------------------------
+// Depletion / mm-based water storage tests
+// ---------------------------------------------------------------------------
+
+function makeSoilSources(overrides: {
+  soilMoisturePct?: number | null;
+  fieldCapacityPct?: number | null;
+  wiltingPointPct?: number | null;
+  rootZoneDepthCm?: number;
+  netWaterBalance24hMm?: number | null;
+}) {
+  return {
+    rasterObservation: null,
+    weatherObservation: {
+      sourceKey: "weather-v1",
+      airTemperatureC: 20,
+      precipitationMm: 0,
+      relativeHumidityPct: null,
+      soilMoisturePct: overrides.soilMoisturePct ?? 30,
+      evapotranspirationMm: 0,
+    },
+    weatherSignalSet: overrides.netWaterBalance24hMm !== undefined
+      ? { netWaterBalance24hMm: overrides.netWaterBalance24hMm }
+      : null,
+    fieldCapacityPct: overrides.fieldCapacityPct,
+    wiltingPointPct: overrides.wiltingPointPct,
+    rootZoneDepthCm: overrides.rootZoneDepthCm,
+  } satisfies Parameters<typeof rebuildFieldMoistureEstimate>[0]["sources"];
+}
+
+test("depletion = 0% when storage is at field capacity", async () => {
+  const { repository } = makeRepository();
+  // soilMoisturePct = fieldCapacityPct => storage at FC => depletion = 0%
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: makeSoilSources({
+      soilMoisturePct: 35,
+      fieldCapacityPct: 35,
+      wiltingPointPct: 15,
+    }),
+  });
+
+  assert.equal(result.snapshot.inputs.depletionPct, 0);
+  assert.equal(typeof result.snapshot.rootZonePct, "number");
+});
+
+test("depletion = 100% when storage is at wilting point", async () => {
+  const { repository } = makeRepository();
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: makeSoilSources({
+      soilMoisturePct: 15,
+      fieldCapacityPct: 35,
+      wiltingPointPct: 15,
+    }),
+  });
+
+  assert.equal(result.snapshot.inputs.depletionPct, 100);
+});
+
+test("depletion = 50% when storage is halfway between FC and WP", async () => {
+  const { repository } = makeRepository();
+  // FC=35%, WP=15%, midpoint=25%
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: makeSoilSources({
+      soilMoisturePct: 25,
+      fieldCapacityPct: 35,
+      wiltingPointPct: 15,
+    }),
+  });
+
+  assert.equal(result.snapshot.inputs.depletionPct, 50);
+});
+
+test("null soil props → depletionPct is null, rootZonePct still computed", async () => {
+  const { repository } = makeRepository();
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: makeSoilSources({
+      soilMoisturePct: 30,
+      fieldCapacityPct: null,
+      wiltingPointPct: null,
+    }),
+  });
+
+  assert.equal(result.snapshot.inputs.depletionPct, null);
+  assert.equal(typeof result.snapshot.rootZonePct, "number");
+  assert.ok(result.snapshot.rootZonePct >= 0);
+});
+
+test("water balance in mm adds correctly to storage", async () => {
+  const { repository } = makeRepository();
+  // FC=40%, WP=10%, depth=30cm => rootZoneDepthMm=300
+  // fcMm=120, wpMm=30
+  // baseStorageMm = (25/100)*300 = 75mm
+  // netWaterBalanceMm = 10mm
+  // storageMm = 75+10 = 85mm (within bounds)
+  // depletionPct = ((120-85)/(120-30))*100 = (35/90)*100 = 38.9
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: makeSoilSources({
+      soilMoisturePct: 25,
+      fieldCapacityPct: 40,
+      wiltingPointPct: 10,
+      netWaterBalance24hMm: 10,
+    }),
+  });
+
+  assert.equal(result.snapshot.inputs.waterStorageMm, 85);
+  assert.equal(result.snapshot.inputs.availableWaterMm, 55); // 85 - 30
+  // depletionPct = (120-85)/(120-30)*100 = 38.888... rounded to 38.9
+  assert.ok(
+    Math.abs((result.snapshot.inputs.depletionPct ?? NaN) - 38.9) < 0.1,
+    `Expected depletionPct ~38.9, got ${result.snapshot.inputs.depletionPct}`,
+  );
+});
+
+test("storage clamped at field capacity (cannot exceed)", async () => {
+  const { repository } = makeRepository();
+  // FC=35%, WP=15%, depth=30cm => fcMm=105, wpMm=45
+  // baseStorageMm = (35/100)*300 = 105mm (already at FC)
+  // netWaterBalanceMm = 50mm => would go to 155mm, clamped to 105
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: makeSoilSources({
+      soilMoisturePct: 35,
+      fieldCapacityPct: 35,
+      wiltingPointPct: 15,
+      netWaterBalance24hMm: 50,
+    }),
+  });
+
+  assert.equal(result.snapshot.inputs.waterStorageMm, 105);
+  assert.equal(result.snapshot.inputs.depletionPct, 0);
+});
+
+test("storage clamped at wilting point (cannot go below)", async () => {
+  const { repository } = makeRepository();
+  // FC=35%, WP=15%, depth=30cm => fcMm=105, wpMm=45
+  // baseStorageMm = (15/100)*300 = 45mm (already at WP)
+  // netWaterBalanceMm = -50mm => would go to -5mm, clamped to 45
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: makeSoilSources({
+      soilMoisturePct: 15,
+      fieldCapacityPct: 35,
+      wiltingPointPct: 15,
+      netWaterBalance24hMm: -50,
+    }),
+  });
+
+  assert.equal(result.snapshot.inputs.waterStorageMm, 45);
+  assert.equal(result.snapshot.inputs.depletionPct, 100);
+  assert.equal(result.snapshot.inputs.availableWaterMm, 0);
+});
+
+test("available water = storageMm - wpMm", async () => {
+  const { repository } = makeRepository();
+  // FC=40%, WP=10%, depth=30cm => fcMm=120, wpMm=30
+  // baseStorageMm = (30/100)*300 = 90mm
+  // availableWaterMm = 90 - 30 = 60mm
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: makeSoilSources({
+      soilMoisturePct: 30,
+      fieldCapacityPct: 40,
+      wiltingPointPct: 10,
+    }),
+  });
+
+  assert.equal(result.snapshot.inputs.availableWaterMm, 60);
+  assert.equal(result.snapshot.inputs.waterStorageMm, 90);
+});
