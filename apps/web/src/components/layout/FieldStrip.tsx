@@ -304,6 +304,48 @@ export function FieldStrip({
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
+  /* ── Track new arrivals for entrance animation ── */
+  const prevFieldIdsRef = useRef<Set<string>>(new Set());
+  const [newFieldIds, setNewFieldIds] = useState<Set<string>>(new Set());
+  const [completedFieldIds, setCompletedFieldIds] = useState<Set<string>>(new Set());
+  const prevOnboardingRef = useRef<ReadonlyMap<string, FieldOnboardingStatus>>(new Map());
+
+  useEffect(() => {
+    const currentIds = new Set(fields.map((f) => f.id));
+    const prevIds = prevFieldIdsRef.current;
+    const arrivals = new Set<string>();
+    for (const id of currentIds) {
+      if (!prevIds.has(id)) arrivals.add(id);
+    }
+    if (arrivals.size > 0) {
+      setNewFieldIds(arrivals);
+      // Clear after animation duration (stagger + animation = ~600ms max)
+      const timer = setTimeout(() => setNewFieldIds(new Set()), 800);
+      return () => clearTimeout(timer);
+    }
+    prevFieldIdsRef.current = currentIds;
+  }, [fields]);
+
+  // Detect completion: was onboarding, now isn't
+  useEffect(() => {
+    if (!onboardingProgress) return;
+    const prev = prevOnboardingRef.current;
+    const completed = new Set<string>();
+    for (const [id, status] of prev) {
+      const current = onboardingProgress.get(id);
+      if ((status.status === 'queued' || status.status === 'running') && (!current || current.status === 'completed')) {
+        completed.add(id);
+      }
+    }
+    if (completed.size > 0) {
+      setCompletedFieldIds(completed);
+      const timer = setTimeout(() => setCompletedFieldIds(new Set()), 1200);
+      prevOnboardingRef.current = onboardingProgress;
+      return () => clearTimeout(timer);
+    }
+    prevOnboardingRef.current = onboardingProgress;
+  }, [onboardingProgress]);
+
   /* ── Kebab menu + inline rename state ── */
   const [kebabFieldId, setKebabFieldId] = useState<string | null>(null);
   const [renamingFieldId, setRenamingFieldId] = useState<string | null>(null);
@@ -847,12 +889,15 @@ export function FieldStrip({
               const onboardingLabel = isOnboarding
                 ? (fieldProgress.phaseLabel || (fieldProgress.status === 'running' ? 'syncing' : 'queued'))
                 : null;
+              const isNewArrival = newFieldIds.has(field.id);
+              const isJustCompleted = completedFieldIds.has(field.id);
+              const entranceDelay = isNewArrival ? `${Math.min(i * 60, 360)}ms` : undefined;
 
             return (
               <div key={field.id} className="field-strip__card-wrap" style={{ position: "relative", flexShrink: 0 }}>
               <button
                 data-field-id={field.id}
-                className={`field-strip__card${isActive ? " field-strip__card--active" : ""}${isDragged ? " field-strip__card--dragging" : ""}${isOnboarding ? " field-strip__card--onboarding" : ""}`}
+                className={`field-strip__card${isActive ? " field-strip__card--active" : ""}${isDragged ? " field-strip__card--dragging" : ""}${isOnboarding ? " field-strip__card--onboarding" : ""}${isNewArrival ? " field-strip__card--entering" : ""}${isJustCompleted ? " field-strip__card--completed" : ""}`}
                 onClick={() => {
                   if (suppressClickRef.current) {
                     suppressClickRef.current = false;
@@ -870,10 +915,13 @@ export function FieldStrip({
                 title={isOnboarding
                   ? `${field.name} · ${onboardingLabel}`
                   : (field.legalLandDescription ? `${field.name} · ${field.legalLandDescription}` : field.name)}
-                style={isOnboarding ? {
-                  borderBottom: '2px solid transparent',
-                  borderImage: `linear-gradient(to right, rgba(22,163,74,0.35) ${progressPct}%, transparent ${progressPct}%) 1`,
-                } : undefined}
+                style={{
+                  ...(isOnboarding ? {
+                    borderBottom: '2px solid transparent',
+                    borderImage: `linear-gradient(to right, rgba(22,163,74,0.35) ${progressPct}%, transparent ${progressPct}%) 1`,
+                  } : {}),
+                  ...(entranceDelay ? { animationDelay: entranceDelay } : {}),
+                }}
               >
                 <FieldStatusDot
                   status={(field.status ?? "pending") as FieldHealthStatus}

@@ -1473,8 +1473,9 @@ img {
 }
 
 @keyframes valueArrive {
-  0%   { opacity: 0; transform: translateY(4px); }
-  100% { opacity: 1; transform: translateY(0); }
+  0%   { opacity: 0; transform: translateY(4px); color: rgba(22, 163, 74, 0.9); }
+  50%  { opacity: 1; transform: translateY(0); color: rgba(22, 163, 74, 0.7); }
+  100% { opacity: 1; transform: translateY(0); color: inherit; }
 }
 
 /* ── Placeholder value blocks (data still arriving) ── */
@@ -1490,7 +1491,7 @@ img {
 }
 
 .value-arrived {
-  animation: valueArrive 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: valueArrive 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* ── Onboarding phase label in sidebar field card ── */
@@ -2096,6 +2097,31 @@ img {
    - Phase label in the location slot, italic to differentiate
    - Bottom border gradient sweep as quiet progress indicator
    - No pulsing, no progress bars, no percentages                      */
+
+/* ── Card entrance animation (CSV batch import) ── */
+
+@keyframes cardSlideIn {
+  0%   { opacity: 0; transform: translateX(20px) scale(0.95); }
+  60%  { opacity: 1; transform: translateX(-2px) scale(1.01); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.field-strip__card--entering {
+  animation: cardSlideIn 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Card completion celebration ── */
+
+@keyframes cardComplete {
+  0%   { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+  30%  { box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.35); transform: scale(1.03); }
+  60%  { box-shadow: 0 0 0 6px rgba(22, 163, 74, 0.12); transform: scale(1.01); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); transform: scale(1); }
+}
+
+.field-strip__card--completed {
+  animation: cardComplete 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
 
 .field-strip__card--onboarding .field-strip__card-name {
   color: rgba(255, 255, 255, 0.45);
