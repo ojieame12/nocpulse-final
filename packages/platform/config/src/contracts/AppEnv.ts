@@ -16,7 +16,7 @@ const optionalUrl = () =>
 
 export const AppEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  NEXT_PUBLIC_APP_NAME: z.string().default("FieldPulse"),
+  NEXT_PUBLIC_APP_NAME: z.string().default("NocPulse"),
   APP_URL: optionalUrl(),
   SUPABASE_URL: optionalUrl(),
   SUPABASE_ANON_KEY: optionalString(),

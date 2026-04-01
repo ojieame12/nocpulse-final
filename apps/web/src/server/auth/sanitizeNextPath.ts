@@ -1,4 +1,4 @@
-const INTERNAL_BASE_URL = "http://fieldpulse.local";
+const INTERNAL_BASE_URL = "http://nocpulse.local";
 
 export function sanitizeNextPath(value: unknown, fallback = "/") {
   if (typeof value !== "string") {

@@ -75,7 +75,7 @@ test("grant access tokens reject tampering and expiry", () => {
 
 test("buildGrantAccessUrl emits a token query param", () => {
   const url = buildGrantAccessUrl({
-    appOrigin: "https://fieldpulse-v3.vercel.app",
+    appOrigin: "https://nocpulse.org",
     secret: SECRET,
     payload: {
       requestId: "8a53d5b1-9d4f-4f29-a0c7-ff0b6564a9ae",

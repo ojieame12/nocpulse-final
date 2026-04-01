@@ -70,7 +70,7 @@ test("renderRequestAccessNotificationEmail uses a review link instead of direct 
       acreage: "450 ha",
       message: "Interested in season-long monitoring.",
     },
-    "https://fieldpulse-v3.vercel.app/api/grant-access?token=abc123",
+    "https://nocpulse.org/api/grant-access?token=abc123",
   );
 
   assert.match(rendered.html, /Review Request/);
