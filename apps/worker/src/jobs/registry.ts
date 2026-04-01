@@ -509,7 +509,10 @@ async function runIntakeFieldOnboardingJob(input: {
                     serviceKey: input.context.runtime.env.supabase.serviceRoleKey!,
                   });
 
-                  const soilProvider = createSoilPropertiesProvider();
+                  const soilProvider = createSoilPropertiesProvider({
+                    enableRestFallback: true,
+                    restBaseUrl: input.context.runtime.env.soil.soilGridsBaseUrl,
+                  });
 
                   const labelPoint = fieldDetail.field.detail.labelPoint;
 

@@ -101,6 +101,23 @@ function toTimestampMillis(value: TimestampIso | null) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isConcurrentReplaceObservationError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes(
+      "field_raster_observations_workspace_field_source_observed_uidx",
+    ) ||
+    message.includes(
+      "field_raster_observation_cells_observation_id_fkey",
+    )
+  );
+}
+
 function getObservationPriority(row: FieldRasterObservationRow) {
   const metadata = toMetadata(row.metadata);
   const mode = typeof metadata.mode === "string" ? metadata.mode : null;
@@ -188,6 +205,71 @@ async function findLatestObservation(
 export function createSupabaseFieldRasterObservationRepository(
   client: DatabaseClient,
 ): FieldRasterObservationRepository {
+  async function replaceObservationOnce(
+    input: ReplaceFieldRasterObservationInput,
+  ): Promise<FieldRasterObservation> {
+    await requireSupabaseSuccess(
+      await client
+        .from("field_raster_observations")
+        .delete()
+        .eq("workspace_id", input.workspaceId)
+        .eq("field_id", input.fieldId)
+        .eq("source_key", input.sourceKey)
+        .eq("observed_at", input.observedAt),
+      "imageryRasterObservations.replaceObservation.delete",
+    );
+
+    const observationResult = await client
+      .from("field_raster_observations")
+      .insert({
+        workspace_id: input.workspaceId,
+        field_id: input.fieldId,
+        observed_at: input.observedAt,
+        source_key: input.sourceKey,
+        provider_key: input.providerKey,
+        artifact_key: input.artifactKey ?? null,
+        metadata: input.metadata ?? {},
+      })
+      .select("*")
+      .single();
+
+    const observation = requireSupabaseData(
+      observationResult,
+      "imageryRasterObservations.replaceObservation.insertObservation",
+    );
+
+    const cellsResult = await client
+      .from("field_raster_observation_cells")
+      .insert(
+        input.cells.map((cell) => ({
+          observation_id: observation.id,
+          workspace_id: input.workspaceId,
+          field_id: input.fieldId,
+          observed_at: input.observedAt,
+          source_key: input.sourceKey,
+          provider_key: input.providerKey,
+          cell_key: cell.cellKey,
+          row_index: cell.rowIndex,
+          column_index: cell.columnIndex,
+          centroid: {
+            type: "Point",
+            coordinates: cell.centroid,
+          },
+          boundary: cell.boundary,
+          measurements: cell.measurements,
+        })),
+      )
+      .select("*");
+
+    return mapObservation(
+      observation,
+      requireSupabaseData(
+        cellsResult,
+        "imageryRasterObservations.replaceObservation.insertCells",
+      ),
+    );
+  }
+
   return {
     async getLatestByField(workspaceId, fieldId, observedAt) {
       const observation = await findLatestObservation(
@@ -253,65 +335,21 @@ export function createSupabaseFieldRasterObservationRepository(
     },
 
     async replaceObservation(input) {
-      await requireSupabaseSuccess(
-        await client
-          .from("field_raster_observations")
-          .delete()
-          .eq("workspace_id", input.workspaceId)
-          .eq("field_id", input.fieldId)
-          .eq("source_key", input.sourceKey)
-          .eq("observed_at", input.observedAt),
-        "imageryRasterObservations.replaceObservation.delete",
-      );
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          return await replaceObservationOnce(input);
+        } catch (error) {
+          if (attempt === 0 && isConcurrentReplaceObservationError(error)) {
+            await sleep(150);
+            continue;
+          }
 
-      const observationResult = await client
-        .from("field_raster_observations")
-        .insert({
-          workspace_id: input.workspaceId,
-          field_id: input.fieldId,
-          observed_at: input.observedAt,
-          source_key: input.sourceKey,
-          provider_key: input.providerKey,
-          artifact_key: input.artifactKey ?? null,
-          metadata: input.metadata ?? {},
-        })
-        .select("*")
-        .single();
+          throw error;
+        }
+      }
 
-      const observation = requireSupabaseData(
-        observationResult,
-        "imageryRasterObservations.replaceObservation.insertObservation",
-      );
-
-      const cellsResult = await client
-        .from("field_raster_observation_cells")
-        .insert(
-          input.cells.map((cell) => ({
-            observation_id: observation.id,
-            workspace_id: input.workspaceId,
-            field_id: input.fieldId,
-            observed_at: input.observedAt,
-            source_key: input.sourceKey,
-            provider_key: input.providerKey,
-            cell_key: cell.cellKey,
-            row_index: cell.rowIndex,
-            column_index: cell.columnIndex,
-            centroid: {
-              type: "Point",
-              coordinates: cell.centroid,
-            },
-            boundary: cell.boundary,
-            measurements: cell.measurements,
-          })),
-        )
-        .select("*");
-
-      return mapObservation(
-        observation,
-        requireSupabaseData(
-          cellsResult,
-          "imageryRasterObservations.replaceObservation.insertCells",
-        ),
+      throw new Error(
+        "imageryRasterObservations.replaceObservation exhausted retries",
       );
     },
   };
