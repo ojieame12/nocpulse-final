@@ -3,10 +3,12 @@ import type { FieldMoistureSnapshot } from "../contracts/FieldMoistureSnapshot";
 import type { MoistureInputProvenance } from "../contracts/FieldMoistureSnapshot";
 import type { RebuildFieldMoistureEstimateInput } from "../contracts/RebuildFieldMoistureEstimateInput";
 import type { RebuildFieldMoistureEstimateResult } from "../contracts/RebuildFieldMoistureEstimateResult";
+import { resolveRootZoneMoisture } from "@fieldpulse/module-weather";
 import { computeKc } from "../domain/crop/computeKc";
 import { computeDrainageMm, inferTextureClass } from "../domain/drainage/computeDrainage";
 import type { SoilTextureClass } from "../domain/drainage/computeDrainage";
 import { resolveStageWeights } from "../domain/crop/resolveStageWeights";
+import { resolveRootDepthCm } from "../domain/crop/resolveRootDepthCm";
 import { ensureFieldMoistureSnapshot } from "./ensureFieldMoistureSnapshot";
 
 type RebuildFieldMoistureEstimateRepository = {
@@ -41,6 +43,18 @@ type WeatherObservationLike = {
   relativeHumidityPct: number | null;
   soilMoisturePct: number | null;
   evapotranspirationMm: number | null;
+  /**
+   * Optional raw soil moisture layer values keyed by Open-Meteo field names
+   * (e.g. "soil_moisture_3_to_9cm"). When provided, the depth translation
+   * layer computes a depth-weighted root-zone average via `resolveRootZoneMoisture`
+   * instead of using the pre-computed `soilMoisturePct`.
+   */
+  soilMoistureLayers?: Record<string, number | null> | null;
+  /**
+   * Which Open-Meteo depth schema the layer keys belong to.
+   * Defaults to "forecast" when `soilMoistureLayers` is provided.
+   */
+  soilMoistureLayerSchema?: "forecast" | "archive" | null;
   provenance?: {
     soilDataset?: string | null;
     forecastModel?: string | null;
@@ -283,7 +297,30 @@ function deriveSourceBackedEstimate(
     : avgThermal ??
       (avgSarWetness === null ? null : clamp(1 - avgSarWetness * 0.9, 0, 1));
   const shadowSignal = avgShadow ?? avgSarRatio;
-  const weatherSoilMoisture = weatherObservation?.soilMoisturePct ?? null;
+  // -----------------------------------------------------------------------
+  // Depth-translated root-zone moisture: when raw layer values are available,
+  // use resolveRootZoneMoisture for depth-weighted averaging instead of using
+  // a single pre-computed value. This allows crop-stage-aware root-zone depths
+  // to automatically adjust the weighting.
+  // When only a pre-computed soilMoisturePct is available (no raw layers),
+  // the depth translation does not apply.
+  // -----------------------------------------------------------------------
+  const rootZoneDepthCm = sources.rootZoneDepthCm ?? resolveRootDepthCm(cropType, growthStage);
+  const rawLayers = weatherObservation?.soilMoistureLayers ?? null;
+  const layerSchema = weatherObservation?.soilMoistureLayerSchema ?? "forecast";
+  // resolveRootZoneMoisture returns volumetric fraction (0-1) matching the
+  // raw Open-Meteo layer units. Convert to percentage to match soilMoisturePct.
+  const depthTranslatedRaw =
+    rawLayers !== null
+      ? resolveRootZoneMoisture(rawLayers, layerSchema, rootZoneDepthCm)
+      : null;
+  const depthTranslatedMoisture =
+    depthTranslatedRaw !== null
+      ? Number((depthTranslatedRaw * 100).toFixed(1))
+      : null;
+  const usedDepthTranslation = depthTranslatedMoisture !== null;
+  const weatherSoilMoisture =
+    depthTranslatedMoisture ?? weatherObservation?.soilMoisturePct ?? null;
   const precipitationMm = weatherObservation?.precipitationMm ?? 0;
   const referenceEtMm = weatherObservation?.evapotranspirationMm ?? 0;
   // FAO-56 Kc adjustment: actualET = referenceET × Kc
@@ -486,7 +523,6 @@ function deriveSourceBackedEstimate(
 
   const fieldCapacityPct = sources.fieldCapacityPct ?? null;
   const wiltingPointPct = sources.wiltingPointPct ?? null;
-  const rootZoneDepthCm = sources.rootZoneDepthCm ?? 30;
 
   let depletionPct: number | null = null;
   let availableWaterMm: number | null = null;
@@ -505,12 +541,21 @@ function deriveSourceBackedEstimate(
     // Current storage from weather baseline (volumetric % -> mm)
     const baseStorageMm = (weatherSoilMoisture / 100) * rootZoneDepthMm;
 
-    // Net water balance and drainage (already in mm)
+    // Net water balance (already in mm)
     const netWaterBalanceMm = weatherSignalSet?.netWaterBalance24hMm ?? 0;
-    const drainageMm = 0; // placeholder for future drainage model
+    const rawStorageMm = baseStorageMm + netWaterBalanceMm;
 
-    let storageMm = baseStorageMm + netWaterBalanceMm - drainageMm;
-    storageMm = clamp(storageMm, wpMm, fcMm);
+    // Drainage decay: excess above FC drains exponentially over time
+    const depletionTextureClass =
+      sources.soilTextureClass ?? inferTextureClass(fieldCapacityPct, wiltingPointPct);
+    const hoursAge = sources.hoursSinceLastObservation ?? 24;
+    const drainageMm = computeDrainageMm(rawStorageMm, fcMm, hoursAge, depletionTextureClass);
+
+    let storageMm = rawStorageMm - drainageMm;
+    // Clamp: floor at wilting point, ceiling at root-zone saturation.
+    // Storage may remain above FC shortly after rain — drainage handles
+    // the exponential decay back toward FC over time.
+    storageMm = clamp(storageMm, wpMm, rootZoneDepthMm);
 
     waterStorageMm = Number(storageMm.toFixed(1));
     depletionPct = Number((((fcMm - storageMm) / (fcMm - wpMm)) * 100).toFixed(1));
@@ -537,6 +582,7 @@ function deriveSourceBackedEstimate(
       usedSar: isSarRasterSource(rasterSourceKey),
       usedWeather: hasWeatherSignal,
       usedWeatherSoilMoisture: weatherSoilMoisture !== null,
+      usedDepthTranslation,
       confidenceReason:
         confidenceReasonParts.length > 0
           ? confidenceReasonParts.join(" + ")

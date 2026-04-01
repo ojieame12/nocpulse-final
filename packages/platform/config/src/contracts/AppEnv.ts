@@ -67,6 +67,8 @@ export const AppEnvSchema = z.object({
   ),
   /** SoilGrids REST API base hostname. Default: rest.isric.org */
   SOILGRIDS_BASE_URL: optionalString(),
+  /** Open-Meteo historical archive API base hostname. Default: archive-api.open-meteo.com */
+  OPEN_METEO_ARCHIVE_BASE_URL: optionalString(),
 });
 
 export type AppEnv = z.infer<typeof AppEnvSchema>;

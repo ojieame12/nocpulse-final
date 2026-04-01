@@ -51,6 +51,7 @@ export {
 export { isReliableMoistureEstimate } from "./domain/policies/isReliableMoistureEstimate";
 export { computeKc } from "./domain/crop/computeKc";
 export { resolveStageWeights, type StageWeights } from "./domain/crop/resolveStageWeights";
+export { resolveRootDepthCm } from "./domain/crop/resolveRootDepthCm";
 export { describeMoistureEstimate } from "./application/describeMoistureEstimate";
 export {
   computeDrainageMm,

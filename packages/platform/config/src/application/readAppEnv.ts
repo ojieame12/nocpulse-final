@@ -65,6 +65,7 @@ export function readAppEnv(source: Partial<Record<keyof AppEnv | string, string 
       openMeteo: {
         enabled: true,
         apiKey: parsed.OPEN_METEO_API_KEY,
+        archiveBaseUrl: parsed.OPEN_METEO_ARCHIVE_BASE_URL ?? "https://archive-api.open-meteo.com",
       },
     },
     email: {

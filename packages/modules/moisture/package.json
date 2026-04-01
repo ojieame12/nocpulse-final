@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@fieldpulse/platform-db": "workspace:*"
+    "@fieldpulse/platform-db": "workspace:*",
+    "@fieldpulse/module-weather": "workspace:*"
   }
 }

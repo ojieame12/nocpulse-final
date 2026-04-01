@@ -391,6 +391,8 @@ function makeSoilSources(overrides: {
   wiltingPointPct?: number | null;
   rootZoneDepthCm?: number;
   netWaterBalance24hMm?: number | null;
+  hoursSinceLastObservation?: number | null;
+  soilTextureClass?: "sand" | "sandy-loam" | "loam" | "clay-loam" | "clay" | "unknown" | null;
 }) {
   return {
     rasterObservation: null,
@@ -408,6 +410,8 @@ function makeSoilSources(overrides: {
     fieldCapacityPct: overrides.fieldCapacityPct,
     wiltingPointPct: overrides.wiltingPointPct,
     rootZoneDepthCm: overrides.rootZoneDepthCm,
+    hoursSinceLastObservation: overrides.hoursSinceLastObservation,
+    soilTextureClass: overrides.soilTextureClass,
   } satisfies Parameters<typeof rebuildFieldMoistureEstimate>[0]["sources"];
 }
 
@@ -504,11 +508,16 @@ test("water balance in mm adds correctly to storage", async () => {
   );
 });
 
-test("storage clamped at field capacity (cannot exceed)", async () => {
+test("post-rain storage above FC is reduced by drainage decay", async () => {
   const { repository } = makeRepository();
-  // FC=35%, WP=15%, depth=30cm => fcMm=105, wpMm=45
-  // baseStorageMm = (35/100)*300 = 105mm (already at FC)
-  // netWaterBalanceMm = 50mm => would go to 155mm, clamped to 105
+  // FC=35%, WP=15%, depth=30cm => fcMm=105, wpMm=45, rootZoneDepthMm=300
+  // baseStorageMm = (35/100)*300 = 105mm (at FC)
+  // netWaterBalanceMm = 50mm => rawStorageMm = 155mm (exceeds FC)
+  // FC=35% => inferTextureClass => "clay-loam" (35 ≥ 35), tau=30h
+  // hoursAge defaults to 24
+  // excess = 155-105 = 50, drained = 50*(1 - exp(-24/30)) ≈ 27.5
+  // storageMm = 155 - 27.5 = 127.5 (above FC, drainage partially applied)
+  // depletionPct = ((105-127.5)/(105-45))*100 = -37.5 (negative = excess)
   const result = await rebuildFieldMoistureEstimate({
     repository,
     estimate: makeEstimate(),
@@ -520,8 +529,16 @@ test("storage clamped at field capacity (cannot exceed)", async () => {
     }),
   });
 
-  assert.equal(result.snapshot.inputs.waterStorageMm, 105);
-  assert.equal(result.snapshot.inputs.depletionPct, 0);
+  // Storage remains above FC because drainage is partial (exponential decay)
+  assert.ok(
+    (result.snapshot.inputs.waterStorageMm ?? 0) > 105,
+    `Expected waterStorageMm > 105 (FC), got ${result.snapshot.inputs.waterStorageMm}`,
+  );
+  // Depletion is negative when storage exceeds FC (indicates excess moisture)
+  assert.ok(
+    (result.snapshot.inputs.depletionPct ?? 0) < 0,
+    `Expected negative depletionPct (excess above FC), got ${result.snapshot.inputs.depletionPct}`,
+  );
 });
 
 test("storage clamped at wilting point (cannot go below)", async () => {
@@ -562,4 +579,309 @@ test("available water = storageMm - wpMm", async () => {
 
   assert.equal(result.snapshot.inputs.availableWaterMm, 60);
   assert.equal(result.snapshot.inputs.waterStorageMm, 90);
+});
+
+// ---------------------------------------------------------------------------
+// Drainage decay in mm-based depletion path
+// ---------------------------------------------------------------------------
+
+test("drainage decay produces different depletion for recent vs old rain", async () => {
+  const { repository } = makeRepository();
+  // FC=30%, WP=10%, depth=30cm => fcMm=90, wpMm=30
+  // baseStorageMm = (30/100)*300 = 90mm (at FC)
+  // netWaterBalanceMm = 40mm => rawStorageMm = 130mm (exceeds FC)
+  // FC=30% => inferTextureClass => "loam" (25 ≤ 30 < 35), tau=18h
+
+  // 2 hours after rain: drainage is small, most excess remains
+  const recentRain = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: makeSoilSources({
+      soilMoisturePct: 30,
+      fieldCapacityPct: 30,
+      wiltingPointPct: 10,
+      netWaterBalance24hMm: 40,
+      hoursSinceLastObservation: 2,
+    }),
+  });
+
+  // 72 hours after rain: drainage is nearly complete, excess mostly drained
+  const oldRain = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: makeSoilSources({
+      soilMoisturePct: 30,
+      fieldCapacityPct: 30,
+      wiltingPointPct: 10,
+      netWaterBalance24hMm: 40,
+      hoursSinceLastObservation: 72,
+    }),
+  });
+
+  // Recent rain should have higher storage (less drainage)
+  const recentStorage = recentRain.snapshot.inputs.waterStorageMm ?? 0;
+  const oldStorage = oldRain.snapshot.inputs.waterStorageMm ?? 0;
+
+  assert.ok(
+    recentStorage > oldStorage,
+    `Expected recent rain storage (${recentStorage}) > old rain storage (${oldStorage})`,
+  );
+
+  // Both should still be above FC (90mm) since drainage is partial
+  assert.ok(
+    recentStorage > 90,
+    `Expected recent rain storage (${recentStorage}) > FC (90mm)`,
+  );
+
+  // Depletion should differ: more negative for recent rain (more excess)
+  const recentDepletion = recentRain.snapshot.inputs.depletionPct ?? 0;
+  const oldDepletion = oldRain.snapshot.inputs.depletionPct ?? 0;
+
+  assert.ok(
+    recentDepletion < oldDepletion,
+    `Expected recent rain depletion (${recentDepletion}) < old rain depletion (${oldDepletion})`,
+  );
+});
+
+test("drainage has no effect when storage is at or below FC", async () => {
+  const { repository } = makeRepository();
+  // FC=35%, WP=15%, storage at 25% (below FC) => no drainage
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: makeSoilSources({
+      soilMoisturePct: 25,
+      fieldCapacityPct: 35,
+      wiltingPointPct: 15,
+      hoursSinceLastObservation: 2,
+    }),
+  });
+
+  // Storage = (25/100)*300 = 75mm, FC = 105mm
+  // No excess, so drainage = 0, storage unchanged
+  assert.equal(result.snapshot.inputs.waterStorageMm, 75);
+  assert.equal(result.snapshot.inputs.depletionPct, 50); // (105-75)/(105-45)*100 = 50
+});
+
+// ---------------------------------------------------------------------------
+// Depth translation integration
+// ---------------------------------------------------------------------------
+
+test("uses resolveRootZoneMoisture when soilMoistureLayers are provided", async () => {
+  const { repository } = makeRepository();
+
+  // Provide raw layers: 3-9cm = 0.30, 9-27cm = 0.25, 27-81cm = 0.20
+  // For rootZoneDepthCm = 30, the depth-weighted average should differ from
+  // the pre-computed soilMoisturePct value (which we set to something clearly different).
+  const withLayers = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: {
+      rasterObservation: null,
+      weatherObservation: {
+        sourceKey: "open-meteo:hourly-v1",
+        airTemperatureC: 20,
+        precipitationMm: 0,
+        relativeHumidityPct: null,
+        soilMoisturePct: 10, // deliberately different from depth-translated value
+        evapotranspirationMm: 0,
+        soilMoistureLayers: {
+          soil_moisture_3_to_9cm: 0.30,
+          soil_moisture_9_to_27cm: 0.25,
+          soil_moisture_27_to_81cm: 0.20,
+        },
+        soilMoistureLayerSchema: "forecast",
+      },
+      rootZoneDepthCm: 30,
+    },
+  });
+
+  // Without layers — uses pre-computed soilMoisturePct = 10
+  const withoutLayers = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: {
+      rasterObservation: null,
+      weatherObservation: {
+        sourceKey: "open-meteo:hourly-v1",
+        airTemperatureC: 20,
+        precipitationMm: 0,
+        relativeHumidityPct: null,
+        soilMoisturePct: 10,
+        evapotranspirationMm: 0,
+      },
+      rootZoneDepthCm: 30,
+    },
+  });
+
+  // The depth-translated moisture (~25%) should produce a higher rootZonePct
+  // than the pre-computed 10%.
+  assert.ok(
+    withLayers.snapshot.rootZonePct > withoutLayers.snapshot.rootZonePct,
+    `Expected depth-translated rootZonePct (${withLayers.snapshot.rootZonePct}) ` +
+      `to be greater than pre-computed (${withoutLayers.snapshot.rootZonePct})`,
+  );
+
+  // Verify provenance tracks depth translation usage
+  assert.equal(withLayers.snapshot.inputs.usedDepthTranslation, true);
+  assert.equal(withoutLayers.snapshot.inputs.usedDepthTranslation, false);
+});
+
+test("falls back to soilMoisturePct when soilMoistureLayers is null", async () => {
+  const { repository } = makeRepository();
+
+  const withNull = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: {
+      rasterObservation: null,
+      weatherObservation: {
+        sourceKey: "open-meteo:hourly-v1",
+        airTemperatureC: 20,
+        precipitationMm: 0,
+        relativeHumidityPct: null,
+        soilMoisturePct: 40,
+        evapotranspirationMm: 0,
+        soilMoistureLayers: null,
+      },
+      rootZoneDepthCm: 30,
+    },
+  });
+
+  const withoutField = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: {
+      rasterObservation: null,
+      weatherObservation: {
+        sourceKey: "open-meteo:hourly-v1",
+        airTemperatureC: 20,
+        precipitationMm: 0,
+        relativeHumidityPct: null,
+        soilMoisturePct: 40,
+        evapotranspirationMm: 0,
+      },
+      rootZoneDepthCm: 30,
+    },
+  });
+
+  // Should produce identical results
+  assert.equal(
+    withNull.snapshot.rootZonePct,
+    withoutField.snapshot.rootZonePct,
+    "null soilMoistureLayers should fall back to soilMoisturePct",
+  );
+  assert.equal(withNull.snapshot.inputs.usedDepthTranslation, false);
+});
+
+test("depth translation respects custom rootZoneDepthCm", async () => {
+  const { repository } = makeRepository();
+
+  // With shallow root zone (10cm), only the 3-9cm layer has significant overlap
+  const shallow = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: {
+      rasterObservation: null,
+      weatherObservation: {
+        sourceKey: "open-meteo:hourly-v1",
+        airTemperatureC: 20,
+        precipitationMm: 0,
+        relativeHumidityPct: null,
+        soilMoisturePct: 30,
+        evapotranspirationMm: 0,
+        soilMoistureLayers: {
+          soil_moisture_3_to_9cm: 0.40,  // wetter shallow
+          soil_moisture_9_to_27cm: 0.15, // drier deep
+          soil_moisture_27_to_81cm: 0.10,
+        },
+      },
+      rootZoneDepthCm: 10,
+    },
+  });
+
+  // With deeper root zone (60cm), the drier deep layers pull the average down
+  const deep = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: {
+      rasterObservation: null,
+      weatherObservation: {
+        sourceKey: "open-meteo:hourly-v1",
+        airTemperatureC: 20,
+        precipitationMm: 0,
+        relativeHumidityPct: null,
+        soilMoisturePct: 30,
+        evapotranspirationMm: 0,
+        soilMoistureLayers: {
+          soil_moisture_3_to_9cm: 0.40,
+          soil_moisture_9_to_27cm: 0.15,
+          soil_moisture_27_to_81cm: 0.10,
+        },
+      },
+      rootZoneDepthCm: 60,
+    },
+  });
+
+  // Shallow root zone should see higher moisture (wetter surface layers)
+  assert.ok(
+    shallow.snapshot.rootZonePct > deep.snapshot.rootZonePct,
+    `Expected shallow rootZonePct (${shallow.snapshot.rootZonePct}) ` +
+      `to be greater than deep (${deep.snapshot.rootZonePct})`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Crop-stage-aware root depth integration tests
+// ---------------------------------------------------------------------------
+
+test("explicit rootZoneDepthCm on sources overrides the crop-stage-computed value", async () => {
+  const { repository } = makeRepository();
+
+  // Corn at flowering would compute 50cm, but explicit override of 20cm should win
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: {
+      ...makeSoilSources({
+        soilMoisturePct: 30,
+        fieldCapacityPct: 40,
+        wiltingPointPct: 10,
+        rootZoneDepthCm: 20,
+      }),
+      cropType: "corn",
+      growthStage: "flowering",
+    },
+  });
+
+  // The provenance should record the explicit 20cm, not the crop-computed 50cm
+  assert.equal(result.snapshot.inputs.rootZoneDepthCm, 20);
+});
+
+test("crop-stage root depth used when rootZoneDepthCm not provided on sources", async () => {
+  const { repository } = makeRepository();
+
+  // Corn at flowering → resolveRootDepthCm returns 50cm
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: {
+      rasterObservation: null,
+      weatherObservation: {
+        sourceKey: "weather-v1",
+        airTemperatureC: 20,
+        precipitationMm: 0,
+        relativeHumidityPct: null,
+        soilMoisturePct: 30,
+        evapotranspirationMm: 0,
+      },
+      fieldCapacityPct: 40,
+      wiltingPointPct: 10,
+      cropType: "corn",
+      growthStage: "flowering",
+      // rootZoneDepthCm intentionally omitted
+    },
+  });
+
+  assert.equal(result.snapshot.inputs.rootZoneDepthCm, 50);
 });

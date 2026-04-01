@@ -21,6 +21,7 @@ export type MoistureInputProvenance = {
   usedSar?: boolean;
   usedWeather?: boolean;
   usedWeatherSoilMoisture?: boolean;
+  usedDepthTranslation?: boolean;
   confidenceScore?: number;
   confidenceReason?: string;
   rasterAgeHours?: number;

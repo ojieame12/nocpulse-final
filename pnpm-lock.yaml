@@ -256,6 +256,9 @@ importers:
 
   packages/modules/moisture:
     dependencies:
+      '@fieldpulse/module-weather':
+        specifier: workspace:*
+        version: link:../weather
       '@fieldpulse/platform-db':
         specifier: workspace:*
         version: link:../../platform/db

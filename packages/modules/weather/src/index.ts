@@ -79,6 +79,18 @@ export { createSupabaseFieldWeatherObservationRepository } from "./infrastructur
 export { createSupabaseFieldWeatherForecastRepository } from "./infrastructure/createSupabaseFieldWeatherForecastRepository";
 export { createSupabaseFieldWeatherDerivedSignalSetRepository } from "./infrastructure/createSupabaseFieldWeatherDerivedSignalSetRepository";
 export {
+  computeHistoricalAnomaly,
+  type HistoricalAnomalyResult,
+  type ComputeHistoricalAnomalyOptions,
+} from "./application/computeHistoricalAnomaly";
+export {
+  createOpenMeteoHistoricalClient,
+  parseArchiveResponse,
+  type CreateOpenMeteoHistoricalClientOptions,
+  type HistoricalSoilMoistureResult,
+  type OpenMeteoHistoricalClient,
+} from "./infrastructure/createOpenMeteoHistoricalClient";
+export {
   type CanonicalDepthRange,
   type DepthSchema,
   type DepthLayer,
