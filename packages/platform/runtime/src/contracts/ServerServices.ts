@@ -537,6 +537,85 @@ export type CommitFieldImportBatchInput = {
   onboardingDryRun?: boolean;
 };
 
+export type FieldHydrationMode =
+  | "cold-bootstrap"
+  | "refresh"
+  | "inline-replay"
+  | "existing";
+
+export type FieldHydrationStatus = "queued" | "completed";
+
+export type FieldHydrationStageSummary = {
+  key: "soil" | "weather" | "imagery" | "moisture";
+  label: string;
+  state: "pending" | "completed";
+  statusText: string;
+};
+
+export type FieldMoistureConfidenceSummary = {
+  level: "low" | "medium" | "high" | "unknown";
+  score: number | null;
+  reason: string | null;
+  observedAt: string | null;
+  sourceKey: string | null;
+  derivationMode: "source-backed" | "seeded-range" | null;
+  rasterMode: "provider" | "synthetic" | "none" | null;
+  signalBlend:
+    | "raster+weather"
+    | "raster-only"
+    | "weather-only"
+    | "seeded"
+    | null;
+  baselineDataset: string | null;
+  soilDataset: string | null;
+  weatherSourceKey: string | null;
+  rasterSourceKey: string | null;
+  usedOptical: boolean;
+  usedSar: boolean;
+  usedWeather: boolean;
+  usedWeatherSoilMoisture: boolean;
+};
+
+export type FieldHydrationSummary = {
+  fieldId: string;
+  fieldName: string;
+  action: "created" | "reused";
+  hydrationMode: FieldHydrationMode;
+  status: FieldHydrationStatus;
+  progressPct: number;
+  phaseLabel: string;
+  sourceFieldId?: string;
+  sourceWorkspaceId?: string;
+  sourceWorkspaceSlug?: string | null;
+  stages: readonly FieldHydrationStageSummary[];
+  coverage: {
+    hasSoilContext: boolean;
+    hasWeatherObservation: boolean;
+    hasWeatherForecast: boolean;
+    hasRasterObservation: boolean;
+    hasMoistureSnapshot: boolean;
+    weatherObservationCount: number | null;
+    weatherForecastCount: number | null;
+    moistureSnapshotCount: number | null;
+    moistureCellCount: number | null;
+  };
+  moistureConfidence: FieldMoistureConfidenceSummary | null;
+};
+
+export type BatchHydrationSummary = {
+  totalFields: number;
+  createdFields: number;
+  reusedFields: number;
+  queuedFields: number;
+  completedFields: number;
+  replayedFields: number;
+  existingFields: number;
+  highConfidenceFields: number;
+  mediumConfidenceFields: number;
+  lowConfidenceFields: number;
+  unknownConfidenceFields: number;
+};
+
 export type CommitFieldImportBatchResult = {
   batch: FieldImportBatch;
   candidates: CommitSpreadsheetImportBatchResult["candidates"];
@@ -545,6 +624,8 @@ export type CommitFieldImportBatchResult = {
     action: "created" | "reused";
     receipts: readonly FieldOnboardingDispatchReceipt[];
   }[];
+  fieldHydrationSummaries: readonly FieldHydrationSummary[];
+  batchHydrationSummary: BatchHydrationSummary;
 };
 
 export type ServerServices = {
