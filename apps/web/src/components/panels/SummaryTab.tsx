@@ -40,6 +40,13 @@ export interface SummaryOutlookDay {
 /** Semantic moisture confidence tier for UI styling. */
 export type MoistureConfidenceLevel = 'high' | 'medium' | 'low' | 'unknown';
 
+export interface FieldDataQualitySummary {
+  label: 'Ready' | 'Limited' | 'Modeled' | 'Stale';
+  tone: 'positive' | 'warning' | 'danger' | 'muted';
+  summary: string;
+  reasons: string[];
+}
+
 export interface FieldSummaryProps {
   name: string;
   lld: string;
@@ -105,6 +112,7 @@ export interface FieldSummaryProps {
     weather: string | null;
     soil: string | null;
   } | null;
+  dataQuality?: FieldDataQualitySummary | null;
 }
 
 /* ── Layer Pills ── */
