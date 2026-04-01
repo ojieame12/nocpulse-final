@@ -17,6 +17,7 @@ import {
   buildObservationHistoryLabels,
   extractTrackedZoneIds,
   formatHistoryLabel,
+  shortProviderTag,
 } from "./buildFieldOverviewViewModel.shared";
 import {
   averageAgronomicMeasurement,
@@ -163,46 +164,77 @@ export function buildReportProps(
   const peakVpd = weatherSignals?.peakForecastVpdKpa24h ?? null;
   const waterBalance72h = weatherSignals?.netWaterBalance72hMm ?? null;
 
+  /* Derive a short human-readable source tag from a sourceKey or providerKey.
+     Intentionally terse — these appear as tiny hints next to values. */
+  const moistureMode = moisture?.latestSnapshot?.inputs?.derivationMode;
+  const moistureSourceTag =
+    moistureMode === "source-backed" ? "SAR" :
+    moistureMode === "seeded-range" ? "Modeled" : undefined;
+
+  const weatherSourceTag = obs?.providerKey
+    ? shortProviderTag(obs.providerKey)
+    : undefined;
+
+  const opticalSourceTag = latestOpticalRaster?.sourceKey
+    ? shortProviderTag(latestOpticalRaster.sourceKey)
+    : undefined;
+
+  const ndmiSourceTag = latestNdmiRaster?.sourceKey
+    ? shortProviderTag(latestNdmiRaster.sourceKey)
+    : undefined;
+
+  const radarSourceTag = latestRadarWetnessRaster?.sourceKey
+    ? shortProviderTag(latestRadarWetnessRaster.sourceKey)
+    : undefined;
+
   const readings: ReportReadingCell[] = [
     {
       iconKey: "temperature" as ReadingIconKey,
       label: "Temperature",
       value: obs ? `${obs.airTemperatureC.toFixed(1)}°C` : "—",
+      sourceTag: weatherSourceTag,
     },
     {
       iconKey: "soil-moisture" as ReadingIconKey,
       label: "Soil Moisture",
       value: obs?.soilMoisturePct != null ? `${obs.soilMoisturePct.toFixed(1)}%` : "—",
+      sourceTag: weatherSourceTag,
     },
     {
       iconKey: "root-moisture" as ReadingIconKey,
       label: "Root Moisture",
       value: rootMoistureAvg != null ? `${rootMoistureAvg.toFixed(1)}%` : "—",
+      sourceTag: moistureSourceTag,
     },
     {
       iconKey: "wind" as ReadingIconKey,
       label: "Wind",
       value: obs ? `${obs.windSpeedKph.toFixed(0)} km/h` : "—",
+      sourceTag: weatherSourceTag,
     },
     {
       iconKey: "ndvi" as ReadingIconKey,
       label: "NDVI",
       value: opticalNdviAvg != null ? opticalNdviAvg.toFixed(2) : "—",
+      sourceTag: opticalSourceTag,
     },
     {
       iconKey: "ndre" as ReadingIconKey,
       label: "NDRE",
       value: opticalNdreAvg != null ? opticalNdreAvg.toFixed(2) : "—",
+      sourceTag: opticalSourceTag,
     },
     {
       iconKey: "ndmi" as ReadingIconKey,
       label: ndmiMetricContract.label,
       value: ndmiAvg != null ? ndmiAvg.toFixed(2) : "—",
+      sourceTag: ndmiSourceTag,
     },
     {
       iconKey: "radar-wetness" as ReadingIconKey,
       label: radarWetnessMetricContract.label,
       value: radarWetnessAvg != null ? radarWetnessAvg.toFixed(2) : "—",
+      sourceTag: radarSourceTag,
     },
     {
       iconKey: "stress-area" as ReadingIconKey,

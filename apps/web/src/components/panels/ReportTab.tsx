@@ -35,6 +35,8 @@ export interface ReportReadingCell {
   label: string;
   value: string;
   valueColor?: string;
+  /** Tiny provenance hint shown beneath the value — e.g. "SAR", "Optical", "Weather". */
+  sourceTag?: string;
 }
 
 export interface ReportCropParam {
@@ -218,6 +220,9 @@ function ReadingsSection({ readings }: { readings: ReportReadingCell[] }) {
                   >
                     {r.value}
                   </span>
+                  {r.sourceTag ? (
+                    <span className="panel__data-cell-source">{r.sourceTag}</span>
+                  ) : null}
                 </div>
               );
             })}

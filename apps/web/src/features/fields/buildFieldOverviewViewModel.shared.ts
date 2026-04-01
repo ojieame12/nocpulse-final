@@ -203,6 +203,25 @@ export function shortProviderLabel(value: string | null | undefined) {
   }
 }
 
+/** Compact source tag for inline provenance hints (even shorter than shortProviderLabel). */
+export function shortProviderTag(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  switch (value) {
+    case "sentinel-1":      return "SAR";
+    case "sentinel-2":      return "Optical";
+    case "planet":           return "Planet";
+    case "open-meteo":       return "Weather";
+    case "synthetic-raster-grid-v1":
+    case "synthetic":        return "Synthetic";
+    default:
+      // Strip common prefixes for unknown keys — e.g. "era5-land" → "ERA5"
+      if (value.startsWith("era5")) return "ERA5";
+      if (value.startsWith("synthetic")) return "Synthetic";
+      // Capitalise first word for anything else
+      return value.split("-")[0].charAt(0).toUpperCase() + value.split("-")[0].slice(1);
+  }
+}
+
 export function toPrimitiveMetadata(
   value: unknown,
 ): Readonly<Record<string, string | number | boolean | null>> {

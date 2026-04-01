@@ -185,6 +185,12 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
             </div>
           </div>
         </div>
+        {field.moistureDerivationMode && field.moistureDerivationMode !== 'unknown' ? (
+          <span className="donut-source-tag">
+            {field.moistureDerivationMode === 'source-backed' ? 'Satellite-derived' : 'Modeled estimate'}
+            {field.confidenceSub && field.confidenceSub !== 'No source' ? ` · ${field.confidenceSub}` : ''}
+          </span>
+        ) : null}
       </div>
 
       {/* CONDITIONS */}
