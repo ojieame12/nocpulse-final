@@ -49,17 +49,13 @@ export function AuthNoticeScreen({
           overflow: "hidden",
         }}
       >
-        {showLogo && (
-          <div style={{ padding: "16px 20px 0", display: "flex", alignItems: "center" }}>
-            <img src="/logo.svg" alt="NocPulse" style={{ height: 14, opacity: 0.5 }} />
-          </div>
-        )}
         <header
           style={{
             minHeight: "var(--panel-header-h)",
             padding: "var(--panel-header-padding)",
             display: "flex",
             alignItems: "center",
+            justifyContent: "space-between",
             borderBottom: "1px solid var(--border-light)",
             background: "var(--panel-header-bg)",
             fontFamily: "var(--font-body)",
@@ -70,7 +66,10 @@ export function AuthNoticeScreen({
             color: "var(--text-muted)",
           }}
         >
-          {eyebrow}
+          {showLogo ? (
+            <img src="/logo.svg" alt="NocPulse" style={{ height: 12, opacity: 0.4 }} />
+          ) : null}
+          <span>{eyebrow}</span>
         </header>
         <div
           style={{
