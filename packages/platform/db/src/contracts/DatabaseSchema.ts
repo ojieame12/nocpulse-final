@@ -2055,6 +2055,27 @@ export type DatabaseSchema = {
           raster_observation: boolean;
         }[];
       };
+      replay_field_hydration_from_committed_batch: {
+        Args: {
+          target_workspace_id: string;
+          target_batch_id: string;
+        };
+        Returns: {
+          target_field_id: string;
+          action: string;
+          reason: string | null;
+          source_field_id: string | null;
+          source_workspace_id: string | null;
+          source_workspace_slug: string | null;
+          copied_crop_context: boolean;
+          weather_observation_count: number;
+          weather_forecast_count: number;
+          weather_signal_set: boolean;
+          moisture_snapshot_count: number;
+          moisture_cell_count: number;
+          raster_observation: boolean;
+        }[];
+      };
     };
     Enums: {
       workspace_role: "owner" | "manager" | "member" | "viewer";

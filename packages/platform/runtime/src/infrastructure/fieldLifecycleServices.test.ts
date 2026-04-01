@@ -205,6 +205,16 @@ test("commitFieldImportBatch uses refresh onboarding after hydration replay", as
     {
       jobDispatcher: createDispatcher(recordedJobKeys),
       hydrationReplay: {
+        async replayFromCommittedBatch() {
+          return [
+            {
+              targetFieldId: FIELD_ID,
+              action: "replayed" as const,
+              sourceFieldId: "source-field-1",
+              sourceWorkspaceId: "source-workspace-1",
+            },
+          ];
+        },
         async replayFromImportCandidate() {
           return {
             action: "replayed",
@@ -233,6 +243,15 @@ test("commitFieldImportBatch uses bootstrap onboarding when hydration replay ski
     {
       jobDispatcher: createDispatcher(recordedJobKeys),
       hydrationReplay: {
+        async replayFromCommittedBatch() {
+          return [
+            {
+              targetFieldId: FIELD_ID,
+              action: "skipped" as const,
+              reason: "no-source-field" as const,
+            },
+          ];
+        },
         async replayFromImportCandidate() {
           return {
             action: "skipped",
@@ -262,6 +281,21 @@ test("commitFieldImportBatch retries hydration replay before falling back", asyn
     {
       jobDispatcher: createDispatcher(recordedJobKeys),
       hydrationReplay: {
+        async replayFromCommittedBatch() {
+          attempts += 1;
+          if (attempts < 3) {
+            throw new Error("transient replay failure");
+          }
+
+          return [
+            {
+              targetFieldId: FIELD_ID,
+              action: "replayed" as const,
+              sourceFieldId: "source-field-1",
+              sourceWorkspaceId: "source-workspace-1",
+            },
+          ];
+        },
         async replayFromImportCandidate() {
           attempts += 1;
           if (attempts < 3) {
@@ -285,5 +319,40 @@ test("commitFieldImportBatch retries hydration replay before falling back", asyn
 
   assert.equal(result.candidates[0]?.action, "created");
   assert.equal(attempts, 3);
+  assert.deepEqual(recordedJobKeys, ["field.refresh-intake"]);
+});
+
+test("commitFieldImportBatch falls back to per-field replay when batch replay omits a field", async () => {
+  const recordedJobKeys: string[] = [];
+  const repositories = createRepositories();
+  let perFieldAttempts = 0;
+
+  const result = await commitFieldImportBatch(
+    repositories,
+    {
+      jobDispatcher: createDispatcher(recordedJobKeys),
+      hydrationReplay: {
+        async replayFromCommittedBatch() {
+          return [];
+        },
+        async replayFromImportCandidate() {
+          perFieldAttempts += 1;
+          return {
+            action: "replayed",
+            sourceFieldId: "source-field-1",
+            sourceWorkspaceId: "source-workspace-1",
+          };
+        },
+      },
+    },
+    {
+      actorUserId: ACTOR_USER_ID,
+      workspaceId: WORKSPACE_ID,
+      batchId: BATCH_ID,
+    },
+  );
+
+  assert.equal(result.candidates[0]?.action, "created");
+  assert.equal(perFieldAttempts, 1);
   assert.deepEqual(recordedJobKeys, ["field.refresh-intake"]);
 });

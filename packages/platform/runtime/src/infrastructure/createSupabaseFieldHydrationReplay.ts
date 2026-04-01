@@ -7,6 +7,8 @@ import type { ServerRepositories } from "../contracts/ServerRuntime";
 
 type ReplayFieldHydrationRpcRow =
   DatabaseSchema["app"]["Functions"]["replay_field_hydration_from_import_candidate"]["Returns"][number];
+type ReplayBatchHydrationRpcRow =
+  DatabaseSchema["app"]["Functions"]["replay_field_hydration_from_committed_batch"]["Returns"][number];
 
 export type ReplayFieldHydrationInput = {
   targetWorkspaceId: string;
@@ -41,6 +43,14 @@ export type FieldHydrationReplay = {
   replayFromImportCandidate(
     input: ReplayFieldHydrationInput,
   ): Promise<ReplayFieldHydrationResult>;
+  replayFromCommittedBatch(input: {
+    targetWorkspaceId: string;
+    batchId: string;
+  }): Promise<
+    readonly (ReplayFieldHydrationResult & {
+      targetFieldId: string;
+    })[]
+  >;
 };
 
 function normalizeLldFragment(value: string) {
@@ -110,6 +120,22 @@ export function createSupabaseFieldHydrationReplay(
   >,
 ): FieldHydrationReplay {
   return {
+    async replayFromCommittedBatch(input) {
+      const result = await client.rpc("replay_field_hydration_from_committed_batch", {
+        target_workspace_id: input.targetWorkspaceId,
+        target_batch_id: input.batchId,
+      });
+
+      return (
+        requireSupabaseData(
+          result,
+          "fieldHydrationReplay.replayFromCommittedBatch.rpc",
+        ) as readonly ReplayBatchHydrationRpcRow[]
+      ).map((row) => ({
+        targetFieldId: row.target_field_id,
+        ...mapReplayResult(row),
+      }));
+    },
     async replayFromImportCandidate(
       input: ReplayFieldHydrationInput,
     ): Promise<ReplayFieldHydrationResult> {

@@ -62,6 +62,29 @@ async function replayFieldHydrationWithRetry(
     : new Error(String(lastError ?? "Unknown hydration replay error"));
 }
 
+async function replayFieldHydrationBatchWithRetry(
+  hydrationReplay: FieldHydrationReplay,
+  input: Parameters<FieldHydrationReplay["replayFromCommittedBatch"]>[0],
+) {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < HYDRATION_REPLAY_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await hydrationReplay.replayFromCommittedBatch(input);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= HYDRATION_REPLAY_RETRY_DELAYS_MS.length) {
+        break;
+      }
+      await delay(HYDRATION_REPLAY_RETRY_DELAYS_MS[attempt]!);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(String(lastError ?? "Unknown hydration replay batch error"));
+}
+
 export async function requireFieldDetail(
   repositories: ServerRepositories,
   workspaceId: string,
@@ -179,6 +202,38 @@ export async function commitFieldImportBatch(
   const onboardingDispatches: Array<
     CommitFieldImportBatchResult["onboardingDispatches"][number]
   > = [];
+  const replayResultsByFieldId = new Map<
+    string,
+    Awaited<ReturnType<FieldHydrationReplay["replayFromCommittedBatch"]>>[number]
+  >();
+
+  if (options.hydrationReplay) {
+    const createdCandidates = committed.candidates.filter(
+      (candidate) => candidate.action === "created",
+    );
+
+    if (createdCandidates.length > 0) {
+      try {
+        const replayResults = await replayFieldHydrationBatchWithRetry(
+          options.hydrationReplay,
+          {
+            targetWorkspaceId: input.workspaceId,
+            batchId: input.batchId,
+          },
+        );
+
+        for (const replayResult of replayResults) {
+          replayResultsByFieldId.set(replayResult.targetFieldId, replayResult);
+        }
+      } catch (error) {
+        console.warn(
+          `[field-intake] hydration replay batch skipped for batch ${input.batchId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+  }
 
   for (const candidate of committed.candidates) {
     if (candidate.candidate.cropType) {
@@ -202,22 +257,28 @@ export async function commitFieldImportBatch(
 
     let hydrationReplayAction: "replayed" | "skipped" = "skipped";
     if (candidate.action === "created" && options.hydrationReplay) {
-      try {
-        const replayResult =
-          await replayFieldHydrationWithRetry(options.hydrationReplay, {
-            targetWorkspaceId: candidate.field.workspaceId,
-            targetFieldId: candidate.field.id,
-            fieldName: candidate.field.name,
-            cropType: candidate.candidate.cropType,
-            legalLandDescriptions: candidate.candidate.legalLandDescriptions,
-          });
-        hydrationReplayAction = replayResult.action;
-      } catch (error) {
-        console.warn(
-          `[field-intake] hydration replay skipped for field ${candidate.field.id}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
+      const batchReplayResult = replayResultsByFieldId.get(candidate.field.id);
+
+      if (batchReplayResult) {
+        hydrationReplayAction = batchReplayResult.action;
+      } else {
+        try {
+          const replayResult =
+            await replayFieldHydrationWithRetry(options.hydrationReplay, {
+              targetWorkspaceId: candidate.field.workspaceId,
+              targetFieldId: candidate.field.id,
+              fieldName: candidate.field.name,
+              cropType: candidate.candidate.cropType,
+              legalLandDescriptions: candidate.candidate.legalLandDescriptions,
+            });
+          hydrationReplayAction = replayResult.action;
+        } catch (error) {
+          console.warn(
+            `[field-intake] hydration replay skipped for field ${candidate.field.id}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
       }
     }
 
