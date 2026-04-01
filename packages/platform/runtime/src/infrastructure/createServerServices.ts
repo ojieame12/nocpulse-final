@@ -143,6 +143,7 @@ import {
   requireFieldDetail,
   saveSpreadsheetImportPreview,
 } from "./fieldLifecycleServices";
+import type { FieldHydrationReplay } from "./createSupabaseFieldHydrationReplay";
 import {
   buildRecentDiseaseRiskReport,
   buildRecentHailRefreshReport,
@@ -626,6 +627,7 @@ export function createServerServices(
     weatherProviderClient?: WeatherProviderClient;
     reportArtifactStore?: ReportArtifactStore;
     lldGeocodeCache?: LldGeocodeCache;
+    hydrationReplay?: FieldHydrationReplay;
   } = {},
 ): ServerServices {
   const fieldBoundaryFileParser = createDefaultFieldBoundaryFileParser();

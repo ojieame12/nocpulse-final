@@ -28,6 +28,7 @@ import type {
   SaveSpreadsheetImportPreviewResult,
 } from "../contracts/ServerServices";
 import { createDefaultMoistureCellDerivationStrategy } from "./createDefaultMoistureCellDerivationStrategy";
+import type { FieldHydrationReplay } from "./createSupabaseFieldHydrationReplay";
 
 export async function requireFieldDetail(
   repositories: ServerRepositories,
@@ -131,6 +132,7 @@ export async function commitFieldImportBatch(
   repositories: ServerRepositories,
   options: {
     jobDispatcher?: ServerJobDispatcher;
+    hydrationReplay?: FieldHydrationReplay;
   },
   input: CommitFieldImportBatchInput,
 ): Promise<CommitFieldImportBatchResult> {
@@ -166,6 +168,27 @@ export async function commitFieldImportBatch(
       });
     }
 
+    let hydrationReplayAction: "replayed" | "skipped" = "skipped";
+    if (candidate.action === "created" && options.hydrationReplay) {
+      try {
+        const replayResult =
+          await options.hydrationReplay.replayFromImportCandidate({
+            targetWorkspaceId: candidate.field.workspaceId,
+            targetFieldId: candidate.field.id,
+            fieldName: candidate.field.name,
+            cropType: candidate.candidate.cropType,
+            legalLandDescriptions: candidate.candidate.legalLandDescriptions,
+          });
+        hydrationReplayAction = replayResult.action;
+      } catch (error) {
+        console.warn(
+          `[field-intake] hydration replay skipped for field ${candidate.field.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
     if (!options.jobDispatcher) {
       onboardingDispatches.push({
         fieldId: candidate.field.id,
@@ -182,7 +205,7 @@ export async function commitFieldImportBatch(
         },
       },
       plan:
-        candidate.action === "created"
+        candidate.action === "created" && hydrationReplayAction !== "replayed"
           ? buildInitialFieldOnboardingPlan({
               workspaceId: candidate.field.workspaceId,
               fieldId: candidate.field.id,
