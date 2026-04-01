@@ -62,6 +62,7 @@ import {
   startPerfTimer,
   toCapturePercentLabel,
   toEarlierTimestamp,
+  resolveHistoricalAnomalyFromReadModel,
   toPrimitiveMetadata,
   toTimestampMillis,
 } from "./buildFieldOverviewViewModel.shared";
@@ -939,6 +940,7 @@ export async function buildFieldOverviewViewModel(
         ? `${Math.round(entry.precipitationProbabilityPct)}%`
         : `${entry.precipitationMm.toFixed(1)}mm`,
     })),
+    historicalAnomaly: resolveHistoricalAnomalyFromReadModel(readModel),
   };
 
   const viewModel = {

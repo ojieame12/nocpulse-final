@@ -243,3 +243,30 @@ export function toPrimitiveMetadata(
 
   return Object.freeze(metadata);
 }
+
+/**
+ * Resolve pre-computed historical anomaly fields from the read model into the
+ * summary-props shape. Returns `null` when the read model has no anomaly data.
+ */
+export function resolveHistoricalAnomalyFromReadModel(readModel: {
+  historicalAnomalyPercentile?: number | null;
+  historicalAnomalyDescription?: string | null;
+}): {
+  percentile: number;
+  description: string;
+  anomalyClass: 'unusually-dry' | 'normal' | 'unusually-wet';
+} | null {
+  if (readModel.historicalAnomalyPercentile == null) {
+    return null;
+  }
+  return {
+    percentile: readModel.historicalAnomalyPercentile,
+    description: readModel.historicalAnomalyDescription ?? '',
+    anomalyClass:
+      readModel.historicalAnomalyPercentile > 75
+        ? 'unusually-dry'
+        : readModel.historicalAnomalyPercentile < 25
+          ? 'unusually-wet'
+          : 'normal',
+  };
+}

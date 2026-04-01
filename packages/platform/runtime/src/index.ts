@@ -79,3 +79,7 @@ export {
 } from "./contracts/ServerServices";
 export { createServerRuntime } from "./infrastructure/createServerRuntime";
 export { createPersistentServerJobDispatcher } from "./infrastructure/createPersistentServerJobDispatcher";
+export {
+  type FeatureFlags,
+  resolveFeatureFlags,
+} from "./application/resolveFeatureFlags";

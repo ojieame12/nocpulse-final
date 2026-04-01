@@ -21,6 +21,7 @@ import type {
 import type { ImageryProviderProbeRecord } from "@fieldpulse/module-imagery";
 import type { WorkerJobContext } from "./contracts/WorkerJobContext";
 import { refreshMarketQuotes } from "../marketRefreshQuotes";
+import { enrichFieldSoilProperties, type SoilEnrichResult } from "../soilEnrich";
 
 type LongRunningSmokeInput = {
   durationMs: number;
@@ -50,6 +51,7 @@ type IntakeFieldOnboardingJobResult = {
       >
     | null;
   hail: RefreshFieldHailJobResult | null;
+  soilEnrich: SoilEnrichResult | null;
   moistureEstimate:
     | Awaited<
         ReturnType<WorkerJobContext["runtime"]["services"]["moisture"]["rebuildFieldEstimate"]>
@@ -91,6 +93,7 @@ type IntakeFieldOnboardingJobState = {
   imagery: IntakeFieldOnboardingJobResult["imagery"] | null;
   weather: IntakeFieldOnboardingJobResult["weather"];
   hail: IntakeFieldOnboardingJobResult["hail"];
+  soilEnrich: IntakeFieldOnboardingJobResult["soilEnrich"];
   moistureEstimate: IntakeFieldOnboardingJobResult["moistureEstimate"];
   moistureCells: IntakeFieldOnboardingJobResult["moistureCells"];
   moistureStress: IntakeFieldOnboardingJobResult["moistureStress"];
@@ -367,6 +370,7 @@ async function runIntakeFieldOnboardingJob(input: {
       imagery: null as IntakeFieldOnboardingJobResult["imagery"] | null,
       weather: null as IntakeFieldOnboardingJobResult["weather"],
       hail: null as IntakeFieldOnboardingJobResult["hail"],
+      soilEnrich: null as IntakeFieldOnboardingJobResult["soilEnrich"],
       moistureEstimate: null as IntakeFieldOnboardingJobResult["moistureEstimate"],
       moistureCells: null as IntakeFieldOnboardingJobResult["moistureCells"],
       moistureStress: null as IntakeFieldOnboardingJobResult["moistureStress"],
@@ -470,6 +474,67 @@ async function runIntakeFieldOnboardingJob(input: {
                     intelligence,
                   },
                 };
+              },
+            },
+            {
+              key: "enrich-soil-properties",
+              progressPct: 65,
+              progressMessage: "enriching field soil properties",
+              async run(currentState: IntakeFieldOnboardingJobState) {
+                try {
+                  const fieldDetail =
+                    await input.context.runtime.services.catalog.loadFieldDetailByWorkspace(
+                      {
+                        workspaceId: input.payload.workspaceId,
+                        fieldId: input.payload.fieldId,
+                      },
+                    );
+
+                  if (!fieldDetail.field) {
+                    input.context.logger.warn(
+                      `[soil-enrich] field ${input.payload.fieldId} not found — skipping soil enrichment`,
+                    );
+                    return currentState;
+                  }
+
+                  const { createSoilPropertiesProvider } = await import(
+                    "@fieldpulse/module-soil"
+                  );
+                  const { createSupabaseDatabaseClient } = await import(
+                    "@fieldpulse/platform-db"
+                  );
+
+                  const db = createSupabaseDatabaseClient({
+                    url: input.context.runtime.env.supabase.url!,
+                    serviceKey: input.context.runtime.env.supabase.serviceRoleKey!,
+                  });
+
+                  const soilProvider = createSoilPropertiesProvider();
+
+                  const labelPoint = fieldDetail.field.detail.labelPoint;
+
+                  const result = await enrichFieldSoilProperties(
+                    {
+                      fieldId: input.payload.fieldId,
+                      centroidLat: labelPoint[1],
+                      centroidLng: labelPoint[0],
+                    },
+                    {
+                      db,
+                      soilProvider,
+                      logger: input.context.logger,
+                    },
+                  );
+
+                  return { ...currentState, soilEnrich: result };
+                } catch (error) {
+                  const message =
+                    error instanceof Error ? error.message : String(error);
+                  input.context.logger.warn(
+                    `[soil-enrich] soil enrichment failed for field ${input.payload.fieldId}: ${message} — continuing`,
+                  );
+                  return currentState;
+                }
               },
             },
             {
@@ -598,6 +663,7 @@ async function runIntakeFieldOnboardingJob(input: {
     imagery: state.imagery,
     weather: state.weather,
     hail: state.hail,
+    soilEnrich: state.soilEnrich,
     moistureEstimate: state.moistureEstimate,
     moistureCells: state.moistureCells,
     moistureStress: state.moistureStress,

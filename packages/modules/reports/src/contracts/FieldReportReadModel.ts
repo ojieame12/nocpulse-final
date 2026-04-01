@@ -78,4 +78,13 @@ export type FieldReportReadModel = {
   findings: readonly FieldIntelligenceFinding[];
   zones: FieldZoneActivityReport;
   summary: FieldReportSummary;
+
+  /**
+   * Pre-computed historical anomaly fields, populated by the worker during
+   * the overview_rebuild phase. Optional — absent until the worker has run
+   * the historical comparison for this field.
+   */
+  historicalAnomalyPercentile?: number | null;
+  historicalAnomalyDescription?: string | null;
+  historicalAnomalyClass?: 'unusually-dry' | 'normal' | 'unusually-wet' | null;
 };

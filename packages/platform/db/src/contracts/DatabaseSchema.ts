@@ -745,6 +745,32 @@ export type DatabaseSchema = {
         }>;
         Relationships: [];
       };
+      field_soil_properties: {
+        Row: {
+          field_id: string;
+          field_capacity_pct: number | null;
+          wilting_point_pct: number | null;
+          soil_properties_fetched_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          field_id: string;
+          field_capacity_pct?: number | null;
+          wilting_point_pct?: number | null;
+          soil_properties_fetched_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<{
+          field_capacity_pct: number | null;
+          wilting_point_pct: number | null;
+          soil_properties_fetched_at: string | null;
+          created_at: string;
+          updated_at: string;
+        }>;
+        Relationships: [];
+      };
       field_yield_assumptions: {
         Row: {
           id: string;

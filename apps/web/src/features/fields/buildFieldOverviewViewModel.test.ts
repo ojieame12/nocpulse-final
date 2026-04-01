@@ -10,6 +10,7 @@ import {
   resolveOpticalSeasonality,
 } from "./buildFieldOverviewViewModel";
 import { buildActionProps } from "./buildFieldOverviewViewModel.action";
+import { resolveHistoricalAnomalyFromReadModel } from "./buildFieldOverviewViewModel.shared";
 
 function createBaseReadModel() {
   return {
@@ -937,4 +938,76 @@ test("buildActionProps applies matching cached field-action curation without cha
   assert.equal(action.questions[1]?.answer, "The active frost signal is critical and time-bound to the next overnight window.");
   assert.equal(action.questions[2]?.answer, "This wording is still grounded in the active weather-risk finding and current signal counts.");
   assert.equal(action.confidence, "Finding-backed");
+});
+
+// ---------------------------------------------------------------------------
+// resolveHistoricalAnomalyFromReadModel
+// ---------------------------------------------------------------------------
+
+test("resolveHistoricalAnomalyFromReadModel returns anomaly object when read model has percentile data", () => {
+  const result = resolveHistoricalAnomalyFromReadModel({
+    historicalAnomalyPercentile: 82,
+    historicalAnomalyDescription: "Drier than 82% of years for early April",
+  });
+
+  assert.deepEqual(result, {
+    percentile: 82,
+    description: "Drier than 82% of years for early April",
+    anomalyClass: "unusually-dry",
+  });
+});
+
+test("resolveHistoricalAnomalyFromReadModel classifies low percentile as unusually-wet", () => {
+  const result = resolveHistoricalAnomalyFromReadModel({
+    historicalAnomalyPercentile: 18,
+    historicalAnomalyDescription: "Wetter than 82% of years for mid March",
+  });
+
+  assert.equal(result!.anomalyClass, "unusually-wet");
+  assert.equal(result!.percentile, 18);
+});
+
+test("resolveHistoricalAnomalyFromReadModel classifies mid-range percentile as normal", () => {
+  const result = resolveHistoricalAnomalyFromReadModel({
+    historicalAnomalyPercentile: 50,
+    historicalAnomalyDescription: "Within normal range for late June",
+  });
+
+  assert.equal(result!.anomalyClass, "normal");
+});
+
+test("resolveHistoricalAnomalyFromReadModel returns null when percentile is missing", () => {
+  const result = resolveHistoricalAnomalyFromReadModel({});
+  assert.equal(result, null);
+});
+
+test("resolveHistoricalAnomalyFromReadModel returns null when percentile is null", () => {
+  const result = resolveHistoricalAnomalyFromReadModel({
+    historicalAnomalyPercentile: null,
+    historicalAnomalyDescription: "Should not appear",
+  });
+  assert.equal(result, null);
+});
+
+test("resolveHistoricalAnomalyFromReadModel defaults description to empty string when absent", () => {
+  const result = resolveHistoricalAnomalyFromReadModel({
+    historicalAnomalyPercentile: 60,
+  });
+
+  assert.equal(result!.description, "");
+  assert.equal(result!.anomalyClass, "normal");
+});
+
+test("resolveHistoricalAnomalyFromReadModel boundary: percentile exactly 75 is normal", () => {
+  const result = resolveHistoricalAnomalyFromReadModel({
+    historicalAnomalyPercentile: 75,
+  });
+  assert.equal(result!.anomalyClass, "normal");
+});
+
+test("resolveHistoricalAnomalyFromReadModel boundary: percentile exactly 25 is normal", () => {
+  const result = resolveHistoricalAnomalyFromReadModel({
+    historicalAnomalyPercentile: 25,
+  });
+  assert.equal(result!.anomalyClass, "normal");
 });

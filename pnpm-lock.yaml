@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      geotiff:
+        specifier: ^3.0.5
+        version: 3.0.5
     devDependencies:
       '@types/node':
         specifier: ^24.0.1
@@ -105,6 +109,9 @@ importers:
       '@fieldpulse/module-moisture':
         specifier: workspace:*
         version: link:../../packages/modules/moisture
+      '@fieldpulse/module-soil':
+        specifier: workspace:*
+        version: link:../../packages/modules/soil
       '@fieldpulse/platform-config':
         specifier: workspace:*
         version: link:../../packages/platform/config
@@ -304,6 +311,9 @@ importers:
       '@fieldpulse/platform-db':
         specifier: workspace:*
         version: link:../../platform/db
+      geotiff:
+        specifier: ^3.0.5
+        version: 3.0.5
 
   packages/modules/weather:
     dependencies:

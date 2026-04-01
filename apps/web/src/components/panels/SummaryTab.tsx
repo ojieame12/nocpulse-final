@@ -77,6 +77,11 @@ export interface FieldSummaryProps {
   sevenDayTotalSub: string;
   alerts: SummaryAlert[];
   outlook: SummaryOutlookDay[];
+  historicalAnomaly?: {
+    percentile: number;
+    description: string;
+    anomalyClass: 'unusually-dry' | 'normal' | 'unusually-wet';
+  } | null;
 }
 
 /* ── Layer Pills ── */
