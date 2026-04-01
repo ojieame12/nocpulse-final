@@ -87,8 +87,8 @@ function alertActionText(alert: ReportAlertItem): string | undefined {
 function inferWeatherDesc(temp: string, precip: string): string {
   const tempNums = temp.match(/-?\d+\.?\d*/g);
   const precipNums = precip.match(/\d+\.?\d*/g);
-  const minTemp = tempNums ? Math.min(...tempNums.map(Number)) : null;
-  const precipVal = precipNums ? Math.max(...precipNums.map(Number)) : 0;
+  const minTemp = tempNums && tempNums.length > 0 ? Math.min(...tempNums.map(Number)) : null;
+  const precipVal = precipNums && precipNums.length > 0 ? Math.max(...precipNums.map(Number)) : 0;
 
   if (minTemp !== null && minTemp <= -10) return precipVal >= 2 ? "Snow likely" : "Deep frost";
   if (minTemp !== null && minTemp <= 0) return precipVal >= 2 ? "Rain/snow mix" : "Frost risk";
@@ -123,11 +123,11 @@ function forecastRowColor(temp: string, precip: string): RGB | undefined {
   // Parse lowest temperature from strings like "-3°C / 5°C" or "Low: -2°C"
   const tempNums = temp.match(/-?\d+\.?\d*/g);
   const precipNums = precip.match(/\d+\.?\d*/g);
-  if (tempNums) {
+  if (tempNums && tempNums.length > 0) {
     const minTemp = Math.min(...tempNums.map(Number));
     if (minTemp <= 0) return RED; // Frost risk — red
   }
-  if (precipNums) {
+  if (precipNums && precipNums.length > 0) {
     const precipVal = Math.max(...precipNums.map(Number));
     if (precipVal >= 10) return [0.23, 0.51, 0.85]; // Heavy rain — blue
     if (precipVal >= 2) return [0.40, 0.65, 0.90]; // Light rain — soft blue

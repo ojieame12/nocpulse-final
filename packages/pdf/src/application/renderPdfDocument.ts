@@ -9,7 +9,7 @@ import type {
   PdfTextStyle,
   RGB,
 } from "../contracts/PdfRender";
-import { parseTTF, generatePdfFontObjects, type EmbeddedFont } from "./ttfEmbed";
+import { parseTTF, generatePdfFontObjects, type EmbeddedFont, type PdfFontObjects } from "./ttfEmbed";
 import { CAUDEX_REGULAR, CAUDEX_BOLD } from "./fontData";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -23,16 +23,31 @@ import { CAUDEX_REGULAR, CAUDEX_BOLD } from "./fontData";
 */
 let _serifRegular: EmbeddedFont | null = null;
 let _serifBold: EmbeddedFont | null = null;
+let _fontInitFailed = false;
 
-function getSerifRegular(): EmbeddedFont {
+function getSerifRegular(): EmbeddedFont | null {
+  if (_fontInitFailed) return null;
   if (!_serifRegular) {
-    _serifRegular = parseTTF(CAUDEX_REGULAR);
+    try {
+      _serifRegular = parseTTF(CAUDEX_REGULAR);
+    } catch (err) {
+      console.error("[NocPulse PDF] Failed to parse Caudex Regular font:", err);
+      _fontInitFailed = true;
+      return null;
+    }
   }
   return _serifRegular;
 }
-function getSerifBold(): EmbeddedFont {
+function getSerifBold(): EmbeddedFont | null {
+  if (_fontInitFailed) return null;
   if (!_serifBold) {
-    _serifBold = parseTTF(CAUDEX_BOLD);
+    try {
+      _serifBold = parseTTF(CAUDEX_BOLD);
+    } catch (err) {
+      console.error("[NocPulse PDF] Failed to parse Caudex Bold font:", err);
+      _fontInitFailed = true;
+      return null;
+    }
   }
   return _serifBold;
 }
@@ -424,8 +439,14 @@ function imageCmd(
 
 function estimateTextWidth(text: string, fontSize: number, font: PdfFontRef = "F1") {
   // For embedded Playfair Display, use real glyph widths
-  if (font === "F3") return getSerifRegular().measureText(text, fontSize);
-  if (font === "F4") return getSerifBold().measureText(text, fontSize);
+  if (font === "F3") {
+    const f = getSerifRegular();
+    return f ? f.measureText(text, fontSize) : text.length * fontSize * 0.5; // fallback estimate
+  }
+  if (font === "F4") {
+    const f = getSerifBold();
+    return f ? f.measureText(text, fontSize) : text.length * fontSize * 0.55; // fallback estimate
+  }
   // Average character widths for built-in PDF fonts
   const avgCharWidth =
     font === "F5" || font === "F6" ? 0.60 // Courier (monospaced)
@@ -1140,9 +1161,9 @@ function renderSparkline(
   // Background
   curPage(ctx).push(rectCmd(chartLeft, chartBottom, chartW, sparkH, BG_STRIPE));
 
-  // Normalize data
-  const minVal = Math.min(...block.data);
-  const maxVal = Math.max(...block.data);
+  // Normalize data (guard against empty/single-element edge cases)
+  const minVal = block.data.length > 0 ? Math.min(...block.data) : 0;
+  const maxVal = block.data.length > 0 ? Math.max(...block.data) : 1;
   const range = maxVal - minVal || 1;
 
   // Horizontal grid lines (4 lines including top and bottom)
@@ -1157,9 +1178,10 @@ function renderSparkline(
     );
   }
 
-  // Data points
+  // Data points (safe division: denominator is always >= 1 because of length >= 2 guard)
+  const denom = Math.max(1, block.data.length - 1);
   const points = block.data.map((val, i) => ({
-    x: chartLeft + padding + (i / (block.data.length - 1)) * (chartW - padding * 2),
+    x: chartLeft + padding + (i / denom) * (chartW - padding * 2),
     y: chartBottom + padding + ((val - minVal) / range) * (sparkH - padding * 2),
   }));
 
@@ -1179,12 +1201,14 @@ function renderSparkline(
     }
   }
 
-  // Last value label
-  const lastPt = points[points.length - 1];
-  const lastVal = block.data[block.data.length - 1];
-  curPage(ctx).push(
-    textCmd(formatAxisValue(lastVal), "F2", 8, lastPt.x + 4, lastPt.y - 3, chartColor),
-  );
+  // Last value label (guard against empty points — shouldn't happen with length >= 2 guard)
+  if (points.length > 0) {
+    const lastPt = points[points.length - 1];
+    const lastVal = block.data[block.data.length - 1] ?? 0;
+    curPage(ctx).push(
+      textCmd(formatAxisValue(lastVal), "F2", 8, lastPt.x + 4, lastPt.y - 3, chartColor),
+    );
+  }
 
   advanceY(ctx, sparkH + 6);
 }
@@ -1236,8 +1260,9 @@ function renderMultiSparkline(
   // Background
   curPage(ctx).push(rectCmd(chartLeft, chartBottom, chartW, sparkH, BG_STRIPE));
 
-  // Shared Y-axis normalization
+  // Shared Y-axis normalization (guard against empty data after filtering)
   const allValues = usableSeries.flatMap((series) => [...series.data]);
+  if (allValues.length === 0) return; // nothing to plot
   const minVal = Math.min(...allValues);
   const maxVal = Math.max(...allValues);
   const range = maxVal - minVal || 1;
@@ -1257,8 +1282,9 @@ function renderMultiSparkline(
   for (let si = 0; si < usableSeries.length; si++) {
     const series = usableSeries[si];
     const color = series.color ?? BRAND_GREEN;
+    const seriesDenom = Math.max(1, series.data.length - 1);
     const points = series.data.map((value, index) => ({
-      x: chartLeft + padding + (index / (series.data.length - 1)) * (chartW - padding * 2),
+      x: chartLeft + padding + (index / seriesDenom) * (chartW - padding * 2),
       y: chartBottom + padding + ((value - minVal) / range) * (sparkH - padding * 2),
     }));
 
@@ -1280,11 +1306,13 @@ function renderMultiSparkline(
     }
 
     // Last value label
-    const lastPt = points[points.length - 1];
-    const lastVal = series.data[series.data.length - 1];
-    curPage(ctx).push(
-      textCmd(formatAxisValue(lastVal), "F2", 7, lastPt.x + 4, lastPt.y - 3, color),
-    );
+    if (points.length > 0) {
+      const lastPt = points[points.length - 1];
+      const lastVal = series.data[series.data.length - 1] ?? 0;
+      curPage(ctx).push(
+        textCmd(formatAxisValue(lastVal), "F2", 7, lastPt.x + 4, lastPt.y - 3, color),
+      );
+    }
   }
 
   advanceY(ctx, sparkH + 6);
@@ -1459,15 +1487,26 @@ function buildPdfDocument(
   let nextObject = 1;
   const fontRegularObject = nextObject++;  // F1 Helvetica
   const fontBoldObject = nextObject++;     // F2 Helvetica-Bold
-  // F3/F4: Embedded Playfair Display — reserve object numbers
+  // F3/F4: Embedded Caudex serif — with fallback to Times-Roman if font load fails
   const serifRegular = getSerifRegular();
   const serifBold = getSerifBold();
-  const serifRegularObjs = generatePdfFontObjects(serifRegular, nextObject);
-  nextObject += serifRegularObjs.objectCount;
-  const serifBoldObjs = generatePdfFontObjects(serifBold, nextObject);
-  nextObject += serifBoldObjs.objectCount;
-  const fontSerifObject = serifRegularObjs.fontObjNum;
-  const fontSerifBoldObject = serifBoldObjs.fontObjNum;
+  let fontSerifObject: number;
+  let fontSerifBoldObject: number;
+  let serifRegularObjs: PdfFontObjects | null = null;
+  let serifBoldObjs: PdfFontObjects | null = null;
+
+  if (serifRegular && serifBold) {
+    serifRegularObjs = generatePdfFontObjects(serifRegular, nextObject);
+    nextObject += serifRegularObjs.objectCount;
+    serifBoldObjs = generatePdfFontObjects(serifBold, nextObject);
+    nextObject += serifBoldObjs.objectCount;
+    fontSerifObject = serifRegularObjs.fontObjNum;
+    fontSerifBoldObject = serifBoldObjs.fontObjNum;
+  } else {
+    // Fallback to built-in serif fonts if custom fonts failed to load
+    fontSerifObject = nextObject++;
+    fontSerifBoldObject = nextObject++;
+  }
   const fontMonoObject = nextObject++;     // F5 Courier
   const fontMonoBoldObject = nextObject++; // F6 Courier-Bold
   const gsAlphaObject = nextObject++; // Graphics state for area fill opacity
@@ -1491,13 +1530,26 @@ function buildPdfDocument(
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
     "endobj",
   ].join("\n");
-  // F3: Playfair Display Regular (embedded TrueType)
-  for (const obj of serifRegularObjs.objects) {
-    objects[obj.objNum] = obj.content;
-  }
-  // F4: Playfair Display Bold (embedded TrueType)
-  for (const obj of serifBoldObjs.objects) {
-    objects[obj.objNum] = obj.content;
+  // F3/F4: Embedded Caudex serif or fallback Times-Roman
+  if (serifRegularObjs && serifBoldObjs) {
+    for (const obj of serifRegularObjs.objects) {
+      objects[obj.objNum] = obj.content;
+    }
+    for (const obj of serifBoldObjs.objects) {
+      objects[obj.objNum] = obj.content;
+    }
+  } else {
+    // Fallback: use built-in Times-Roman when custom font embedding fails
+    objects[fontSerifObject] = [
+      `${fontSerifObject} 0 obj`,
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>",
+      "endobj",
+    ].join("\n");
+    objects[fontSerifBoldObject] = [
+      `${fontSerifBoldObject} 0 obj`,
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold /Encoding /WinAnsiEncoding >>",
+      "endobj",
+    ].join("\n");
   }
   objects[fontMonoObject] = [
     `${fontMonoObject} 0 obj`,
