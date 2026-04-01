@@ -157,6 +157,23 @@ export function createSupabaseFieldMoistureSnapshotRepository(
         requireSupabaseData(result, "moisture.upsertSnapshot"),
       );
     },
+
+    async listRecentByField(workspaceId, fieldId, limit = 14) {
+      const result = await client
+        .from("field_moisture_snapshots")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("field_id", fieldId)
+        .order("observed_at", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      return (result.data ?? []).map(mapFieldMoistureSnapshot);
+    },
   };
 }
 

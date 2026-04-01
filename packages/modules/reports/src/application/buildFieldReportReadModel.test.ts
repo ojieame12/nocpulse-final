@@ -95,6 +95,9 @@ test("buildFieldReportReadModel fetches active and resolved alerts once and spli
         async getLatestByField() {
           return null;
         },
+        async listRecentByField() {
+          return [];
+        },
       },
       moistureCells: {
         async getLatestByField() {
@@ -104,6 +107,9 @@ test("buildFieldReportReadModel fetches active and resolved alerts once and spli
       weatherObservations: {
         async getLatestByField() {
           return null;
+        },
+        async listRecentByField() {
+          return [];
         },
       },
       weatherForecasts: {
@@ -230,6 +236,9 @@ test("buildFieldReportReadModel overlaps field lookup with other repository read
         async getLatestByField() {
           return null;
         },
+        async listRecentByField() {
+          return [];
+        },
       },
       moistureCells: {
         async getLatestByField() {
@@ -239,6 +248,9 @@ test("buildFieldReportReadModel overlaps field lookup with other repository read
       weatherObservations: {
         async getLatestByField() {
           return null;
+        },
+        async listRecentByField() {
+          return [];
         },
       },
       weatherForecasts: {

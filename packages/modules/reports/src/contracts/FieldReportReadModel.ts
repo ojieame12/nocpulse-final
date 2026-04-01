@@ -13,6 +13,7 @@ import type {
 } from "@fieldpulse/module-moisture";
 import type {
   FieldWeatherDerivedSignalSet,
+  FieldWeatherObservation,
   FieldWeatherProfile,
 } from "@fieldpulse/module-weather";
 import type { TimestampIso } from "@fieldpulse/platform-db";
@@ -28,6 +29,8 @@ export type FieldReportMoistureSummary = {
   surfaceMinPct: number | null;
   surfaceMaxPct: number | null;
   surfaceAvgPct: number | null;
+  /** Recent moisture snapshots for trend display (newest first, up to 14). */
+  recentSnapshots: readonly FieldMoistureSnapshot[];
 };
 
 export type FieldReportSummary = {
@@ -71,6 +74,8 @@ export type FieldReportReadModel = {
   weather: {
     profile: FieldWeatherProfile;
     signals: FieldWeatherDerivedSignalSet | null;
+    /** Recent weather observations for past-temperature display (newest first, up to 7). */
+    recentObservations: readonly FieldWeatherObservation[];
   };
   dataAvailability: FieldReportDataAvailability;
   alerts: readonly FieldAlert[];

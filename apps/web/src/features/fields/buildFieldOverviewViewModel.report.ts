@@ -453,7 +453,37 @@ export function buildReportProps(
   const moistureHistory = sarHistory.slice(0, 6).reverse();
   const vegetationLabels = buildObservationHistoryLabels(vegetationHistory);
   const moistureLabels = buildObservationHistoryLabels(moistureHistory);
+
+  // ── Model-estimated moisture snapshots (fallback when SAR history is sparse) ──
+  const recentSnapshots: readonly { observedAt: string; rootZonePct: number; surfacePct: number; confidence: string; sourceKey: string }[] =
+    Array.isArray(rm.moisture?.recentSnapshots) ? rm.moisture.recentSnapshots : [];
+  const modelSnapshotPoints = recentSnapshots
+    .slice(0, 10)
+    .reverse()
+    .map((snap) => ({
+      label: formatHistoryLabel(snap.observedAt),
+      rootZonePct: snap.rootZonePct,
+      surfacePct: snap.surfacePct,
+      confidence: snap.confidence,
+    }));
+  const hasModelTrend = modelSnapshotPoints.filter((p) => p.rootZonePct != null).length >= 2;
+
+  // ── Temperature window: past observations + now + forecast ──
+  const recentWeatherObs: readonly { observedAt: string; airTemperatureC: number }[] =
+    Array.isArray(rm.weather?.recentObservations) ? rm.weather.recentObservations : [];
+  const pastWeatherPoints = recentWeatherObs
+    .slice(0, 5)
+    .reverse()
+    .map((o) => {
+      const d = new Date(o.observedAt);
+      return {
+        label: d.toLocaleDateString("en-CA", { weekday: "short" }).slice(0, 3),
+        maxC: o.airTemperatureC,
+        minC: o.airTemperatureC,
+      };
+    });
   const temperatureWindow = [
+    ...pastWeatherPoints,
     {
       label: "Now",
       maxC: obs?.airTemperatureC ?? null,
@@ -467,18 +497,22 @@ export function buildReportProps(
   ];
   const vegetationEmptyText =
     latestOpticalRaster == null
-      ? "No optical canopy raster is available yet. NDVI and NDRE history needs Sentinel-2 or Planet coverage."
+      ? "Awaiting first Sentinel-2 or Planet optical pass."
       : opticalSeasonality.status === "context-only"
-        ? `${opticalSeasonality.detail} Only one or two captures are available, so the optical trend is informational rather than in-season crop stress.`
+        ? `${opticalSeasonality.detail} Trend is informational — more captures needed.`
       : opticalHistory.length <= 1
-        ? "Only one optical capture is stored so far. More optical passes are needed before a vegetation trend can be drawn."
-        : "Optical history is present, but NDVI and NDRE values are not populated on the recent captures yet.";
+        ? "One optical capture stored. More passes needed for a trend."
+        : "Optical history present, but NDVI/NDRE values are not yet populated.";
+  const usingSarTrend = moistureHistory.length >= 2;
+  const usingModelFallback = !usingSarTrend && hasModelTrend;
   const moistureHistoryEmptyText =
-    moisture?.latestSnapshot != null || rm.imagery?.latestRasterObservation != null
-      ? sarHistory.length <= 1
-        ? "Only one SAR-backed moisture capture is stored so far. More raster passes are needed before a moisture trend can be drawn."
-        : "SAR moisture history exists, but the recent captures do not contain enough populated values for a trend."
-      : "No raster-backed moisture history is available yet.";
+    usingSarTrend
+      ? null
+      : usingModelFallback
+        ? null
+        : moisture?.latestSnapshot != null
+          ? "Waiting for more raster passes to draw a trend."
+          : "No moisture observations yet.";
   const temperatureWindowEmptyText =
     !weatherDataAvailability.latestObservation && !weatherDataAvailability.forecasts
       ? "Weather observation and forecast data were unavailable for this field."
@@ -521,42 +555,67 @@ export function buildReportProps(
       ],
     },
     {
-      title: "MOISTURE PROFILE HISTORY",
-      subtitle: "Root + surface moisture from raster",
+      title: usingModelFallback ? "MOISTURE ESTIMATE TREND" : "MOISTURE PROFILE HISTORY",
+      subtitle: usingModelFallback
+        ? "Model estimates from weather + soil data"
+        : "Root + surface moisture from raster",
       emptyText: moistureHistoryEmptyText,
-      series: [
-        {
-          label: "Root",
-          color: "#3b82f6",
-          format: "percent" as const,
-          points: moistureHistory.map((observation: FieldRasterObservation, index: number) => ({
-            label: moistureLabels[index] ?? formatHistoryLabel(observation.observedAt),
-            value: deriveObservationRootMoisturePct(observation),
-          })),
-        },
-        {
-          label: "Surface",
-          color: "#0ea5e9",
-          format: "percent" as const,
-          points: moistureHistory.map((observation: FieldRasterObservation, index: number) => ({
-            label: moistureLabels[index] ?? formatHistoryLabel(observation.observedAt),
-            value: deriveObservationSurfaceMoisturePct(observation),
-          })),
-        },
-        {
-          label: radarWetnessMetricContract.label,
-          color: "#06b6d4",
-          format: "index" as const,
-          points: moistureHistory.map((observation: FieldRasterObservation, index: number) => ({
-            label: moistureLabels[index] ?? formatHistoryLabel(observation.observedAt),
-            value: averageAgronomicMeasurement(observation.cells, "radar-wetness"),
-          })),
-        },
-      ],
+      series: usingModelFallback
+        ? [
+            {
+              label: "Root (est.)",
+              color: "#60a5fa",
+              format: "percent" as const,
+              points: modelSnapshotPoints.map((p) => ({
+                label: p.label,
+                value: p.rootZonePct,
+              })),
+            },
+            {
+              label: "Surface (est.)",
+              color: "#7dd3fc",
+              format: "percent" as const,
+              points: modelSnapshotPoints.map((p) => ({
+                label: p.label,
+                value: p.surfacePct,
+              })),
+            },
+          ]
+        : [
+            {
+              label: "Root",
+              color: "#3b82f6",
+              format: "percent" as const,
+              points: moistureHistory.map((observation: FieldRasterObservation, index: number) => ({
+                label: moistureLabels[index] ?? formatHistoryLabel(observation.observedAt),
+                value: deriveObservationRootMoisturePct(observation),
+              })),
+            },
+            {
+              label: "Surface",
+              color: "#0ea5e9",
+              format: "percent" as const,
+              points: moistureHistory.map((observation: FieldRasterObservation, index: number) => ({
+                label: moistureLabels[index] ?? formatHistoryLabel(observation.observedAt),
+                value: deriveObservationSurfaceMoisturePct(observation),
+              })),
+            },
+            {
+              label: radarWetnessMetricContract.label,
+              color: "#06b6d4",
+              format: "index" as const,
+              points: moistureHistory.map((observation: FieldRasterObservation, index: number) => ({
+                label: moistureLabels[index] ?? formatHistoryLabel(observation.observedAt),
+                value: averageAgronomicMeasurement(observation.cells, "radar-wetness"),
+              })),
+            },
+          ],
     },
     {
       title: "TEMPERATURE WINDOW",
-      subtitle: "Latest observation + next forecast days",
+      subtitle: pastWeatherPoints.length > 0
+        ? "Recent observations + forecast"
+        : "Latest observation + next forecast days",
       emptyText: temperatureWindowEmptyText,
       series: [
         {

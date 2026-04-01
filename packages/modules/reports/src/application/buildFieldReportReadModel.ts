@@ -35,9 +35,9 @@ type BuildFieldReportReadModelRepositories = {
   fieldImportBatches: Pick<FieldImportBatchRepository, "getLatestCommittedCandidateByField">;
   cropContexts: Pick<FieldCropContextRepository, "getLatestByField">;
   imageryRasterObservations: Pick<FieldRasterObservationRepository, "getLatestByField">;
-  moistureSnapshots: Pick<FieldMoistureSnapshotRepository, "getLatestByField">;
+  moistureSnapshots: Pick<FieldMoistureSnapshotRepository, "getLatestByField" | "listRecentByField">;
   moistureCells: Pick<FieldMoistureCellSnapshotRepository, "getLatestByField">;
-  weatherObservations: Pick<FieldWeatherObservationRepository, "getLatestByField">;
+  weatherObservations: Pick<FieldWeatherObservationRepository, "getLatestByField" | "listRecentByField">;
   weatherForecasts: Pick<FieldWeatherForecastRepository, "listByField">;
   weatherSignals: Pick<FieldWeatherDerivedSignalSetRepository, "getLatestByField">;
   alerts: Pick<AlertRepository, "listByField">;
@@ -85,6 +85,7 @@ function maxValue(values: readonly number[]) {
 function buildMoistureSummary(input: {
   latestSnapshot: FieldMoistureSnapshot | null;
   latestCells: readonly FieldMoistureCellSnapshot[];
+  recentSnapshots: readonly FieldMoistureSnapshot[];
 }): FieldReportMoistureSummary {
   const rootZoneValues = input.latestCells.map((cell) => cell.rootZonePct);
   const surfaceValues = input.latestCells.map((cell) => cell.surfacePct);
@@ -104,6 +105,7 @@ function buildMoistureSummary(input: {
     surfaceMinPct: minValue(surfaceValues) ?? snapshotSurfacePct,
     surfaceMaxPct: maxValue(surfaceValues) ?? snapshotSurfacePct,
     surfaceAvgPct: average(surfaceValues) ?? snapshotSurfacePct,
+    recentSnapshots: input.recentSnapshots,
   };
 }
 
@@ -228,6 +230,8 @@ export async function buildFieldReportReadModel(
     fieldAlertsResult,
     findingsResult,
     zonesResult,
+    recentSnapshotsResult,
+    recentWeatherObservationsResult,
   ] = await Promise.all([
     fieldPromise,
     timeAsync(debugPerfEnabled, "latestCommittedCandidate", () =>
@@ -304,6 +308,18 @@ export async function buildFieldReportReadModel(
         limit: input.zoneLimit ?? 50,
         generatedAt: input.generatedAt,
       })),
+    timeAsync(debugPerfEnabled, "recentSnapshots", () =>
+      input.repositories.moistureSnapshots.listRecentByField(
+        input.workspaceId,
+        input.fieldId,
+        14,
+      )),
+    timeAsync(debugPerfEnabled, "recentWeatherObservations", () =>
+      input.repositories.weatherObservations.listRecentByField(
+        input.workspaceId,
+        input.fieldId,
+        7,
+      )),
   ]);
 
   if (!field) {
@@ -329,10 +345,13 @@ export async function buildFieldReportReadModel(
   };
   const findings = findingsResult.value;
   const zones = zonesResult.value;
+  const recentSnapshotsResultValue = recentSnapshotsResult.value;
+  const recentWeatherObservationsResultValue = recentWeatherObservationsResult.value;
 
   const moisture = buildMoistureSummary({
     latestSnapshot,
     latestCells,
+    recentSnapshots: recentSnapshotsResultValue ?? [],
   });
   const imagery = buildImagerySummary({
     latestRasterObservation,
@@ -361,6 +380,7 @@ export async function buildFieldReportReadModel(
     weather: {
       profile: weatherProfile,
       signals: weatherSignals,
+      recentObservations: recentWeatherObservationsResultValue ?? [],
     },
     dataAvailability,
     alerts: activeAlerts,
@@ -402,6 +422,8 @@ export async function buildFieldReportReadModel(
         fieldAlertsResult,
         findingsResult,
         zonesResult,
+        recentSnapshotsResult,
+        recentWeatherObservationsResult,
       ].map((entry) => ({
         label: entry.label,
         durationMs: entry.durationMs,

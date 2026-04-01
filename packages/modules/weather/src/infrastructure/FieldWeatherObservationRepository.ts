@@ -15,6 +15,11 @@ export type FieldWeatherObservationRepository = {
     updatedAfter?: string;
     limit?: number;
   }): Promise<readonly FieldWeatherObservation[]>;
+  listRecentByField(
+    workspaceId: WorkspaceId,
+    fieldId: EntityId,
+    limit?: number,
+  ): Promise<readonly FieldWeatherObservation[]>;
   upsertObservation(
     input: UpsertFieldWeatherObservationInput,
   ): Promise<FieldWeatherObservation>;

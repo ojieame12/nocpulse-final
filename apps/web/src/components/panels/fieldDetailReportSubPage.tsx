@@ -364,12 +364,11 @@ export function ReportSubPage({
         {vegetationChart?.emptyText && !vegetationHasTrend ? (
           <Sub>{vegetationChart.emptyText}</Sub>
         ) : null}
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <Sub>{vegetationChart ? vegetationRange.start : mc.spatialColumns[0].label}</Sub>
           <Sub>
             {vegetationChart
               ? [
-                  vegetationChart.subtitle,
                   `NDVI ${vegetationChart.series[0] ? findLatestReportChartPointValue(vegetationChart, 0)?.toFixed(2) ?? "—" : "—"}`,
                   vegetationChart.series[1]
                     ? `NDRE ${findLatestReportChartPointValue(vegetationChart, 1)?.toFixed(2) ?? "—"}`
@@ -412,7 +411,7 @@ export function ReportSubPage({
         {moistureHistoryChart?.emptyText && !moistureHasTrend ? (
           <Sub>{moistureHistoryChart.emptyText}</Sub>
         ) : null}
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <Sub>
             {moistureHistoryChart ? moistureHistoryRange.start : mc.spatialColumns[0].value}
           </Sub>
@@ -461,14 +460,13 @@ export function ReportSubPage({
         {temperatureChart?.emptyText && !temperatureHasTrend ? (
           <Sub>{temperatureChart.emptyText}</Sub>
         ) : null}
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <Sub>
             {temperatureChart ? temperatureRange.start : reportForecast[0]?.day ?? "Now"}
           </Sub>
           <Sub>
             {temperatureChart
               ? [
-                  temperatureChart.subtitle,
                   `High ${formatChartLatestValue(temperatureChart, 0)}`,
                   temperatureChart.series[1]
                     ? `Low ${formatChartLatestValue(temperatureChart, 1)}`

@@ -163,5 +163,22 @@ export function createSupabaseFieldWeatherObservationRepository(
         "weather.listRecentObservations",
       ).map(mapFieldWeatherObservation);
     },
+
+    async listRecentByField(workspaceId, fieldId, limit = 7) {
+      const result = await client
+        .from("field_weather_observations")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("field_id", fieldId)
+        .order("observed_at", { ascending: false })
+        .order("updated_at", { ascending: false })
+        .limit(limit);
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      return (result.data ?? []).map(mapFieldWeatherObservation);
+    },
   };
 }

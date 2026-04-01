@@ -7,5 +7,10 @@ export type FieldMoistureSnapshotRepository = {
     workspaceId: WorkspaceId,
     fieldId: EntityId,
   ): Promise<FieldMoistureSnapshot | null>;
+  listRecentByField(
+    workspaceId: WorkspaceId,
+    fieldId: EntityId,
+    limit?: number,
+  ): Promise<readonly FieldMoistureSnapshot[]>;
   upsertSnapshot(input: UpsertFieldMoistureSnapshotInput): Promise<FieldMoistureSnapshot>;
 };
