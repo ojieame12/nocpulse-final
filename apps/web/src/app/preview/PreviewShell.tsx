@@ -580,6 +580,11 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
   /* Onboarding dispatch statuses — owned here so they survive panel switches */
   const [onboardingStatuses, setOnboardingStatuses] = useState<Map<string, PreviewJobDispatchSnapshot>>(new Map());
 
+  /** Pre-built stage arrays from the commit response, keyed by fieldId. */
+  const [prebuiltStagesByField, setPrebuiltStagesByField] = useState<
+    ReadonlyMap<string, CommitFieldHydrationSummary["stages"]>
+  >(new Map());
+
   /** Derived per-field progress for the field strip */
   const fieldOnboardingProgress = useMemo(() => {
     if (!pendingOnboardingWatch || onboardingStatuses.size === 0) return new Map<string, FieldOnboardingStatus>();
@@ -1347,6 +1352,18 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         }
         return next;
       });
+
+      /* Store pre-built stage arrays so HydrationStageTracker can use
+         authoritative backend data instead of substring-parsing progressMessages. */
+      setPrebuiltStagesByField((prev) => {
+        const next = new Map(prev);
+        for (const summary of result.fieldHydrationSummaries!) {
+          if (summary.stages && summary.stages.length > 0) {
+            next.set(summary.fieldId, summary.stages);
+          }
+        }
+        return next;
+      });
     }
   }, []);
 
@@ -1785,6 +1802,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       onInitialPageClose={onInitialPageClose}
       onboardingStatus={fieldOnboardingProgress.get(fieldData.fieldId) ?? null}
       progressMessage={fieldOnboardingProgress.get(fieldData.fieldId)?.phaseLabel ?? null}
+      prebuiltStages={prebuiltStagesByField.get(fieldData.fieldId) ?? null}
     />
   );
 

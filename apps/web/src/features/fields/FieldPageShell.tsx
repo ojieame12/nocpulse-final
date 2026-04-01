@@ -93,6 +93,11 @@ type PendingOnboardingWatch = {
   preferredFieldId?: string | null;
   fieldIds: string[];
   dispatchIds: string[];
+  dispatchFieldEntries?: readonly {
+    dispatchId: string;
+    fieldId: string;
+    fieldLabel: string;
+  }[];
 };
 
 type OnboardingDispatchSnapshot = {
@@ -132,6 +137,24 @@ function parsePendingOnboardingWatch(raw: string | null): PendingOnboardingWatch
     const fieldIds = Array.isArray(value.fieldIds)
       ? value.fieldIds.filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
       : [];
+    const dispatchFieldEntries = Array.isArray(value.dispatchFieldEntries)
+      ? value.dispatchFieldEntries.filter(
+          (
+            entry,
+          ): entry is {
+            dispatchId: string;
+            fieldId: string;
+            fieldLabel: string;
+          } =>
+            typeof entry === "object" &&
+            entry != null &&
+            typeof entry.dispatchId === "string" &&
+            entry.dispatchId.length > 0 &&
+            typeof entry.fieldId === "string" &&
+            entry.fieldId.length > 0 &&
+            typeof entry.fieldLabel === "string",
+        )
+      : [];
 
     if (dispatchIds.length === 0) {
       return null;
@@ -143,6 +166,7 @@ function parsePendingOnboardingWatch(raw: string | null): PendingOnboardingWatch
         typeof value.preferredFieldId === "string" ? value.preferredFieldId : null,
       dispatchIds,
       fieldIds,
+      dispatchFieldEntries,
     };
   } catch {
     return null;
@@ -1141,6 +1165,9 @@ export function FieldPageShell({
     useState<PendingOnboardingWatch | null>(null);
   const [onboardingStatuses, setOnboardingStatuses] =
     useState<Map<string, JobDispatchSnapshot>>(new Map());
+  const [prebuiltStagesByField, setPrebuiltStagesByField] = useState<
+    ReadonlyMap<string, CommitFieldHydrationSummary["stages"]>
+  >(new Map());
   const [zoneDetailReturnView, setZoneDetailReturnView] = useState<"detail" | "activity">(
     "detail",
   );
@@ -1149,6 +1176,73 @@ export function FieldPageShell({
     () => resolveAvailableDetailModes(mapModel),
     [mapModel],
   );
+  const fieldOnboardingProgress = useMemo(() => {
+    if (!pendingOnboardingWatch || onboardingStatuses.size === 0) {
+      return new Map<
+        string,
+        {
+          status: "queued" | "running" | "completed" | "failed" | "cancelled";
+          progressPct: number | null;
+          phaseLabel: string | null;
+        }
+      >();
+    }
+
+    const byField = new Map<
+      string,
+      {
+        status: "queued" | "running" | "completed" | "failed" | "cancelled";
+        progressPct: number | null;
+        phaseLabel: string | null;
+      }
+    >();
+    const statusOrder: Record<string, number> = {
+      running: 0,
+      queued: 1,
+      failed: 2,
+      cancelled: 3,
+      completed: 4,
+    };
+    const dispatchEntries =
+      pendingOnboardingWatch.dispatchFieldEntries?.length
+        ? pendingOnboardingWatch.dispatchFieldEntries
+        : pendingOnboardingWatch.dispatchIds.flatMap((dispatchId) => {
+            const snap = onboardingStatuses.get(dispatchId);
+            return snap?.fieldId
+              ? [{ dispatchId, fieldId: snap.fieldId, fieldLabel: snap.fieldId }]
+              : [];
+          });
+
+    for (const { dispatchId, fieldId } of dispatchEntries) {
+      const snap = onboardingStatuses.get(dispatchId);
+      const status = snap?.status ?? "queued";
+      const existing = byField.get(fieldId);
+
+      if (!existing) {
+        byField.set(fieldId, {
+          status,
+          progressPct: snap?.progressPct ?? null,
+          phaseLabel: snap?.activePhaseLabel ?? snap?.progressMessage ?? null,
+        });
+        continue;
+      }
+
+      if ((statusOrder[status] ?? 4) < (statusOrder[existing.status] ?? 4)) {
+        existing.status = status;
+        existing.phaseLabel =
+          snap?.activePhaseLabel ?? snap?.progressMessage ?? existing.phaseLabel;
+      }
+
+      if (snap?.progressPct != null) {
+        existing.progressPct =
+          existing.progressPct != null
+            ? Math.round((existing.progressPct + snap.progressPct) / 2)
+            : snap.progressPct;
+      }
+    }
+
+    return byField;
+  }, [pendingOnboardingWatch, onboardingStatuses]);
 
 
   useEffect(() => {
@@ -1194,6 +1288,12 @@ export function FieldPageShell({
 
     const poll = async () => {
       try {
+        const dispatchFieldMap = new Map(
+          (pendingOnboardingWatch?.dispatchFieldEntries ?? []).map((entry) => [
+            entry.dispatchId,
+            { fieldId: entry.fieldId, fieldLabel: entry.fieldLabel },
+          ]),
+        );
         const response = await fetch("/api/jobs/dispatches", {
           method: "POST",
           headers: {
@@ -1228,7 +1328,7 @@ export function FieldPageShell({
               failedAt: dispatch.status === "failed" ? new Date().toISOString() : null,
               cancelledAt: dispatch.status === "cancelled" ? new Date().toISOString() : null,
               lastError: null,
-              fieldId: dispatch.fieldId ?? null,
+              fieldId: dispatch.fieldId ?? dispatchFieldMap.get(dispatch.id)?.fieldId ?? null,
             } satisfies JobDispatchSnapshot,
           ] as const),
         );
@@ -1351,6 +1451,12 @@ export function FieldPageShell({
     }
 
     const hydrationSummaries = watch.fieldHydrationSummaries;
+    const dispatchFieldEntries =
+      watch.trackedJobs?.map((job) => ({
+        dispatchId: job.dispatchId,
+        fieldId: job.fieldId,
+        fieldLabel: job.fieldLabel,
+      })) ?? [];
 
     if (hydrationSummaries && hydrationSummaries.length > 0) {
       setOnboardingStatuses((prev) => {
@@ -1387,14 +1493,31 @@ export function FieldPageShell({
 
         return next;
       });
+
+      setPrebuiltStagesByField((prev) => {
+        const next = new Map(prev);
+
+        for (const summary of hydrationSummaries) {
+          if (summary.stages && summary.stages.length > 0) {
+            next.set(summary.fieldId, summary.stages);
+          }
+        }
+
+        return next;
+      });
     }
 
-    setPendingOnboardingWatch(watch);
+    const nextWatch: PendingOnboardingWatch = {
+      ...watch,
+      dispatchFieldEntries,
+    };
+
+    setPendingOnboardingWatch(nextWatch);
 
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem(
         PENDING_ONBOARDING_STORAGE_KEY,
-        JSON.stringify(watch),
+        JSON.stringify(nextWatch),
       );
     }
   }, []);
@@ -1509,6 +1632,8 @@ export function FieldPageShell({
         activity={interactiveActivity}
         initialPage={canonicalDetailInitialPage}
         onInitialPageClose={() => setPanelView("detail")}
+        onboardingStatus={fieldOnboardingProgress.get(activeFieldId) ?? null}
+        prebuiltStages={prebuiltStagesByField.get(activeFieldId) ?? null}
       />
     ) :
     panelView === "alerts" && alerts ? (
@@ -1608,6 +1733,8 @@ export function FieldPageShell({
         notes={interactiveNotes}
         activity={interactiveActivity}
         onClose={handlePanelClose}
+        onboardingStatus={fieldOnboardingProgress.get(activeFieldId) ?? null}
+        prebuiltStages={prebuiltStagesByField.get(activeFieldId) ?? null}
       />
     );
 
