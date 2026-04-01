@@ -64,6 +64,29 @@ export type CommitHydrationStageSummary = {
   statusText: string;
 };
 
+/** Mirrors FieldMoistureConfidenceSummary from ServerServices (subset for UI). */
+export type CommitMoistureConfidence = {
+  level: 'low' | 'medium' | 'high' | 'unknown';
+  score: number | null;
+  reason: string | null;
+  derivationMode: 'source-backed' | 'seeded-range' | null;
+  rasterMode: 'provider' | 'synthetic' | 'none' | null;
+  signalBlend: 'raster+weather' | 'raster-only' | 'weather-only' | 'seeded' | null;
+  usedOptical: boolean;
+  usedSar: boolean;
+  usedWeather: boolean;
+  usedWeatherSoilMoisture: boolean;
+};
+
+/** Mirrors FieldHydrationSummary.coverage from ServerServices (subset for UI). */
+export type CommitHydrationCoverage = {
+  hasSoilContext: boolean;
+  hasWeatherObservation: boolean;
+  hasWeatherForecast: boolean;
+  hasRasterObservation: boolean;
+  hasMoistureSnapshot: boolean;
+};
+
 /** Mirrors FieldHydrationSummary from ServerServices (subset used by frontend). */
 export type CommitFieldHydrationSummary = {
   fieldId: string;
@@ -72,6 +95,8 @@ export type CommitFieldHydrationSummary = {
   progressPct: number;
   phaseLabel: string;
   stages: readonly CommitHydrationStageSummary[];
+  coverage?: CommitHydrationCoverage;
+  moistureConfidence?: CommitMoistureConfidence | null;
 };
 
 /** Mirrors BatchHydrationSummary from ServerServices (subset). */

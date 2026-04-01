@@ -76,7 +76,8 @@ import {
   vitalValueColor,
 } from "./fieldDetailColorSystem";
 import { MetricHintProvider } from "../ui/MetricHintProvider";
-import { HydrationStageTracker } from "../ui/HydrationStageTracker";
+import { HydrationStageTracker, type PrebuiltStage } from "../ui/HydrationStageTracker";
+import type { CommitMoistureConfidence } from "./AddFieldPanel";
 
 /** Resolve footer badge data: count + color for each sub-page section */
 function resolveFooterBadge(
@@ -776,6 +777,10 @@ export interface FieldDetailPanelProps {
   } | null;
   /** Raw worker progressMessage for deriving hydration stages. */
   progressMessage?: string | null;
+  /** Pre-built stage data from the commit response's hydration summaries. */
+  prebuiltStages?: readonly PrebuiltStage[] | null;
+  /** Commit-time moisture confidence/provenance data for the current field. */
+  hydrationConfidence?: CommitMoistureConfidence | null;
 }
 
 /* Types and MODE_TO_METRIC_KEY imported from ./fieldDetailTypes */
@@ -873,6 +878,8 @@ export function FieldDetailPanel({
   onClose,
   onboardingStatus,
   progressMessage,
+  prebuiltStages,
+  hydrationConfidence,
 }: FieldDetailPanelProps) {
   const [internalMode, setInternalMode] = useState<ModeKey>("moisture");
   const [page, setPage] = useState<string | null>(initialPage ?? null);
@@ -1243,6 +1250,43 @@ export function FieldDetailPanel({
             summary?.rainChanceSub ??
             "No weather signal",
         };
+  /* ── Derive provenance chips from commit-time hydration confidence ── */
+  const hcChips: (string | null)[] = [];
+  if (hydrationConfidence) {
+    const hc = hydrationConfidence;
+    // Signal blend — only when snapshot-derived data doesn't already cover it
+    if (hc.signalBlend && !summary?.confidence) {
+      const blendLabels: Record<string, string> = {
+        "raster+weather": "Raster + Weather",
+        "raster-only": "Raster only",
+        "weather-only": "Weather only",
+        "seeded": "Modeled estimate",
+      };
+      hcChips.push(blendLabels[hc.signalBlend] ?? hc.signalBlend);
+    }
+    // Confidence level — only as fallback
+    if (!summary?.confidence && hc.level !== "unknown") {
+      hcChips.push(`${hc.level.charAt(0).toUpperCase() + hc.level.slice(1)} confidence`);
+    }
+    // Score — always useful when present
+    if (hc.score != null) {
+      hcChips.push(`Score ${Math.round(hc.score * 100)}%`);
+    }
+    // Source flags — compact summary of what fed the model
+    const usedSources: string[] = [];
+    if (hc.usedOptical) usedSources.push("Optical");
+    if (hc.usedSar) usedSources.push("SAR");
+    if (hc.usedWeather) usedSources.push("Weather");
+    if (hc.usedWeatherSoilMoisture) usedSources.push("Soil moisture");
+    if (usedSources.length > 0 && !summary?.dataSources) {
+      hcChips.push(`Sources: ${usedSources.join(", ")}`);
+    }
+    // Raster mode — flag synthetic transparently
+    if (hc.rasterMode === "synthetic") {
+      hcChips.push("Synthetic raster");
+    }
+  }
+
   const sourceChips = Array.from(
     new Set(
       [
@@ -1259,6 +1303,7 @@ export function FieldDetailPanel({
         moistureSourceLabel ? `Moisture ${moistureSourceLabel}` : null,
         summary?.updatedLabel ?? null,
         ...(report?.sources.slice(0, 2).map((source) => source.label) ?? []),
+        ...hcChips,
       ].filter((value): value is string => Boolean(value)),
     ),
   );
@@ -1344,6 +1389,7 @@ export function FieldDetailPanel({
           fieldName={fieldName}
           onboardingStatus={onboardingStatus}
           progressMessage={progressMessage}
+          prebuiltStages={prebuiltStages}
         />
       )}
 

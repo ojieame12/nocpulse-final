@@ -14,6 +14,13 @@ export interface HydrationStage {
   statusText: string;
 }
 
+export interface PrebuiltStage {
+  key: 'soil' | 'weather' | 'imagery' | 'moisture';
+  label: string;
+  state: 'pending' | 'completed';
+  statusText: string;
+}
+
 const STAGE_DEFS: { key: HydrationStageKey; label: string; completedText: string }[] = [
   { key: 'soil', label: 'Soil properties', completedText: 'Fetched' },
   { key: 'weather', label: 'Weather observations', completedText: 'Collected' },
@@ -58,6 +65,38 @@ export interface HydrationStageTrackerProps {
   } | null;
   /** Raw progressMessage from the dispatch snapshot, if available. */
   progressMessage?: string | null;
+  /** Pre-built stage array from the commit response's `fieldHydrationSummaries`. */
+  prebuiltStages?: readonly PrebuiltStage[] | null;
+}
+
+function fromPrebuiltStages(
+  prebuilt: readonly PrebuiltStage[],
+  onboardingStatus: HydrationStageTrackerProps['onboardingStatus'],
+): HydrationStage[] {
+  const isComplete = onboardingStatus?.status === 'completed';
+
+  return STAGE_DEFS.map((def) => {
+    const match = prebuilt.find((s) => s.key === def.key);
+    if (!match) {
+      return { key: def.key, label: def.label, state: 'pending' as const, statusText: 'Queued' };
+    }
+
+    if (match.state === 'completed' || isComplete) {
+      return {
+        key: def.key,
+        label: match.label || def.label,
+        state: 'completed' as const,
+        statusText: match.statusText || def.completedText,
+      };
+    }
+
+    return {
+      key: def.key,
+      label: match.label || def.label,
+      state: 'pending' as const,
+      statusText: match.statusText || 'Queued',
+    };
+  });
 }
 
 /**
@@ -155,6 +194,7 @@ export function HydrationStageTracker({
   fieldName,
   onboardingStatus,
   progressMessage,
+  prebuiltStages,
 }: HydrationStageTrackerProps) {
   const isOnboarding =
     onboardingStatus != null &&
@@ -196,7 +236,10 @@ export function HydrationStageTracker({
   if (!isOnboarding && !isComplete) return null;
   if (dismissed) return null;
 
-  const stages = deriveStages(onboardingStatus, progressMessage);
+  const stages =
+    prebuiltStages && prebuiltStages.length > 0
+    ? fromPrebuiltStages(prebuiltStages, onboardingStatus)
+    : deriveStages(onboardingStatus, progressMessage);
   const allComplete = stages.every((s) => s.state === 'completed');
   const isFadingOut = allComplete && !showFarewell;
 
