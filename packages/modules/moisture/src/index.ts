@@ -31,13 +31,26 @@ export {
   type EnsureFieldMoistureSnapshotInput,
   type EnsureFieldMoistureSnapshotResult,
 } from "./application/ensureFieldMoistureSnapshot";
-export { rebuildFieldMoistureEstimate } from "./application/rebuildFieldMoistureEstimate";
+export {
+  rebuildFieldMoistureEstimate,
+  type RebuildFieldMoistureEstimateSources,
+  type RebuildFieldMoistureEstimateOptions,
+  computeRasterAgeHours,
+  computeFreshnessFactor,
+  resolveResolutionTier,
+  type ResolutionTier,
+  computeScaleFitPenalty,
+  computeAgreement,
+  type AgreementResult,
+} from "./application/rebuildFieldMoistureEstimate";
 export {
   rebuildFieldMoistureCellSnapshots,
   type RebuildFieldMoistureCellSnapshotsInput,
   type RebuildFieldMoistureCellSnapshotsResult,
 } from "./application/rebuildFieldMoistureCellSnapshots";
 export { isReliableMoistureEstimate } from "./domain/policies/isReliableMoistureEstimate";
+export { computeKc } from "./domain/crop/computeKc";
+export { resolveStageWeights, type StageWeights } from "./domain/crop/resolveStageWeights";
 export { describeMoistureEstimate } from "./application/describeMoistureEstimate";
 export { type FieldMoistureSnapshotRepository } from "./infrastructure/FieldMoistureSnapshotRepository";
 export { type FieldMoistureCellSnapshotRepository } from "./infrastructure/FieldMoistureCellSnapshotRepository";

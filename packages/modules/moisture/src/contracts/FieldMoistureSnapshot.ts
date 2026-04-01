@@ -23,6 +23,12 @@ export type MoistureInputProvenance = {
   usedWeatherSoilMoisture?: boolean;
   confidenceScore?: number;
   confidenceReason?: string;
+  rasterAgeHours?: number;
+  freshnessFactor?: number;
+  agreementDeltaPct?: number;
+  agreementFlag?: "agree" | "neutral" | "divergent";
+  resolutionTier?: "sub-field" | "field-level" | "regional";
+  scaleFitPenalty?: number;
 };
 
 export type FieldMoistureSnapshot = WorkspaceScoped &

@@ -84,5 +84,8 @@ export function readAppEnv(source: Partial<Record<keyof AppEnv | string, string 
       bucket: r2Bucket,
       endpoint: parsed.R2_ENDPOINT,
     },
+    soil: {
+      soilGridsBaseUrl: parsed.SOILGRIDS_BASE_URL ?? "rest.isric.org",
+    },
   };
 }

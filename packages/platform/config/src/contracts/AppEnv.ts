@@ -65,6 +65,8 @@ export const AppEnvSchema = z.object({
       typeof value === "string" && value.trim().length === 0 ? undefined : value,
     z.string().uuid().optional(),
   ),
+  /** SoilGrids REST API base hostname. Default: rest.isric.org */
+  SOILGRIDS_BASE_URL: optionalString(),
 });
 
 export type AppEnv = z.infer<typeof AppEnvSchema>;

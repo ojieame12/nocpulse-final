@@ -296,6 +296,12 @@ importers:
         specifier: workspace:*
         version: link:../../platform/db
 
+  packages/modules/soil:
+    dependencies:
+      '@fieldpulse/platform-db':
+        specifier: workspace:*
+        version: link:../../platform/db
+
   packages/modules/weather:
     dependencies:
       '@fieldpulse/platform-db':
