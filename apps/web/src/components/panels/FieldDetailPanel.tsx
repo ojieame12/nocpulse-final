@@ -76,7 +76,7 @@ import {
   vitalValueColor,
 } from "./fieldDetailColorSystem";
 import { MetricHintProvider } from "../ui/MetricHintProvider";
-import { HydrationStageTracker } from "../ui/HydrationStageTracker";
+import { HydrationStageTracker, type PrebuiltStage } from "../ui/HydrationStageTracker";
 
 /** Resolve footer badge data: count + color for each sub-page section */
 function resolveFooterBadge(
@@ -776,6 +776,8 @@ export interface FieldDetailPanelProps {
   } | null;
   /** Raw worker progressMessage for deriving hydration stages. */
   progressMessage?: string | null;
+  /** Pre-built stage data from the commit response's hydration summaries. */
+  prebuiltStages?: readonly PrebuiltStage[] | null;
 }
 
 /* Types and MODE_TO_METRIC_KEY imported from ./fieldDetailTypes */
@@ -873,6 +875,7 @@ export function FieldDetailPanel({
   onClose,
   onboardingStatus,
   progressMessage,
+  prebuiltStages,
 }: FieldDetailPanelProps) {
   const [internalMode, setInternalMode] = useState<ModeKey>("moisture");
   const [page, setPage] = useState<string | null>(initialPage ?? null);
@@ -1344,6 +1347,7 @@ export function FieldDetailPanel({
           fieldName={fieldName}
           onboardingStatus={onboardingStatus}
           progressMessage={progressMessage}
+          prebuiltStages={prebuiltStages}
         />
       )}
 
