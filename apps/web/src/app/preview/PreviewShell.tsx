@@ -1352,7 +1352,6 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         }
         return next;
       });
-
       /* Store pre-built stage arrays so HydrationStageTracker can use
          authoritative backend data instead of substring-parsing progressMessages. */
       setPrebuiltStagesByField((prev) => {

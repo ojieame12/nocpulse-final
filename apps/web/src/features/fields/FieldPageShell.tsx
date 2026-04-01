@@ -1493,7 +1493,6 @@ export function FieldPageShell({
 
         return next;
       });
-
       setPrebuiltStagesByField((prev) => {
         const next = new Map(prev);
 
@@ -1507,12 +1506,12 @@ export function FieldPageShell({
       });
     }
 
-    const nextWatch: PendingOnboardingWatch = {
-      ...watch,
-      dispatchFieldEntries,
-    };
+      const nextWatch: PendingOnboardingWatch = {
+        ...watch,
+        dispatchFieldEntries,
+      };
 
-    setPendingOnboardingWatch(nextWatch);
+      setPendingOnboardingWatch(nextWatch);
 
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem(
