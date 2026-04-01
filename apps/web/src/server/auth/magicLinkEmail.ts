@@ -49,17 +49,10 @@ export function renderMagicLinkEmail(options: {
             <td style="height:3px; background: linear-gradient(90deg, #16a34a 0%, #065f46 100%);"></td>
           </tr>
 
-          <!-- Logo area -->
+          <!-- Logo -->
           <tr>
             <td align="center" style="padding: 36px 32px 0 32px;">
-              <table role="presentation" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="width:10px; height:10px; background-color:#16a34a; border-radius:50%;"></td>
-                  <td style="padding-left:8px; font-size:18px; font-weight:600; color:rgba(255,255,255,0.85); letter-spacing:-0.02em;">
-                    NocPulse
-                  </td>
-                </tr>
-              </table>
+              <img src="https://www.nocpulse.org/logo-light.svg" alt="NocPulse" width="102" height="16" style="display:block; width:102px; height:16px; opacity:0.85;" />
             </td>
           </tr>
 

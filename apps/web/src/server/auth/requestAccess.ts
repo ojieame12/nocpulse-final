@@ -144,43 +144,107 @@ export function renderRequestAccessNotificationEmail(
 
   const html = `<!DOCTYPE html>
 <html lang="en">
-  <body style="margin:0;padding:24px;background:#f8faf8;color:#1f2937;font-family:Arial,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #ebebeb;border-radius:16px;overflow:hidden;">
-      <tr>
-        <td style="padding:24px 28px;border-bottom:1px solid #ebebeb;background:#f4f7f3;">
-          <div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8f98;">Request Access</div>
-          <h1 style="margin:12px 0 0;font-size:28px;font-weight:400;line-height:1.2;color:#111827;">New NocPulse lead</h1>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:24px 28px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-            <tr>
-              <td style="padding:0 0 16px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8f98;">Name</td>
-              <td style="padding:0 0 16px;font-size:14px;color:#111827;">${escapeHtml(submission.name)}</td>
-            </tr>
-            <tr>
-              <td style="padding:0 0 16px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8f98;">Email</td>
-              <td style="padding:0 0 16px;font-size:14px;color:#111827;">${escapeHtml(submission.email)}</td>
-            </tr>
-            <tr>
-              <td style="padding:0 0 16px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8f98;">Farm / Operation</td>
-              <td style="padding:0 0 16px;font-size:14px;color:#111827;">${escapeHtml(submission.farmName)}</td>
-            </tr>
-            <tr>
-              <td style="padding:0 0 16px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8f98;">Approximate Acreage</td>
-              <td style="padding:0 0 16px;font-size:14px;color:#111827;">${formatOptionalValue(submission.acreage)}</td>
-            </tr>
-            <tr>
-              <td style="padding:0;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#8a8f98;vertical-align:top;">Message</td>
-              <td style="padding:0;font-size:14px;color:#111827;white-space:pre-wrap;">${formatOptionalValue(submission.message)}</td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-      ${ctaHtml}
-    </table>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>${subject}</title>
+  <style>
+    body, table, td, p, a { margin: 0; padding: 0; }
+    body { width: 100% !important; background-color: #0c120e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#0c120e;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0c120e;">
+    <tr>
+      <td align="center" style="padding: 48px 24px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px; background-color:#151e17; border:1px solid rgba(255,255,255,0.06); border-radius:16px; overflow:hidden;">
+
+          <!-- Green accent bar -->
+          <tr><td style="height:3px; background: linear-gradient(90deg, #16a34a 0%, #065f46 100%);"></td></tr>
+
+          <!-- Logo + eyebrow -->
+          <tr>
+            <td style="padding: 28px 32px 0 32px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td><img src="https://www.nocpulse.org/logo-light.svg" alt="NocPulse" width="102" height="16" style="display:block; width:102px; height:16px; opacity:0.7;" /></td>
+                  <td align="right" style="font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,0.25);">New Lead</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Heading -->
+          <tr>
+            <td style="padding: 20px 32px 0 32px;">
+              <h1 style="font-size:20px; font-weight:400; color:rgba(255,255,255,0.88); line-height:1.3; margin:0;">Access request from ${escapeHtml(submission.name)}</h1>
+            </td>
+          </tr>
+
+          <!-- Details table -->
+          <tr>
+            <td style="padding: 24px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding:10px 0; font-size:11px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; color:rgba(255,255,255,0.30); width:140px; vertical-align:top;">Name</td>
+                  <td style="padding:10px 0; font-size:14px; color:rgba(255,255,255,0.78);">${escapeHtml(submission.name)}</td>
+                </tr>
+                <tr><td colspan="2" style="height:1px; background:rgba(255,255,255,0.05);"></td></tr>
+                <tr>
+                  <td style="padding:10px 0; font-size:11px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; color:rgba(255,255,255,0.30); vertical-align:top;">Email</td>
+                  <td style="padding:10px 0; font-size:14px; color:rgba(255,255,255,0.78);"><a href="mailto:${escapeHtml(submission.email)}" style="color:#4ade80; text-decoration:none;">${escapeHtml(submission.email)}</a></td>
+                </tr>
+                <tr><td colspan="2" style="height:1px; background:rgba(255,255,255,0.05);"></td></tr>
+                <tr>
+                  <td style="padding:10px 0; font-size:11px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; color:rgba(255,255,255,0.30); vertical-align:top;">Farm</td>
+                  <td style="padding:10px 0; font-size:14px; color:rgba(255,255,255,0.78);">${escapeHtml(submission.farmName)}</td>
+                </tr>
+                <tr><td colspan="2" style="height:1px; background:rgba(255,255,255,0.05);"></td></tr>
+                <tr>
+                  <td style="padding:10px 0; font-size:11px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; color:rgba(255,255,255,0.30); vertical-align:top;">Acreage</td>
+                  <td style="padding:10px 0; font-size:14px; color:rgba(255,255,255,${submission.acreage ? '0.78' : '0.25'});">${formatOptionalValue(submission.acreage)}</td>
+                </tr>
+                ${submission.message ? `
+                <tr><td colspan="2" style="height:1px; background:rgba(255,255,255,0.05);"></td></tr>
+                <tr>
+                  <td style="padding:10px 0; font-size:11px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase; color:rgba(255,255,255,0.30); vertical-align:top;">Message</td>
+                  <td style="padding:10px 0; font-size:13px; color:rgba(255,255,255,0.60); line-height:1.5; white-space:pre-wrap;">${escapeHtml(submission.message)}</td>
+                </tr>` : ''}
+              </table>
+            </td>
+          </tr>
+
+          ${reviewAccessUrl ? `
+          <!-- CTA -->
+          <tr>
+            <td align="center" style="padding: 28px 32px 0 32px;">
+              <table role="presentation" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="background-color:#16a34a; border-radius:10px;">
+                    <a href="${escapeHtml(reviewAccessUrl)}" target="_blank" style="display:inline-block; padding:12px 32px; font-size:14px; font-weight:600; color:#ffffff; text-decoration:none; letter-spacing:0.01em;">Review &amp; Grant Access</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin-top:12px; font-size:11px; color:rgba(255,255,255,0.25);">Grant <strong style="color:rgba(255,255,255,0.45);">${escapeHtml(submission.email)}</strong> workspace access</p>
+            </td>
+          </tr>` : ''}
+
+          <!-- Divider -->
+          <tr><td style="padding: 24px 32px 0 32px;"><div style="height:1px; background:rgba(255,255,255,0.06);"></div></td></tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding: 16px 32px 28px 32px;">
+              <p style="font-size:10px; color:rgba(255,255,255,0.12);">NocPulse &mdash; Agricultural Intelligence</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
 </html>`;
   const text = [
     "New NocPulse lead",
