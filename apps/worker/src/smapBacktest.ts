@@ -11,13 +11,14 @@
  *   --workspace-id <id> All fields in workspace
  *   --days <n>          Lookback period (default: 90)
  *   --output <path>     JSON report output (default: stdout)
- *   --smap-csv <path>   Path to SMAP fixture CSV (required until AppEEARS is wired)
+ *   --smap-csv <path>   Path to SMAP fixture CSV (optional when AppEEARS creds exist)
  *   --dry-run           Show what would be fetched without calling APIs
  */
 
 import { writeFile } from "node:fs/promises";
 import {
   computeValidationMetrics,
+  createAppEearsSmapSource,
   createCsvFixtureSmapSource,
   type SmapDataSource,
   type SmapFieldReport,
@@ -45,6 +46,13 @@ function mean(values: number[]): number {
   if (values.length === 0) return NaN;
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
+
+type BacktestFieldRow = {
+  id: string;
+  workspace_id: string;
+  name: string | null;
+  label_point: readonly [number, number] | null;
+};
 
 // ---------------------------------------------------------------------------
 // Main
@@ -107,14 +115,16 @@ async function main() {
     return;
   }
 
+  const fieldRows = fields as BacktestFieldRow[];
+
   console.log(
-    `[smap-backtest] found ${fields.length} field(s), period: ${isoDate(startDate)} to ${isoDate(endDate)} (${days} days)`,
+    `[smap-backtest] found ${fieldRows.length} field(s), period: ${isoDate(startDate)} to ${isoDate(endDate)} (${days} days)`,
   );
 
   if (dryRun) {
     const summary = {
       mode: "dry-run",
-      fields: fields.map((f) => ({
+      fields: fieldRows.map((f) => ({
         id: f.id,
         name: f.name,
         labelPoint: f.label_point,
@@ -134,25 +144,30 @@ async function main() {
     smapSource = createCsvFixtureSmapSource(smapCsvPath);
     console.log(`[smap-backtest] using CSV fixture: ${smapCsvPath}`);
   } else {
-    // TODO: wire AppEEARS client when credentials are available
-    // const username = process.env.EARTHDATA_USERNAME;
-    // const password = process.env.EARTHDATA_PASSWORD;
-    // smapSource = createAppEearsSmapSource(username, password);
-    console.error(
-      "[smap-backtest] No --smap-csv provided and AppEEARS is not yet wired. " +
-        "Provide a fixture CSV with --smap-csv <path>.",
+    const username = process.env.EARTHDATA_USERNAME;
+    const password = process.env.EARTHDATA_PASSWORD;
+    const baseUrl = process.env.APPEEARS_BASE_URL;
+
+    if (!username || !password) {
+      console.error(
+        "[smap-backtest] No --smap-csv provided and AppEEARS credentials are missing. " +
+          "Set EARTHDATA_USERNAME / EARTHDATA_PASSWORD or provide --smap-csv <path>.",
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    smapSource = createAppEearsSmapSource(username, password, baseUrl);
+    console.log(
+      `[smap-backtest] using AppEEARS${baseUrl ? ` (${baseUrl})` : ""}`,
     );
-    process.exitCode = 1;
-    return;
   }
 
   // ---- Process each field ----
   const fieldReports: SmapFieldReport[] = [];
 
-  for (const field of fields) {
-    const labelPoint = field.label_point as unknown as
-      | readonly [number, number]
-      | null;
+  for (const field of fieldRows) {
+    const labelPoint = field.label_point;
 
     if (!labelPoint || labelPoint.length < 2) {
       console.warn(
