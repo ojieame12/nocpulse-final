@@ -993,18 +993,27 @@ test("resolveHistoricalAnomalyFromReadModel returns null when percentile is null
   assert.equal(result, null);
 });
 
-test("resolveHistoricalAnomalyFromReadModel defaults description to empty string when absent", () => {
+test("resolveHistoricalAnomalyFromReadModel returns null when description is absent", () => {
   const result = resolveHistoricalAnomalyFromReadModel({
     historicalAnomalyPercentile: 60,
   });
 
-  assert.equal(result!.description, "");
-  assert.equal(result!.anomalyClass, "normal");
+  assert.equal(result, null);
+});
+
+test("resolveHistoricalAnomalyFromReadModel returns null when description is blank", () => {
+  const result = resolveHistoricalAnomalyFromReadModel({
+    historicalAnomalyPercentile: 60,
+    historicalAnomalyDescription: "   ",
+  });
+
+  assert.equal(result, null);
 });
 
 test("resolveHistoricalAnomalyFromReadModel boundary: percentile exactly 75 is normal", () => {
   const result = resolveHistoricalAnomalyFromReadModel({
     historicalAnomalyPercentile: 75,
+    historicalAnomalyDescription: "Within normal range for early April",
   });
   assert.equal(result!.anomalyClass, "normal");
 });
@@ -1012,6 +1021,7 @@ test("resolveHistoricalAnomalyFromReadModel boundary: percentile exactly 75 is n
 test("resolveHistoricalAnomalyFromReadModel boundary: percentile exactly 25 is normal", () => {
   const result = resolveHistoricalAnomalyFromReadModel({
     historicalAnomalyPercentile: 25,
+    historicalAnomalyDescription: "Within normal range for early April",
   });
   assert.equal(result!.anomalyClass, "normal");
 });

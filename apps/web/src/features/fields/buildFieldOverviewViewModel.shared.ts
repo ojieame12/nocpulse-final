@@ -256,12 +256,15 @@ export function resolveHistoricalAnomalyFromReadModel(readModel: {
   description: string;
   anomalyClass: 'unusually-dry' | 'normal' | 'unusually-wet';
 } | null {
-  if (readModel.historicalAnomalyPercentile == null) {
+  const description = readModel.historicalAnomalyDescription?.trim() ?? "";
+
+  if (readModel.historicalAnomalyPercentile == null || description.length === 0) {
     return null;
   }
+
   return {
     percentile: readModel.historicalAnomalyPercentile,
-    description: readModel.historicalAnomalyDescription ?? '',
+    description,
     anomalyClass:
       readModel.historicalAnomalyPercentile > 75
         ? 'unusually-dry'
