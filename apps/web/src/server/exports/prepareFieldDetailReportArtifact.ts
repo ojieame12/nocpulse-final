@@ -5,6 +5,7 @@ import type {
   ReportAlertItem,
   ReportFindingItem,
 } from "../../components/panels/ReportTab";
+import type { FieldActionProps } from "../../components/panels/ActionTab";
 import type { FieldSummaryProps } from "../../components/panels/SummaryTab";
 import { loadPdfBrandLogo } from "./loadPdfBrandLogo";
 
@@ -118,6 +119,62 @@ function cropParamNote(label: string, value: string, fillPct: number): string {
   return "Within acceptable range for selected crop.";
 }
 
+function joinParts(parts: Array<string | null | undefined>, separator = " · "): string | undefined {
+  const compact = parts.map((part) => part?.trim()).filter((part): part is string => Boolean(part));
+  return compact.length > 0 ? compact.join(separator) : undefined;
+}
+
+function formatPercent(value: number | null | undefined): string | undefined {
+  if (value == null || !Number.isFinite(value)) return undefined;
+  return Number.isInteger(value) ? `${value}%` : `${value.toFixed(1)}%`;
+}
+
+function dataQualityColor(summary: FieldSummaryProps | null | undefined): RGB {
+  switch (summary?.dataQuality?.tone) {
+    case "positive":
+      return TEAL;
+    case "warning":
+      return AMBER;
+    case "danger":
+      return RED;
+    default:
+      return SLATE;
+  }
+}
+
+function deriveSummarySource(summary: FieldSummaryProps): string | undefined {
+  if (summary.sourceTagExtended?.trim()) return summary.sourceTagExtended.trim();
+  if (summary.moistureDerivationMode === "source-backed") {
+    return joinParts(["Satellite-derived", summary.confidenceSub !== "No source" ? summary.confidenceSub : undefined]);
+  }
+  if (summary.moistureDerivationMode && summary.moistureDerivationMode !== "unknown") {
+    return joinParts(["Modeled estimate", summary.confidenceSub !== "No source" ? summary.confidenceSub : undefined]);
+  }
+  return undefined;
+}
+
+function actionSeverity(action: FieldActionProps): "critical" | "warning" | "info" {
+  if (action.topRiskSeverity) return sevType(action.topRiskSeverity);
+  const urgency = action.urgency.toLowerCase();
+  if (/(critical|urgent|immediate|high)/.test(urgency)) return "critical";
+  if (/(watch|soon|medium|moderate)/.test(urgency)) return "warning";
+  return "info";
+}
+
+function actionDetail(action: FieldActionProps): string | undefined {
+  const due = action.dueDate.trim() ? `Due ${action.dueDate.trim()}` : undefined;
+  return joinParts([due, action.intelligenceSourceLabel, action.intelligenceFreshnessLabel]);
+}
+
+function actionNextStep(action: FieldActionProps): string | undefined {
+  const answeredQuestion = action.questions.find((item) => item.answer?.trim())?.answer?.trim();
+  if (answeredQuestion) return answeredQuestion;
+  if (action.signals.length > 0) {
+    return `Signals to watch: ${action.signals.slice(0, 3).map((signal) => signal.label).join(", ")}.`;
+  }
+  return undefined;
+}
+
 /** Determine row accent color from forecast data. */
 function forecastRowColor(temp: string, precip: string): RGB | undefined {
   // Parse lowest temperature from strings like "-3°C / 5°C" or "Low: -2°C"
@@ -154,6 +211,7 @@ export type PrepareFieldDetailReportArtifactInput = {
   areaLabel: string;
   report: FieldReportProps | null;
   summary: FieldSummaryProps | null;
+  action: FieldActionProps | null;
   generatedAt?: string;
 };
 
@@ -178,6 +236,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
   const blocks: PdfBlock[] = [];
   const r = input.report;
   const s = input.summary;
+  const a = input.action;
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const reportDate = r?.updatedDate ?? generatedAt.slice(0, 10);
 
@@ -246,6 +305,135 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
       ],
       marginTop: 6,
     });
+  }
+
+  /* ── Truth & confidence ── */
+
+  if (s && (s.dataQuality || s.confidenceBreakdown || s.sourceTagExtended || s.availableWaterMm || s.depletionPct != null || s.historicalAnomaly || s.dataSources)) {
+    const sourceSummary = deriveSummarySource(s);
+    const truthPairs = [
+      { key: "Data quality", value: s.dataQuality?.label ?? "Unavailable" },
+      {
+        key: "Confidence",
+        value: joinParts([s.confidence, s.confidenceSub && s.confidenceSub !== "No source" ? s.confidenceSub : undefined]) ?? s.confidence,
+      },
+      ...(sourceSummary ? [{ key: "Moisture source", value: sourceSummary }] : []),
+      ...(s.statusLabel ? [{ key: "Water status", value: s.statusLabel }] : []),
+      ...(s.availableWaterMm ? [{ key: "Available water", value: s.availableWaterMm }] : []),
+      ...(s.depletionPct != null ? [{ key: "Water depletion", value: formatPercent(s.depletionPct) ?? "—" }] : []),
+      ...(s.historicalAnomaly?.description ? [{ key: "Historical signal", value: s.historicalAnomaly.description }] : []),
+    ];
+
+    blocks.push({ kind: "spacer", height: 6 });
+    blocks.push({
+      kind: "section-header",
+      label: "Data Quality & Confidence",
+      meta: s.updatedLabel ?? reportDate,
+      accentColor: dataQualityColor(s),
+    });
+
+    if (s.dataQuality) {
+      blocks.push({
+        kind: "status-badge",
+        label: `${s.dataQuality.label} Data`,
+        color: dataQualityColor(s),
+        marginTop: 4,
+      });
+      blocks.push({
+        kind: "text",
+        style: "body",
+        text: joinParts([s.dataQuality.summary, s.dataQuality.reasons.join(" ")], " ") ?? s.dataQuality.summary,
+      });
+    }
+
+    blocks.push({
+      kind: "key-value",
+      pairs: truthPairs,
+      columns: 2,
+      marginTop: 6,
+    });
+
+    if (s.confidenceBreakdown) {
+      blocks.push({
+        kind: "metric-grid",
+        cells: [
+          { label: "Freshness", value: s.confidenceBreakdown.freshness },
+          { label: "Agreement", value: s.confidenceBreakdown.agreement },
+          { label: "Resolution", value: s.confidenceBreakdown.resolution },
+          { label: "Scale fit", value: s.confidenceBreakdown.scaleFit },
+        ],
+        columns: 4,
+        marginTop: 6,
+      });
+    }
+
+    if (s.dataSources) {
+      blocks.push({
+        kind: "text",
+        style: "caption",
+        text: `Inputs: Satellite ${s.dataSources.satellite ?? "Unavailable"} · Weather ${s.dataSources.weather ?? "Unavailable"} · Soil ${s.dataSources.soil ?? "Unavailable"}`,
+      });
+    }
+  }
+
+  /* ── Recommended action ── */
+
+  if (a) {
+    const recommendationDetail = actionDetail(a);
+    const recommendationNextStep = actionNextStep(a);
+    const topRiskSummary = joinParts([
+      a.topRiskTitle ? `Top risk: ${a.topRiskTitle}` : undefined,
+      a.intelligenceSource ? `Intelligence state: ${a.intelligenceSource}` : undefined,
+    ]);
+
+    blocks.push({ kind: "spacer", height: 6 });
+    blocks.push({
+      kind: "section-header",
+      label: "Recommended Action",
+      meta: a.dueDate,
+      accentColor: actionSeverity(a) === "critical" ? RED : actionSeverity(a) === "warning" ? AMBER : GREEN,
+    });
+    blocks.push({
+      kind: "status-badge",
+      label: a.urgency,
+      color: actionSeverity(a) === "critical" ? RED : actionSeverity(a) === "warning" ? AMBER : TEAL,
+      marginTop: 4,
+    });
+    blocks.push({
+      kind: "severity-card",
+      severity: actionSeverity(a),
+      title: a.recommendation,
+      detail: recommendationDetail,
+      body: a.explanation,
+      action: recommendationNextStep,
+      marginTop: 6,
+    });
+    blocks.push({
+      kind: "metric-grid",
+      cells: [
+        { label: "Confidence", value: a.confidence },
+        { label: "Signals", value: String(a.signalCount) },
+        { label: "Alerts", value: String(a.activeAlertCount ?? 0) },
+        { label: "Findings / Zones", value: `${a.activeFindingCount ?? 0} / ${a.activeZoneCount ?? 0}` },
+      ],
+      columns: 4,
+      marginTop: 6,
+    });
+    if (topRiskSummary) {
+      blocks.push({
+        kind: "text",
+        style: "caption",
+        text: topRiskSummary,
+      });
+    }
+    for (const question of a.questions.slice(0, 2)) {
+      if (!question.answer?.trim()) continue;
+      blocks.push({
+        kind: "text",
+        style: "caption",
+        text: `${question.question}: ${question.answer.trim()}`,
+      });
+    }
   }
 
   /* ── Action Items (farmer-first: what do I need to do?) ── */
