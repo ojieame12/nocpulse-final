@@ -167,6 +167,9 @@ importers:
       '@fieldpulse/platform-db':
         specifier: workspace:*
         version: link:../../platform/db
+      resend:
+        specifier: ^4.6.0
+        version: 4.8.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
 
   packages/modules/auth:
     dependencies:
