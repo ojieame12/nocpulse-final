@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="${ROOT_DIR}/logs/cadence"
 TIMESTAMP="$(date -u +"%Y-%m-%dT%H-%M-%SZ")"
 
-mkdir -p "${LOG_DIR}/market" "${LOG_DIR}/probe" "${LOG_DIR}/hail"
+mkdir -p "${LOG_DIR}/market" "${LOG_DIR}/probe" "${LOG_DIR}/hail" "${LOG_DIR}/action-brief"
 
 usage() {
   cat <<'EOF'
@@ -14,6 +14,7 @@ Usage:
   scripts/run-cadence.sh market
   scripts/run-cadence.sh probe
   scripts/run-cadence.sh hail
+  scripts/run-cadence.sh action-brief
 
 Environment overrides:
   FIELDPULSE_WORKSPACE_ID   Workspace for hail runs.
@@ -22,6 +23,11 @@ Environment overrides:
   FIELDPULSE_STALE_HOURS    Default: 24
   FIELDPULSE_PROBE_LIMIT    Default: 50
   FIELDPULSE_PROBE_SINCE    Default: 6
+  FIELDPULSE_ACTION_BRIEF_WORKSPACE_ID  Optional workspace for action-brief runs.
+  FIELDPULSE_ACTION_BRIEF_LIMIT         Optional per-workspace field limit.
+  FIELDPULSE_ACTION_BRIEF_DRAIN_LIMIT   Default: 100
+  FIELDPULSE_ACTION_BRIEF_REPORT_LIMIT  Default: 50
+  FIELDPULSE_ACTION_BRIEF_FORECAST_HOURS Optional weather forecast horizon override.
 EOF
 }
 
@@ -87,6 +93,32 @@ case "${JOB}" in
       --limit "${HAIL_LIMIT}" \
       --drain-limit "${DRAIN_LIMIT}" \
       --stale-after-hours "${STALE_HOURS}"
+    ;;
+  action-brief)
+    ACTION_BRIEF_WORKSPACE_ID="${FIELDPULSE_ACTION_BRIEF_WORKSPACE_ID:-}"
+    ACTION_BRIEF_LIMIT="${FIELDPULSE_ACTION_BRIEF_LIMIT:-}"
+    ACTION_BRIEF_DRAIN_LIMIT="${FIELDPULSE_ACTION_BRIEF_DRAIN_LIMIT:-100}"
+    ACTION_BRIEF_REPORT_LIMIT="${FIELDPULSE_ACTION_BRIEF_REPORT_LIMIT:-50}"
+    ACTION_BRIEF_FORECAST_HOURS="${FIELDPULSE_ACTION_BRIEF_FORECAST_HOURS:-}"
+
+    ACTION_BRIEF_ARGS=(--drain-limit "${ACTION_BRIEF_DRAIN_LIMIT}" --report-limit "${ACTION_BRIEF_REPORT_LIMIT}")
+
+    if [[ -n "${ACTION_BRIEF_WORKSPACE_ID}" ]]; then
+      ACTION_BRIEF_ARGS+=(--workspace-id "${ACTION_BRIEF_WORKSPACE_ID}")
+    fi
+
+    if [[ -n "${ACTION_BRIEF_LIMIT}" ]]; then
+      ACTION_BRIEF_ARGS+=(--limit "${ACTION_BRIEF_LIMIT}")
+    fi
+
+    if [[ -n "${ACTION_BRIEF_FORECAST_HOURS}" ]]; then
+      ACTION_BRIEF_ARGS+=(--forecast-hours "${ACTION_BRIEF_FORECAST_HOURS}")
+    fi
+
+    run_job \
+      action-brief \
+      corepack pnpm --filter @fieldpulse/worker action-brief:cadence -- \
+      "${ACTION_BRIEF_ARGS[@]}"
     ;;
   ""|-h|--help|help)
     usage
