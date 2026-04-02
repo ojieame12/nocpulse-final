@@ -47,6 +47,7 @@
     "enqueue": "tsx src/enqueue.ts",
     "report:read-model": "tsx src/fieldReportReadModel.ts",
     "report:beta-readiness": "tsx src/betaReadinessReport.ts",
+    "report:beta-roster": "tsx src/betaWorkspaceRosterReport.ts",
     "report:quality": "tsx src/fieldQualityAudit.ts",
     "report:first-insight": "tsx src/previewFirstInsightReport.ts",
     "report:first-insight-funnel": "tsx src/firstInsightFunnelReport.ts",
