@@ -22,7 +22,9 @@ import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../server/runtime/resolveRequestContext";
-import type { JsonValue } from "@fieldpulse/platform-db";
+
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 const FIELD_CROP_CONTEXT_RATE_LIMIT = {
   scope: "field-crop-context:actor",

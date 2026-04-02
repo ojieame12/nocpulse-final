@@ -3,8 +3,8 @@ import {
   deriveSourceBackedMoistureEstimate,
   type FieldRasterObservation,
 } from "@fieldpulse/module-imagery";
-import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import { getWebServerRuntime } from "../../server/runtime/getWebServerRuntime";
+import { createServerDatabaseClient } from "../../server/runtime/createServerDatabaseClient";
 import {
   chooseLatestObservation,
   toPrimitiveMetadata,
@@ -340,7 +340,7 @@ export function observationHasMetric(
 }
 
 async function loadRecentRasterObservationHistory(input: {
-  client: ReturnType<typeof createSupabaseDatabaseClient>;
+  client: ReturnType<typeof createServerDatabaseClient>;
   workspaceId: string;
   fieldId: string;
   providerKeys: readonly string[];
@@ -425,7 +425,7 @@ async function loadRecentRasterObservationHistory(input: {
 }
 
 async function loadRecentMetricFamilyRasterHistory(input: {
-  client: ReturnType<typeof createSupabaseDatabaseClient>;
+  client: ReturnType<typeof createServerDatabaseClient>;
   workspaceId: string;
   fieldId: string;
   observedAt?: string;
@@ -524,7 +524,7 @@ async function loadRecentMetricFamilyRasterHistory(input: {
 }
 
 async function loadRecentImageryCaptures(input: {
-  client: ReturnType<typeof createSupabaseDatabaseClient>;
+  client: ReturnType<typeof createServerDatabaseClient>;
   workspaceId: string;
   fieldId: string;
 }) {
@@ -553,10 +553,7 @@ export async function loadMetricFamilyRasterObservations(input: {
     return createEmptyMetricFamilyRasterObservations();
   }
 
-  const client = createSupabaseDatabaseClient({
-    url: input.runtime.env.supabase.url!,
-    serviceKey: input.runtime.env.supabase.serviceRoleKey!,
-  });
+  const client = createServerDatabaseClient(input.runtime);
   const [recentCaptures, metricFamilyHistory] = await Promise.all([
     readOptionalMetricFamilyValue(
       "recent imagery captures",
@@ -590,9 +587,15 @@ export async function loadMetricFamilyRasterObservations(input: {
 
   const latestSarObservation = sarHistory[0] ?? null;
   const latestSentinel2Observation =
-    opticalHistory.find((observation) => observation.providerKey === "sentinel-2") ?? null;
+    opticalHistory.find(
+      (observation: FieldRasterObservation) =>
+        observation.providerKey === "sentinel-2",
+    ) ?? null;
   const latestPlanetObservation =
-    opticalHistory.find((observation) => observation.providerKey === "planet") ?? null;
+    opticalHistory.find(
+      (observation: FieldRasterObservation) =>
+        observation.providerKey === "planet",
+    ) ?? null;
 
   const latestOpticalObservation = chooseLatestObservation([
     latestPlanetObservation,
@@ -602,7 +605,7 @@ export async function loadMetricFamilyRasterObservations(input: {
     latestOpticalObservation == null
       ? null
       : opticalHistory.find(
-          (observation) =>
+          (observation: FieldRasterObservation) =>
             observation.providerKey === "sentinel-2" &&
             toTimestampMillis(observation.observedAt) <
               toTimestampMillis(latestOpticalObservation.observedAt),
@@ -611,7 +614,7 @@ export async function loadMetricFamilyRasterObservations(input: {
     latestOpticalObservation == null
       ? null
       : opticalHistory.find(
-          (observation) =>
+          (observation: FieldRasterObservation) =>
             observation.providerKey === "planet" &&
             toTimestampMillis(observation.observedAt) <
               toTimestampMillis(latestOpticalObservation.observedAt),
@@ -620,7 +623,7 @@ export async function loadMetricFamilyRasterObservations(input: {
     latestSarObservation == null
       ? null
       : sarHistory.find(
-          (observation) =>
+          (observation: FieldRasterObservation) =>
             toTimestampMillis(observation.observedAt) <
             toTimestampMillis(latestSarObservation.observedAt),
         ) ?? null;
