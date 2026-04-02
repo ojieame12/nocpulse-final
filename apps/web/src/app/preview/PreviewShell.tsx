@@ -56,6 +56,10 @@ import {
   type WorkspaceFirstInsightFieldSnapshot,
 } from '../../features/fields/workspaceFirstInsightSummary';
 import type { FieldCropProps as LiveCropPanelProps } from '../../features/fields/tabs/CropTab';
+import {
+  buildPreviewFirstInsightAuditPayload,
+  buildPreviewFirstInsightSessionKey,
+} from './previewFirstInsightTracking';
 
 /* ── Types ── */
 
@@ -584,6 +588,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     [initial.fieldId, initial],
   ]));
   const inflightRequestsRef = useRef(new Map<string, Promise<FieldViewModel | null>>());
+  const firstInsightTrackingInFlightRef = useRef(new Set<string>());
   const failedRequestsRef = useRef(
     new Map<string, { retryAfter: number; summary: string }>(),
   );
@@ -1804,6 +1809,51 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       fields: fieldSnapshots,
     });
   }, [activeFieldId, fieldCacheRevision, fieldData, sidebarFields, workspaceId]);
+
+  const firstInsightAuditPayload = useMemo(
+    () =>
+      buildPreviewFirstInsightAuditPayload({
+        workspaceId,
+        fieldData,
+        workspaceFirstInsightSummary,
+      }),
+    [fieldData, workspaceFirstInsightSummary, workspaceId],
+  );
+
+  useEffect(() => {
+    if (!firstInsightAuditPayload || typeof window === 'undefined') {
+      return;
+    }
+
+    const sessionKey = buildPreviewFirstInsightSessionKey(firstInsightAuditPayload);
+    if (window.sessionStorage.getItem(sessionKey) === '1') {
+      return;
+    }
+
+    if (firstInsightTrackingInFlightRef.current.has(sessionKey)) {
+      return;
+    }
+
+    firstInsightTrackingInFlightRef.current.add(sessionKey);
+
+    void fetch('/api/preview/first-insight', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(firstInsightAuditPayload),
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`first-insight tracking failed: ${response.status}`);
+        }
+
+        window.sessionStorage.setItem(sessionKey, '1');
+      })
+      .catch(() => {
+        firstInsightTrackingInFlightRef.current.delete(sessionKey);
+      });
+  }, [firstInsightAuditPayload]);
 
   /* ── Global ⌘K shortcut ── */
   useEffect(() => {
