@@ -4,6 +4,12 @@ import Link from "next/link";
 import { Moon, SunMedium } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 
+function applyTheme(t: "light" | "dark") {
+  document.documentElement.setAttribute("data-theme", t);
+  // Also update <main> if it has data-theme (prevents stale attribute from overriding)
+  document.querySelectorAll("main[data-theme]").forEach((el) => el.setAttribute("data-theme", t));
+}
+
 export function LandingNavbar() {
   const [scrolled, setScrolled] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
@@ -19,13 +25,13 @@ export function LandingNavbar() {
     const stored = localStorage.getItem("nocpulse-theme") as "light" | "dark" | null;
     const preferred = stored ?? "dark";
     setTheme(preferred);
-    document.documentElement.setAttribute("data-theme", preferred);
+    applyTheme(preferred);
   }, []);
 
   const toggleTheme = useCallback(() => {
     setTheme((prev) => {
       const next = prev === "light" ? "dark" : "light";
-      document.documentElement.setAttribute("data-theme", next);
+      applyTheme(next);
       localStorage.setItem("nocpulse-theme", next);
       return next;
     });
