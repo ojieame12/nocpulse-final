@@ -17,6 +17,7 @@ export type FieldRepository = {
     fieldId: EntityId,
     name: string,
   ): Promise<FieldDetail>;
+  restoreField(workspaceId: WorkspaceId, fieldId: EntityId): Promise<FieldDetail>;
   setLegalLandDescription(
     workspaceId: WorkspaceId,
     fieldId: EntityId,

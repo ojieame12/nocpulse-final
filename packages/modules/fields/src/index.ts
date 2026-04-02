@@ -1,4 +1,5 @@
 export { type CreateFieldInput } from "./contracts/CreateFieldInput";
+export { type ArchivedFieldSummary } from "./contracts/ArchivedFieldSummary";
 export { type FieldBoundary, type GeoPoint } from "./contracts/FieldBoundary";
 export { type FieldDetail } from "./contracts/FieldDetail";
 export { type FieldOverview } from "./contracts/FieldOverview";

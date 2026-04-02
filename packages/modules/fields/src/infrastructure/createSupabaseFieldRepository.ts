@@ -9,6 +9,7 @@ import {
   type WorkspaceId,
 } from "@fieldpulse/platform-db";
 import type { CreateFieldInput } from "../contracts/CreateFieldInput";
+import type { ArchivedFieldSummary } from "../contracts/ArchivedFieldSummary";
 import type { FieldBoundary, GeoPoint } from "../contracts/FieldBoundary";
 import type { FieldDetail } from "../contracts/FieldDetail";
 import type { FieldOverview } from "../contracts/FieldOverview";
@@ -32,6 +33,16 @@ type SelectedFieldOverviewRow = Pick<
   | "latest_surface_pct"
   | "latest_moisture_confidence"
   | "latest_moisture_source_key"
+>;
+type ArchivedFieldRow = Pick<
+  DatabaseSchema["app"]["Tables"]["fields"]["Row"],
+  | "workspace_id"
+  | "id"
+  | "name"
+  | "area_ha"
+  | "legal_land_description"
+  | "archived_at"
+  | "archived_by"
 >;
 
 const FIELD_OVERVIEW_SELECT =
@@ -113,6 +124,22 @@ function mapFieldOverview(row: SelectedFieldOverviewRow): FieldOverview {
             sourceKey: row.latest_moisture_source_key,
           }
         : null,
+  };
+}
+
+function mapArchivedFieldSummary(row: ArchivedFieldRow): ArchivedFieldSummary {
+  if (!row.archived_at) {
+    throw new Error("[fields] archived field row missing archived_at");
+  }
+
+  return {
+    workspaceId: row.workspace_id,
+    id: row.id,
+    name: row.name,
+    areaHa: Number(row.area_ha),
+    legalLandDescription: row.legal_land_description,
+    archivedAt: row.archived_at,
+    archivedBy: row.archived_by ?? null,
   };
 }
 
@@ -227,6 +254,32 @@ export function createSupabaseFieldRepository(
       return detail;
     },
 
+    async restoreField(workspaceId, fieldId) {
+      const result = await client
+        .from("fields")
+        .update({
+          archived_at: null,
+          archived_by: null,
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("id", fieldId)
+        .not("archived_at", "is", null)
+        .select("id")
+        .single();
+
+      requireSupabaseData(result, "fields.restoreField.update");
+
+      const detail = await this.getById(workspaceId, fieldId);
+
+      if (!detail) {
+        throw new Error(
+          `[fields] restored field ${fieldId} could not be reloaded after restore`,
+        );
+      }
+
+      return detail;
+    },
+
     async setLegalLandDescription(workspaceId, fieldId, legalLandDescription) {
       const result = await client
         .from("fields")
@@ -296,6 +349,22 @@ export function createSupabaseFieldRepository(
         result,
         "fields.listByWorkspace",
       ).map(mapFieldSummary);
+    },
+
+    async listArchivedByWorkspace(workspaceId: WorkspaceId) {
+      const result = await client
+        .from("fields")
+        .select(
+          "workspace_id,id,name,area_ha,legal_land_description,archived_at,archived_by",
+        )
+        .eq("workspace_id", workspaceId)
+        .not("archived_at", "is", null)
+        .order("archived_at", { ascending: false });
+
+      return requireSupabaseData(
+        result,
+        "fields.listArchivedByWorkspace",
+      ).map((row) => mapArchivedFieldSummary(row as ArchivedFieldRow));
     },
 
     async listOverviewByWorkspace(workspaceId: WorkspaceId) {

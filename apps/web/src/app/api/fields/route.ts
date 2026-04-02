@@ -25,6 +25,7 @@ import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../server/runtime/resolveRequestContext";
+import { canManageWorkspace } from "../../../features/settings/workspaceAccess";
 
 const FIELD_CREATE_ACTOR_RATE_LIMIT = {
   scope: "fields-create:actor",
@@ -52,6 +53,51 @@ const CreateFieldBodySchema = z.object({
   ),
   legalLandDescription: nullableTrimmedText(),
 });
+
+export async function GET(request: Request) {
+  try {
+    const runtime = getWebServerRuntime();
+
+    if (runtime.mode !== "supabase") {
+      return jsonError(503, "Supabase runtime is not configured.");
+    }
+
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status");
+    const requestedWorkspaceId = url.searchParams.get("workspaceId");
+
+    const scopedActor = await resolveRequestActor(request, runtime, {
+      allowDevelopmentFallback: true,
+      preferredWorkspaceId: requestedWorkspaceId,
+    });
+    if (!canManageWorkspace(scopedActor.role)) {
+      return jsonError(403, "Manager access is required to manage archived fields.");
+    }
+
+    if (status !== "archived") {
+      return jsonError(400, "Only archived field listing is supported on this route.");
+    }
+
+    const fields = await runtime.services.fields.listArchivedFields({
+      workspaceId: scopedActor.workspaceId,
+    });
+
+    return jsonOk({
+      result: {
+        fields,
+      },
+    });
+  } catch (error) {
+    if (error instanceof RequestContextError) {
+      return jsonError(error.status, error.message);
+    }
+
+    return jsonServerError(error, {
+      event: "fields-list-route",
+      message: "Field list request failed.",
+    });
+  }
+}
 
 export async function POST(request: Request) {
   const body = await readJsonObject(request);
