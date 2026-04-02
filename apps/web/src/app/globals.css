@@ -246,6 +246,73 @@
   --empty-padding:      32px;
   --empty-radius:       var(--radius-lg);
   --empty-border:       1px solid var(--border-light);
+
+  /* ── Landing page ds-* token aliases ── */
+  --ds-green-50:  var(--color-forest-50);
+  --ds-green-100: var(--color-forest-100);
+  --ds-green-200: var(--color-forest-200);
+  --ds-green-300: var(--color-forest-300);
+  --ds-green-400: var(--color-forest-400);
+  --ds-green-500: var(--color-forest-500);
+  --ds-green-600: var(--color-forest-700);
+  --ds-green-700: var(--color-forest-700);
+  --ds-green-800: var(--color-forest-800);
+  --ds-green-900: var(--color-forest-900);
+  --ds-green-950: var(--color-forest-950);
+  --ds-red-100:   #FEE2E2;
+  --ds-red-500:   #EF4444;
+  --ds-red-600:   #DC2626;
+  --ds-amber-100: #FEF3C7;
+  --ds-amber-500: #F59E0B;
+  --ds-blue-100:  #DBEAFE;
+  --ds-blue-500:  #3B82F6;
+  --ds-surface-dark:   var(--color-slate-900);
+  --ds-surface-white:  var(--color-white);
+  --ds-surface-subtle: var(--color-slate-50);
+  --ds-surface-muted:  var(--color-slate-100);
+  --ds-border-light:   var(--border-light);
+  --ds-border-default: var(--border-medium);
+  --ds-text-primary:   var(--text-primary);
+  --ds-text-body:      var(--text-body);
+  --ds-text-muted:     var(--text-muted);
+  --ds-text-on-dark:   var(--text-on-dark);
+  --ds-text-on-dark-soft:      rgba(255, 255, 255, 0.9);
+  --ds-text-on-dark-strong:    rgba(255, 255, 255, 0.85);
+  --ds-text-on-dark-secondary: rgba(255, 255, 255, 0.7);
+  --ds-text-on-dark-muted:     rgba(255, 255, 255, 0.6);
+  --ds-text-on-dark-faint:     rgba(255, 255, 255, 0.5);
+  --ds-surface-on-dark-subtle: rgba(255, 255, 255, 0.08);
+  --ds-border-on-dark:         rgba(255, 255, 255, 0.12);
+  --ds-border-on-dark-muted:   rgba(255, 255, 255, 0.3);
+  --ds-divider-on-dark:        rgba(255, 255, 255, 0.15);
+  --ds-shadow-overlay:         rgba(0, 0, 0, 0.15);
+  --ds-shadow-btn:   var(--color-forest-950);
+  --nav-scrolled-bg:          rgba(255, 255, 255, 0.92);
+  --nav-scrolled-border:      var(--border-light);
+  --nav-btn-secondary-bg:     rgba(255, 255, 255, 0.92);
+  --nav-btn-secondary-border: var(--border-medium);
+}
+
+/* ── Landing dark theme overrides ── */
+[data-theme="dark"],
+html[data-theme="dark"] {
+  --ds-surface-white:  #0c120e;
+  --ds-surface-subtle: #0a0f0c;
+  --ds-surface-muted:  #151e17;
+  --ds-surface-dark:   #080c09;
+  --ds-green-50:  #0d1a12;
+  --ds-green-100: #0f2016;
+  --ds-green-200: rgba(34, 197, 94, 0.12);
+  --ds-green-300: rgba(34, 197, 94, 0.18);
+  --ds-border-light:   rgba(255, 255, 255, 0.08);
+  --ds-border-default: rgba(255, 255, 255, 0.12);
+  --ds-text-primary:   rgba(255, 255, 255, 0.88);
+  --ds-text-body:      rgba(255, 255, 255, 0.60);
+  --ds-text-muted:     rgba(255, 255, 255, 0.35);
+  --nav-scrolled-bg:          rgba(12, 18, 14, 0.92);
+  --nav-scrolled-border:      rgba(255, 255, 255, 0.06);
+  --nav-btn-secondary-bg:     rgba(255, 255, 255, 0.06);
+  --nav-btn-secondary-border: rgba(255, 255, 255, 0.12);
 }
 
 /* ═══════════════════════════════════════════════════════════════════

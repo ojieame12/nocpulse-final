@@ -1,15 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Moon, SunMedium } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
 
 export function LandingNavbar() {
   const [scrolled, setScrolled] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 100);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  /* Hydrate from stored preference or system */
+  useEffect(() => {
+    const stored = localStorage.getItem("nocpulse-theme") as "light" | "dark" | null;
+    const preferred = stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    setTheme(preferred);
+    document.documentElement.setAttribute("data-theme", preferred);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === "light" ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", next);
+      localStorage.setItem("nocpulse-theme", next);
+      return next;
+    });
   }, []);
 
   return (
@@ -61,9 +80,35 @@ export function LandingNavbar() {
         >
           How It Works
         </a>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} />
         <LandingAuthControls />
       </div>
     </nav>
+  );
+}
+
+function ThemeToggle({ theme, onToggle }: { theme: "light" | "dark"; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label="Toggle theme"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 36,
+        height: 36,
+        borderRadius: 999,
+        border: "1px solid var(--ds-border-light)",
+        backgroundColor: "var(--ds-surface-subtle)",
+        color: "var(--ds-text-body)",
+        cursor: "pointer",
+        transition: "background-color 0.2s, border-color 0.2s, color 0.2s",
+      }}
+    >
+      {theme === "dark" ? <SunMedium size={16} strokeWidth={2} /> : <Moon size={16} strokeWidth={2} />}
+    </button>
   );
 }
 
@@ -89,7 +134,7 @@ function LandingAuthControls() {
     border: "1px solid transparent",
     backgroundColor: "var(--ds-green-800)",
     color: "var(--ds-text-on-dark)",
-    boxShadow: "0 2px 0 #002A15",
+    boxShadow: "0 2px 0 var(--ds-green-950)",
   } as const;
 
   return (

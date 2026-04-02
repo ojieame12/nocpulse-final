@@ -49,20 +49,20 @@ export function Footer() {
               href="#"
               style={{
                 fontSize: 12,
-                color: "rgba(255,255,255,0.5)",
+                color: "var(--ds-text-on-dark-faint)",
                 fontFamily: "var(--font-sintony), sans-serif",
                 textDecoration: "none",
                 transition: "color 0.2s",
               }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.color = "rgba(255,255,255,0.85)"; }}
-              onMouseLeave={(e) => { (e.target as HTMLElement).style.color = "rgba(255,255,255,0.5)"; }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.color = "var(--ds-text-on-dark-strong)"; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.color = "var(--ds-text-on-dark-faint)"; }}
             >
               {label}
             </a>
           ))}
         </div>
 
-        <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-sintony), sans-serif" }}>
+        <p style={{ fontSize: 11, color: "var(--ds-border-on-dark-muted)", fontFamily: "var(--font-sintony), sans-serif" }}>
           &copy; 2026 NocPulse
         </p>
       </div>
