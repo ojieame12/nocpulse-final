@@ -1305,8 +1305,17 @@ export function FieldPageShell({
         );
         const response = await fetch("/api/jobs/dispatches", {
           method: "POST",
+          credentials: "same-origin",
           headers: {
             "content-type": "application/json",
+            ...(
+              pendingOnboardingWatch?.workspaceId ?? workspaceId
+                ? {
+                    "x-fieldpulse-workspace-id":
+                      pendingOnboardingWatch?.workspaceId ?? workspaceId!,
+                  }
+                : {}
+            ),
           },
           body: JSON.stringify({
             workspaceId: pendingOnboardingWatch?.workspaceId ?? workspaceId,

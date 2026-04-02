@@ -60,6 +60,10 @@ import {
   buildPreviewFirstInsightAuditPayload,
   buildPreviewFirstInsightSessionKey,
 } from './previewFirstInsightTracking';
+import {
+  mergeResolvedSidebarField,
+  resolveCompletedImportedFieldIds,
+} from './progressiveFieldStrip.shared';
 
 /* ── Types ── */
 
@@ -655,6 +659,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
   const failedRequestsRef = useRef(
     new Map<string, { retryAfter: number; summary: string }>(),
   );
+  const syncedCompletedFieldIdsRef = useRef(new Set<string>());
 
   /* Welcome modal for fresh workspaces */
   const isEmptyWorkspace = isPlaceholderFieldId(activeFieldId) && sidebarFields.length === 0;
@@ -1424,6 +1429,9 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         { fieldId: job.fieldId, fieldLabel: job.fieldLabel },
       ] as const),
     );
+    for (const job of result.trackedJobs ?? []) {
+      syncedCompletedFieldIdsRef.current.delete(job.fieldId);
+    }
 
     setPendingOnboardingWatch((prev) => {
       /* Merge with any existing watch so earlier imports aren't lost */
@@ -1531,12 +1539,57 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
+    const revealReadyFields = async (
+      fieldIds: readonly string[],
+      options?: { force?: boolean },
+    ) => {
+      for (const fieldId of fieldIds) {
+        if (syncedCompletedFieldIdsRef.current.has(fieldId)) {
+          continue;
+        }
+
+        const nextField = await fetchFieldOverview(
+          fieldId,
+          options?.force ? { force: true } : undefined,
+        );
+
+        if (!nextField || cancelled) {
+          continue;
+        }
+
+        const resolvedSidebarField =
+          nextField.sidebarFields.find((field) => field.id === fieldId) ?? null;
+
+        if (resolvedSidebarField) {
+          syncSidebarFieldsAcrossCache((fields) =>
+            mergeResolvedSidebarField(fields, resolvedSidebarField),
+          );
+          setRevealedFieldId(fieldId);
+        }
+
+        if (activeFieldId === fieldId) {
+          applyFieldData(nextField);
+        }
+
+        syncedCompletedFieldIdsRef.current.add(fieldId);
+      }
+    };
+
     const poll = async () => {
       try {
         const response = await fetch('/api/jobs/dispatches', {
           method: 'POST',
+          credentials: 'same-origin',
           headers: {
             'content-type': 'application/json',
+            ...(
+              pendingOnboardingWatch.workspaceId ?? workspaceId
+                ? {
+                    'x-fieldpulse-workspace-id':
+                      pendingOnboardingWatch.workspaceId ?? workspaceId,
+                  }
+                : {}
+            ),
           },
           body: JSON.stringify({
             workspaceId: pendingOnboardingWatch.workspaceId ?? workspaceId,
@@ -1578,6 +1631,16 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         /* Update the shared status map so FieldStrip + AddFieldPanel can read it */
         setOnboardingStatuses(dispatchById);
 
+        const completedFieldIds = resolveCompletedImportedFieldIds({
+          dispatchFieldMap: pendingOnboardingWatch.dispatchFieldMap,
+          onboardingStatuses: dispatchById,
+          syncedFieldIds: syncedCompletedFieldIdsRef.current,
+        });
+
+        if (completedFieldIds.length > 0) {
+          await revealReadyFields(completedFieldIds, { force: true });
+        }
+
         const shouldContinue = pendingOnboardingWatch.dispatchIds.some((dispatchId) => {
           const status = dispatchById.get(dispatchId)?.status ?? 'queued';
           return status === 'queued' || status === 'running';
@@ -1618,6 +1681,11 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         setOnboardingStatuses(new Map());
       } catch {
         if (!cancelled) {
+          await revealReadyFields(
+            pendingOnboardingWatch.fieldIds.filter(
+              (fieldId) => !syncedCompletedFieldIdsRef.current.has(fieldId),
+            ),
+          );
           timeoutId = setTimeout(() => {
             void poll();
           }, ONBOARDING_STATUS_POLL_MS);
@@ -1633,7 +1701,14 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         clearTimeout(timeoutId);
       }
     };
-  }, [activeFieldId, applyFieldData, fetchFieldOverview, pendingOnboardingWatch, workspaceId]);
+  }, [
+    activeFieldId,
+    applyFieldData,
+    fetchFieldOverview,
+    pendingOnboardingWatch,
+    syncSidebarFieldsAcrossCache,
+    workspaceId,
+  ]);
 
   /* ── Field switching via API ── */
   const handleFieldSelect = useCallback(
