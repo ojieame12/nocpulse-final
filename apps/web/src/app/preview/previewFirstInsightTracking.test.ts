@@ -1,147 +1,141 @@
-import assert from "node:assert/strict";
 import test from "node:test";
-import type { FieldViewModel } from "./PreviewShell";
+import assert from "node:assert/strict";
 import {
   buildPreviewFirstInsightAuditPayload,
   buildPreviewFirstInsightSessionKey,
 } from "./previewFirstInsightTracking";
 
-function makeFieldViewModel(
-  overrides: Partial<FieldViewModel> = {},
-): FieldViewModel {
-  return {
+test("buildPreviewFirstInsightAuditPayload returns a payload for the focused ready field", () => {
+  const result = buildPreviewFirstInsightAuditPayload({
     workspaceId: "workspace-1",
     fieldId: "field-1",
-    fieldName: "Main Farm",
-    areaHaLabel: "64.0 ha",
-    mapPreview: {} as FieldViewModel["mapPreview"],
-    sidebarFields: [],
-    reportPanel: null,
-    actionPanel: null,
-    notesPanel: null,
-    marketPanel: null,
-    cropPanel: null,
-    alertsPanel: null,
-    activityPanel: null,
-    cellInspector: null,
+    activePanel: "detail",
+    isGuestSession: false,
     summary: {
-      name: "Main Farm",
-      lld: "01-001-01-W1",
-      crop: "canola",
-      cropStage: "Stem elongation",
-      moisture: 0.48,
-      cloudCover: "0%",
-      surfaceMoisture: "31%",
-      fieldState: "Adequate",
-      fieldStateColor: "#16a34a",
-      rootMoisture: "48.0%",
-      rootMoistureSub: "Adequate",
-      trend: "+4.2%",
-      trendSub: "vs previous raster",
-      spread: "8.1",
-      spreadSub: "12 mapped cells",
-      confidence: "High",
-      confidenceSub: "sentinel-1",
+      moisture: 0.51,
+      moistureLabel: "51%",
+      moistureTrend: "Flat",
+      moistureTrendDirection: "flat",
+      moistureConfidence: "High confidence",
       moistureConfidenceLevel: "high",
-      moistureDerivationMode: "source-backed",
-      precipitation: "0.0 mm",
-      precipitationSub: "Current observation",
-      nextRain: "—",
-      nextRainSub: "No forecast signal",
-      rainChance: "—",
-      rainChanceSub: "No forecast",
-      sevenDayTotal: "2.1 mm",
-      sevenDayTotalSub: "Loaded forecast window",
-      alerts: [],
-      outlook: [],
+      moistureObservedAtLabel: "Today",
+      rootMoisture: "51%",
+      fieldState: "Stable",
+      trend: "+4%",
+      trendSub: "vs last week",
+      modeLabels: ["Crop health", "Canopy vigor", "Leaf moisture"],
+      currentModeLabel: "Crop health",
+      currentModeValue: "0.64",
       dataQuality: {
         label: "Ready",
-        tone: "positive",
-        summary: "Current moisture is source-backed and fresh.",
-        reasons: ["Weather context loaded"],
+        tone: "good",
+        detail: "Source-backed",
       },
     },
-    ...overrides,
-  };
-}
-
-test("buildPreviewFirstInsightAuditPayload returns payload for a ready focus field", () => {
-  const payload = buildPreviewFirstInsightAuditPayload({
-    workspaceId: "workspace-1",
-    fieldData: makeFieldViewModel(),
     workspaceFirstInsightSummary: {
       focusFieldId: "field-1",
-      focusFieldName: "Main Farm",
+      focusFieldName: "North Quarter",
       headline: "Workspace first read",
-      summary: "Start with Main Farm.",
-      comparisons: [
-        {
-          label: "Wettest ready field",
-          fieldId: "field-1",
-          fieldName: "Main Farm",
-          value: "48.0%",
-          note: "Adequate",
-        },
-      ],
+      summary: "Start here.",
+      comparisons: [],
     },
   });
 
-  assert.deepEqual(payload, {
+  assert.deepEqual(result, {
     workspaceId: "workspace-1",
     fieldId: "field-1",
-    fieldName: "Main Farm",
+    fieldName: "North Quarter",
     dataQualityLabel: "Ready",
     moistureConfidenceLevel: "high",
-    moistureDerivationMode: "source-backed",
-    workspaceSummaryComparisonCount: 1,
+    moistureDerivationMode: "unknown",
     focusFieldId: "field-1",
-    focusFieldName: "Main Farm",
+    focusFieldName: "North Quarter",
+    workspaceSummaryComparisonCount: 0,
+    source: "workspace-first-read",
   });
-  assert.equal(
-    buildPreviewFirstInsightSessionKey(payload!),
-    "fieldpulse:first-insight-surfaced:workspace-1:field-1",
-  );
 });
 
-test("buildPreviewFirstInsightAuditPayload excludes non-focus fields", () => {
-  const payload = buildPreviewFirstInsightAuditPayload({
+test("buildPreviewFirstInsightAuditPayload rejects thin or off-focus fields", () => {
+  const offFocus = buildPreviewFirstInsightAuditPayload({
     workspaceId: "workspace-1",
-    fieldData: makeFieldViewModel({ fieldId: "field-2", fieldName: "Rath" }),
-    workspaceFirstInsightSummary: {
-      focusFieldId: "field-1",
-      focusFieldName: "Main Farm",
-      headline: "Workspace first read",
-      summary: "Start with Main Farm.",
-      comparisons: [],
-    },
-  });
-
-  assert.equal(payload, null);
-});
-
-test("buildPreviewFirstInsightAuditPayload excludes weak limited fields", () => {
-  const payload = buildPreviewFirstInsightAuditPayload({
-    workspaceId: "workspace-1",
-    fieldData: makeFieldViewModel({
-      summary: {
-        ...makeFieldViewModel().summary!,
-        moistureConfidenceLevel: "low",
-        dataQuality: {
-          label: "Limited",
-          tone: "warning",
-          summary: "Context is still filling in.",
-          reasons: ["Vegetation history is still thin"],
-        },
+    fieldId: "field-2",
+    activePanel: "detail",
+    isGuestSession: false,
+    summary: {
+      moisture: 0.41,
+      moistureLabel: "41%",
+      moistureTrend: "Flat",
+      moistureTrendDirection: "flat",
+      moistureConfidence: "Medium confidence",
+      moistureConfidenceLevel: "medium",
+      moistureObservedAtLabel: "Today",
+      rootMoisture: "41%",
+      fieldState: "Stable",
+      trend: "+1%",
+      trendSub: "vs last week",
+      modeLabels: ["Crop health", "Canopy vigor", "Leaf moisture"],
+      currentModeLabel: "Crop health",
+      currentModeValue: "0.55",
+      dataQuality: {
+        label: "Ready",
+        tone: "good",
+        detail: "Source-backed",
       },
-    }),
+    },
     workspaceFirstInsightSummary: {
       focusFieldId: "field-1",
-      focusFieldName: "Main Farm",
+      focusFieldName: "North Quarter",
       headline: "Workspace first read",
-      summary: "Start with Main Farm.",
+      summary: "Start here.",
       comparisons: [],
     },
   });
 
-  assert.equal(payload, null);
+  const thin = buildPreviewFirstInsightAuditPayload({
+    workspaceId: "workspace-1",
+    fieldId: "field-1",
+    activePanel: "detail",
+    isGuestSession: false,
+    summary: {
+      moisture: 0.41,
+      moistureLabel: "41%",
+      moistureTrend: "Flat",
+      moistureTrendDirection: "flat",
+      moistureConfidence: "Low confidence",
+      moistureConfidenceLevel: "low",
+      moistureObservedAtLabel: "Today",
+      rootMoisture: "41%",
+      fieldState: "Stable",
+      trend: "+1%",
+      trendSub: "vs last week",
+      modeLabels: ["Crop health", "Canopy vigor", "Leaf moisture"],
+      currentModeLabel: "Crop health",
+      currentModeValue: "0.55",
+      dataQuality: {
+        label: "Limited",
+        tone: "caution",
+        detail: "Weak support",
+      },
+    },
+    workspaceFirstInsightSummary: {
+      focusFieldId: "field-1",
+      focusFieldName: "North Quarter",
+      headline: "Workspace first read",
+      summary: "Start here.",
+      comparisons: [],
+    },
+  });
+
+  assert.equal(offFocus, null);
+  assert.equal(thin, null);
+});
+
+test("buildPreviewFirstInsightSessionKey is stable", () => {
+  assert.equal(
+    buildPreviewFirstInsightSessionKey({
+      workspaceId: "workspace-1",
+      fieldId: "field-1",
+    }),
+    "preview:first-insight:workspace-1:field-1",
+  );
 });

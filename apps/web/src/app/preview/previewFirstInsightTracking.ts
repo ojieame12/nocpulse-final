@@ -1,73 +1,86 @@
-import type { FieldViewModel } from "./PreviewShell";
+import type { FieldSummaryProps } from "../../components/panels/SummaryTab";
 import type { WorkspaceFirstInsightSummaryCard } from "../../features/fields/workspaceFirstInsightSummary";
 
-export type PreviewFirstInsightAuditPayload = {
+export type PreviewFirstInsightTrackInput = {
+  workspaceId: string | null;
+  fieldId: string | null;
+  activePanel: string;
+  isGuestSession: boolean;
+  summary: FieldSummaryProps | null;
+  workspaceFirstInsightSummary: WorkspaceFirstInsightSummaryCard | null;
+};
+
+export type PreviewFirstInsightPayload = {
   workspaceId: string;
   fieldId: string;
   fieldName: string;
-  dataQualityLabel: "Ready" | "Limited";
-  moistureConfidenceLevel: "high" | "medium";
+  dataQualityLabel: string | null;
+  moistureConfidenceLevel: string | null;
   moistureDerivationMode: string;
-  workspaceSummaryComparisonCount: number;
   focusFieldId: string;
   focusFieldName: string;
+  workspaceSummaryComparisonCount: number;
+  source: "workspace-first-read";
 };
 
-export function buildPreviewFirstInsightAuditPayload(input: {
-  workspaceId?: string | null;
-  fieldData: FieldViewModel;
-  workspaceFirstInsightSummary?: WorkspaceFirstInsightSummaryCard | null;
-}): PreviewFirstInsightAuditPayload | null {
-  const workspaceId = input.workspaceId?.trim() ?? "";
-  if (!workspaceId || !input.workspaceFirstInsightSummary) {
-    return null;
-  }
-
-  const { fieldData, workspaceFirstInsightSummary } = input;
-  const summary = fieldData.summary;
-  const dataQuality = summary?.dataQuality ?? null;
-  const confidence = summary?.moistureConfidenceLevel ?? "unknown";
-
-  if (!summary || !dataQuality) {
-    return null;
-  }
-
-  if (fieldData.fieldId !== workspaceFirstInsightSummary.focusFieldId) {
-    return null;
-  }
-
-  const eligible =
-    dataQuality.label === "Ready" ||
-    (dataQuality.label === "Limited" &&
-      (confidence === "high" || confidence === "medium"));
-
-  if (!eligible) {
-    return null;
-  }
-
-  if (confidence !== "high" && confidence !== "medium") {
-    return null;
-  }
-
-  const dataQualityLabel: PreviewFirstInsightAuditPayload["dataQualityLabel"] =
-    dataQuality.label === "Ready" ? "Ready" : "Limited";
-
-  return {
-    workspaceId,
-    fieldId: fieldData.fieldId,
-    fieldName: fieldData.fieldName,
-    dataQualityLabel,
-    moistureConfidenceLevel: confidence,
-    moistureDerivationMode: summary.moistureDerivationMode,
-    workspaceSummaryComparisonCount:
-      workspaceFirstInsightSummary.comparisons.length,
-    focusFieldId: workspaceFirstInsightSummary.focusFieldId,
-    focusFieldName: workspaceFirstInsightSummary.focusFieldName,
-  };
-}
+const TRACKABLE_CONFIDENCE_LEVELS = new Set(["high", "medium"]);
 
 export function buildPreviewFirstInsightSessionKey(
-  payload: PreviewFirstInsightAuditPayload,
+  input: Pick<PreviewFirstInsightPayload, "workspaceId" | "fieldId">,
 ) {
-  return `fieldpulse:first-insight-surfaced:${payload.workspaceId}:${payload.fieldId}`;
+  return `preview:first-insight:${input.workspaceId}:${input.fieldId}`;
+}
+
+export function buildPreviewFirstInsightAuditPayload(
+  input: PreviewFirstInsightTrackInput,
+): PreviewFirstInsightPayload | null {
+  if (input.isGuestSession) {
+    return null;
+  }
+
+  if (input.activePanel !== "detail") {
+    return null;
+  }
+
+  if (!input.workspaceId || !input.fieldId) {
+    return null;
+  }
+
+  if (!input.workspaceFirstInsightSummary) {
+    return null;
+  }
+
+  if (input.workspaceFirstInsightSummary.focusFieldId !== input.fieldId) {
+    return null;
+  }
+
+  const summary = input.summary;
+  const dataQualityLabel = summary?.dataQuality?.label ?? null;
+  const moistureConfidenceLevel = summary?.moistureConfidenceLevel ?? null;
+
+  const isTrackableField =
+    dataQualityLabel === "Ready"
+    || (
+      dataQualityLabel === "Limited"
+      && moistureConfidenceLevel != null
+      && TRACKABLE_CONFIDENCE_LEVELS.has(moistureConfidenceLevel)
+    );
+
+  if (!isTrackableField) {
+    return null;
+  }
+
+  return {
+    workspaceId: input.workspaceId,
+    fieldId: input.fieldId,
+    fieldName: input.workspaceFirstInsightSummary.focusFieldName,
+    dataQualityLabel,
+    moistureConfidenceLevel,
+    moistureDerivationMode: summary?.moistureDerivationMode ?? "unknown",
+    focusFieldId: input.workspaceFirstInsightSummary.focusFieldId,
+    focusFieldName: input.workspaceFirstInsightSummary.focusFieldName,
+    workspaceSummaryComparisonCount:
+      input.workspaceFirstInsightSummary.comparisons.length,
+    source: "workspace-first-read",
+  };
 }
