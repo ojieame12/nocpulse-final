@@ -769,6 +769,57 @@ test("buildActionProps returns watchlist state for heuristic-only dryness signal
   assert.equal(action.signalCount, 1);
 });
 
+test("buildActionProps suppresses heuristic watchlists when field data quality is limited", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    summary: {
+      ...createBaseReadModel().summary,
+      activeAlertCount: 0,
+      activeFindingCount: 0,
+      activeTrackedZoneCount: 0,
+      dataQuality: {
+        label: "Limited",
+      },
+    },
+    findings: [],
+    alerts: [],
+    zones: {
+      zones: [],
+      newZoneCount: 0,
+      persistentZoneCount: 0,
+      recoveringZoneCount: 0,
+    },
+    moisture: {
+      latestSnapshot: {
+        rootZonePct: 28.4,
+        surfacePct: 17.9,
+        confidence: "high",
+        observedAt: "2026-03-29T09:30:00.000Z",
+        sourceKey: "imagery-weather-derived-v1:sentinel-1",
+      },
+    },
+    weather: {
+      signals: {
+        peakForecastVpdKpa24h: 0.7,
+        frostRiskMinTempC: 6.2,
+        netWaterBalance72hMm: -1.1,
+        updatedAt: "2026-03-29T10:15:00.000Z",
+        sourceKey: "open-meteo:derived",
+      },
+    },
+  };
+
+  const action = buildActionProps(readModel, "North Quarter Demo");
+
+  assert.equal(action.intelligenceState, "none");
+  assert.equal(action.intelligenceSourceLabel, "No active intelligence");
+  assert.equal(action.topRiskTitle, "No active intelligence signal");
+  assert.match(action.recommendation, /current field context is not strong enough/i);
+  assert.match(action.explanation, /heuristic watchlists stay suppressed/i);
+  assert.match(action.questions[1]?.answer ?? "", /watchlist heuristics are being held back/i);
+  assert.equal(action.signalCount, 0);
+});
+
 test("buildActionProps prioritizes spring seeding readiness over frost watch when seed-depth temperature is still missing", () => {
   const readModel = {
     ...createBaseReadModel(),
