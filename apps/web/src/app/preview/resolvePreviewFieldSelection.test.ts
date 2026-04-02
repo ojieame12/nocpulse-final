@@ -69,6 +69,20 @@ test("resolvePreviewFieldId falls back to the primary field when no allowlist ap
   assert.equal(selected, "field-z");
 });
 
+test("resolvePreviewFieldId explicitly prefers the strongest field when no allowlist applies", () => {
+  const selected = resolvePreviewFieldId(
+    [
+      { id: "field-z", name: "Zeta North", latestMoisture: { confidence: "low", sourceKey: "seeded" } },
+      { id: "field-r", name: "Rath", latestMoisture: { confidence: "high", sourceKey: "sentinel-1" } },
+      { id: "field-a", name: "Alpha", latestMoisture: null },
+    ],
+    "workspace-dev-farm",
+    "field-z",
+  );
+
+  assert.equal(selected, "field-r");
+});
+
 test("resolvePreviewFieldId still uses the allowlist when only lower-confidence allowlisted fields exist", () => {
   const selected = resolvePreviewFieldId(
     [

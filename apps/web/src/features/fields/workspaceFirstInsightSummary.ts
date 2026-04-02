@@ -106,7 +106,7 @@ export function buildWorkspaceFirstInsightSummary(options: {
     (allowlist ?? []).map((fieldName, index) => [normalizeFieldName(fieldName), index] as const),
   );
 
-  const eligibleFields = options.fields
+  const allEligibleFields = options.fields
     .filter((field): field is WorkspaceFirstInsightFieldSnapshot & { summary: FieldSummaryProps } =>
       isEligibleForWorkspaceInsight(field.summary),
     )
@@ -117,6 +117,11 @@ export function buildWorkspaceFirstInsightSummary(options: {
         allowlistIndex.get(normalizeFieldName(field.fieldName) ?? "__missing__")
         ?? Number.POSITIVE_INFINITY,
     }));
+
+  const eligibleFields =
+    allowlist != null
+      ? allEligibleFields.filter((field) => Number.isFinite(field.allowlistRank))
+      : allEligibleFields;
 
   if (eligibleFields.length < 2) {
     return null;
@@ -175,11 +180,7 @@ export function buildWorkspaceFirstInsightSummary(options: {
     });
   }
 
-  const allowlistScopedCount =
-    allowlist != null
-      ? eligibleFields.filter((field) => Number.isFinite(field.allowlistRank)).length
-      : eligibleFields.length;
-  const comparisonScopeCount = allowlistScopedCount > 0 ? allowlistScopedCount : eligibleFields.length;
+  const comparisonScopeCount = eligibleFields.length;
   const scopeLabel = comparisonScopeCount === 1 ? "ready field" : "ready fields";
   const focusPrefix =
     focusField.fieldId === options.activeFieldId
