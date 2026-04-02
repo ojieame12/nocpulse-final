@@ -32,6 +32,7 @@ async function main() {
     "worker-action-brief-cadence",
   );
   const forecastHours = readNumberFlag(args, "forecast-hours");
+  const refreshWeather = readBooleanFlag(args, "refresh-weather");
   const drainLimit = readNumberFlag(args, "drain-limit") ?? 100;
   const reportLimit = readNumberFlag(args, "report-limit") ?? 50;
 
@@ -59,6 +60,7 @@ async function main() {
     fieldId,
     limit,
     forecastHours,
+    refreshWeather,
     drainLimit,
     reportLimit,
     loadWorkspaceFindings: (input) =>
@@ -99,7 +101,7 @@ async function main() {
       "",
       "Action brief cadence summary",
       `Requested at: ${result.requestedAt}`,
-      `Weather keys: ${ACTION_BRIEF_WEATHER_JOB_KEYS.join(", ")}`,
+      `Weather refresh: ${refreshWeather ? ACTION_BRIEF_WEATHER_JOB_KEYS.join(", ") : "skipped"}`,
       `Action brief keys: ${ACTION_BRIEF_INTELLIGENCE_JOB_KEYS.join(", ")}`,
       `Drained weather dispatches: ${result.drainedWeatherDispatches.length}`,
       `Drained action brief dispatches: ${result.drainedActionBriefDispatches.length}`,

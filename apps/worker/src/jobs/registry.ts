@@ -2215,7 +2215,7 @@ export const jobs = [
   >({
     key: "intelligence.generate-action-brief",
     description:
-      "Materialize weather-derived signals, then generate a material-change action brief and synced alert.",
+      "Load the latest available weather-derived context, then generate a material-change action brief and synced alert.",
     async samplePayload(context: WorkerJobContext) {
       const target = await context.resolveDefaultFieldTarget();
       return {
@@ -2246,14 +2246,14 @@ export const jobs = [
             },
           },
           {
-            key: "compute-weather-signals",
+            key: "load-weather-signals",
             progressPct: 45,
-            progressMessage: "computing weather-derived context",
+            progressMessage: "loading latest weather-derived context",
             async run(currentState) {
               return {
                 ...currentState,
                 weatherSignals:
-                  await context.runtime.services.weather.computeFieldDerivedSignals({
+                  await context.runtime.services.weather.loadFieldDerivedSignals({
                     workspaceId: payload.workspaceId,
                     fieldId: payload.fieldId,
                   }),

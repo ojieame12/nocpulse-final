@@ -70,6 +70,7 @@ export type RunActionBriefCadenceInput = {
   fieldId?: string;
   limit?: number;
   forecastHours?: number;
+  refreshWeather?: boolean;
   drainLimit: number;
   reportLimit: number;
   loadWorkspaceFindings: (input: {
@@ -139,34 +140,42 @@ async function drainMatchingWithRetry(input: {
 export async function runActionBriefCadence(
   input: RunActionBriefCadenceInput,
 ) {
-  const scheduledWeatherDispatches = [];
+  const scheduledWeatherDispatches: {
+    workspaceId: string;
+    workspaceSlug: string;
+    requestedAt: string;
+    dispatch: PersistentJobDispatchRecord;
+  }[] = [];
+  const drainedWeatherDispatches = input.refreshWeather
+    ? await (async () => {
+        for (const target of input.targets) {
+          const dispatch = await input.queue.enqueue({
+            key: "weather.schedule-workspace-refresh",
+            payload: {
+              workspaceId: target.workspaceId,
+              requestedAt: input.requestedAt,
+              fieldIds: input.fieldId ? [input.fieldId] : undefined,
+              limit: input.limit,
+              forecastHours: input.forecastHours,
+            },
+          });
 
-  for (const target of input.targets) {
-    const dispatch = await input.queue.enqueue({
-      key: "weather.schedule-workspace-refresh",
-      payload: {
-        workspaceId: target.workspaceId,
-        requestedAt: input.requestedAt,
-        fieldIds: input.fieldId ? [input.fieldId] : undefined,
-        limit: input.limit,
-        forecastHours: input.forecastHours,
-      },
-    });
+          scheduledWeatherDispatches.push({
+            workspaceId: target.workspaceId,
+            workspaceSlug: target.workspaceSlug,
+            requestedAt: input.requestedAt,
+            dispatch: toScheduledDispatchRecord(dispatch),
+          });
+        }
 
-    scheduledWeatherDispatches.push({
-      workspaceId: target.workspaceId,
-      workspaceSlug: target.workspaceSlug,
-      requestedAt: input.requestedAt,
-      dispatch: toScheduledDispatchRecord(dispatch),
-    });
-  }
-
-  const drainedWeatherDispatches = await drainMatchingWithRetry({
-    queue: input.queue,
-    limit: input.drainLimit,
-    keys: ACTION_BRIEF_WEATHER_JOB_KEYS,
-    sleepFn: input.sleepFn,
-  });
+        return drainMatchingWithRetry({
+          queue: input.queue,
+          limit: input.drainLimit,
+          keys: ACTION_BRIEF_WEATHER_JOB_KEYS,
+          sleepFn: input.sleepFn,
+        });
+      })()
+    : [];
 
   const scheduledActionBriefDispatches = [];
 

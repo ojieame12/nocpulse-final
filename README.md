@@ -55,7 +55,7 @@ pnpm install
 - `./scripts/run-cadence.sh market` runs the market cadence and writes a timestamped log to `logs/cadence/market/`.
 - `./scripts/run-cadence.sh probe` runs the probe schedule, drains only the probe queue keys, then writes the probe report to `logs/cadence/probe/`.
 - `./scripts/run-cadence.sh hail` runs the hail cadence for `FIELDPULSE_WORKSPACE_ID` and writes output to `logs/cadence/hail/`.
-- `./scripts/run-cadence.sh action-brief` runs the material-change action-brief cadence, queues weather + action-brief jobs, and writes output to `logs/cadence/action-brief/`.
+- `./scripts/run-cadence.sh action-brief` runs the material-change action-brief cadence, queues action-brief jobs using the latest available weather-derived context, and writes output to `logs/cadence/action-brief/`.
 - Each job also updates a `latest.log` symlink in its log directory so you can quickly inspect the newest run.
 - [`scripts/cadence.crontab.example`](/Users/ojieame/FieldPulse-v3/scripts/cadence.crontab.example) is a starter crontab with the cadence jobs staggered every 6 hours.
 - On macOS, if `crontab` is blocked, run `./scripts/install-cadence-launchd.sh` to install equivalent `launchd` agents from [`scripts/launchd/`](/Users/ojieame/FieldPulse-v3/scripts/launchd).
