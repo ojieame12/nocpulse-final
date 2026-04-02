@@ -26,14 +26,14 @@ export function LandingNavbar() {
         padding: "0 clamp(1.5rem, 4vw, 4rem)",
         height: scrolled ? 52 : 60,
         backdropFilter: scrolled ? "blur(16px)" : "none",
-        backgroundColor: scrolled ? "rgba(255,255,255,0.92)" : "transparent",
-        borderBottom: scrolled ? "1px solid var(--ds-border-light)" : "1px solid transparent",
+        backgroundColor: scrolled ? "var(--nav-scrolled-bg)" : "transparent",
+        borderBottom: scrolled ? "1px solid var(--nav-scrolled-border)" : "1px solid transparent",
         transition: "all 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
       }}
     >
       <Link href="/">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/logo.svg" alt="NocPulse" style={{ height: 18 }} />
+        <img src="/logo-light.svg" alt="NocPulse" style={{ height: 18, opacity: 0.9 }} />
       </Link>
 
       <div className="landing-nav-links">
@@ -75,8 +75,8 @@ function LandingAuthControls() {
     height: 36,
     padding: "0 14px",
     borderRadius: 999,
-    border: "1px solid var(--ds-border-default)",
-    backgroundColor: "rgba(255,255,255,0.92)",
+    border: "1px solid var(--nav-btn-secondary-border)",
+    backgroundColor: "var(--nav-btn-secondary-bg)",
     color: "var(--ds-text-primary)",
     fontFamily: "var(--font-sintony), sans-serif",
     fontSize: 13,

@@ -98,7 +98,7 @@ export function HowItWorks() {
                 transition: `all 0.6s cubic-bezier(0.22,1,0.36,1) ${300 + i * 150}ms`,
                 position: "relative",
                 paddingLeft: 24,
-                borderLeft: "2px solid var(--ds-green-300)",
+                borderLeft: "2px solid var(--ds-green-500)",
               }}
             >
               {/* Step indicator dot */}

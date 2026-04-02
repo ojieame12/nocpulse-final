@@ -37,9 +37,9 @@ export function Footer() {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/images/logo.svg"
+          src="/logo-light.svg"
           alt="NocPulse"
-          style={{ height: 16, filter: "brightness(0) invert(1)" }}
+          style={{ height: 16, opacity: 0.85 }}
         />
 
         <div style={{ display: "flex", gap: 28 }}>

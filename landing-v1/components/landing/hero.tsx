@@ -51,9 +51,9 @@ export function Hero() {
           width: 800,
           height: 800,
           borderRadius: "50%",
-          background: "radial-gradient(circle, var(--ds-green-200) 0%, transparent 65%)",
-          filter: "blur(120px)",
-          opacity: 0.4,
+          background: "radial-gradient(circle, var(--ds-green-500) 0%, transparent 65%)",
+          filter: "blur(140px)",
+          opacity: 0.15,
           pointerEvents: "none",
           animation: "blobBreathe 8s ease-in-out infinite",
         }}
@@ -64,7 +64,7 @@ export function Hero() {
         style={{
           position: "absolute",
           inset: 0,
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E")`,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E")`,
           backgroundRepeat: "repeat",
           backgroundSize: 200,
           pointerEvents: "none",
@@ -209,6 +209,7 @@ export function Hero() {
         <img
           src="/images/farm-illustration.svg"
           alt="Farm fields monitored from space"
+          className="landing-farm-illustration"
           style={{ width: "100%", display: "block" }}
         />
       </div>
@@ -221,8 +222,8 @@ export function Hero() {
           left: 0,
           right: 0,
           height: 1,
-          background: "linear-gradient(90deg, transparent, var(--ds-green-300), transparent)",
-          opacity: 0.5,
+          background: "linear-gradient(90deg, transparent, var(--ds-green-500), transparent)",
+          opacity: 0.2,
         }}
       />
     </section>
