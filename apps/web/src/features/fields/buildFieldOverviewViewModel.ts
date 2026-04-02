@@ -95,6 +95,7 @@ import {
   resolveMarketCropSymbol,
 } from "./buildFieldOverviewViewModel.market";
 import { buildReportProps } from "./buildFieldOverviewViewModel.report";
+import { buildAlternateSurfaceCellDictionary } from "./alternateSurfaceCells.shared";
 import { toMapZoneMultiPolygon } from "./zoneGeometry";
 
 export {
@@ -1167,15 +1168,12 @@ function buildAlternateAgronomicSurfaces(input: {
       persistedCells,
     });
 
-    const cellDict: Record<string, any> = {};
-    for (const cell of baseSurface.cells) {
-      const { polygon, centroid, ...rest } = cell;
-      cellDict[cell.id] = rest;
-    }
-
     surfaces[metricKey] = {
       ...baseSurface,
-      cells: cellDict,
+      cells: buildAlternateSurfaceCellDictionary({
+        primaryCells: input.mapPreview.agronomicSurface?.cells ?? [],
+        alternateCells: baseSurface.cells,
+      }),
     };
   }
 

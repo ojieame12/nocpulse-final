@@ -9,9 +9,12 @@ import React, { useEffect, useState } from "react";
 
 export function Spark({ data, color, height = 32 }: { data: number[]; color: string; height?: number }) {
   if (data.length === 0) return <div style={{ height }} />;
-  const max = Math.max(...data);
-  const safeMax = max > 0 ? max : 1;
-  const count = data.length;
+  const normalizedData = data.map((value) => (Number.isFinite(value) ? value : 0));
+  const max = Math.max(...normalizedData);
+  const min = Math.min(...normalizedData);
+  const range = max - min;
+  const count = normalizedData.length;
+  const amplitude = height * 0.9;
   /* Ensure minimum 5 slots so ≤4 bars don't stretch into blobs */
   const slots = Math.max(count, 5);
   return (
@@ -22,8 +25,10 @@ export function Spark({ data, color, height = 32 }: { data: number[]; color: str
       preserveAspectRatio="none"
       style={{ display: "block" }}
     >
-      {data.map((v, i) => {
-        const h = (v / safeMax) * height * 0.9;
+      {normalizedData.map((value, i) => {
+        const normalized =
+          range > 0 ? (value - min) / range : Math.abs(value) > Number.EPSILON ? 0.55 : 0;
+        const h = Math.max(normalized * amplitude, 0);
         return (
           <rect
             key={i}
@@ -33,7 +38,7 @@ export function Spark({ data, color, height = 32 }: { data: number[]; color: str
             height={h}
             rx={3}
             fill={color}
-            opacity={0.15 + (v / safeMax) * 0.65}
+            opacity={0.15 + normalized * 0.65}
           />
         );
       })}
