@@ -2,6 +2,8 @@
 
 Use this runbook to decide whether `/Users/ojieame/FieldPulse-v3` is ready for a managed beta widening without changing the product surface.
 
+The top-level `ops:*` commands in this repo refresh the linked Vercel production environment into the ignored local `.env.local` file automatically before running worker reports.
+
 ## 1. Check release hygiene
 
 ```bash
@@ -14,6 +16,14 @@ Expected:
 - working tree is clean
 
 ## 2. Run the beta-readiness report
+
+Start by identifying real target workspaces:
+
+```bash
+corepack pnpm -C /Users/ojieame/FieldPulse-v3 ops:beta-roster -- --days 30 --json
+```
+
+Use the returned `workspaceId`, `workspaceSlug`, and `status` to decide which workspace to inspect next.
 
 Workspace-specific:
 
