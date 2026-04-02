@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 export function CTASection() {
@@ -61,7 +62,7 @@ export function CTASection() {
             fontWeight: 300,
             fontSize: "clamp(1.4rem, 3vw, 2rem)",
             lineHeight: 1.3,
-            color: "#fff",
+            color: "var(--ds-text-on-dark)",
             position: "relative",
           }}
         >
@@ -73,7 +74,7 @@ export function CTASection() {
             fontFamily: "var(--font-sintony), sans-serif",
             fontSize: 14,
             lineHeight: 1.7,
-            color: "rgba(255,255,255,0.7)",
+            color: "var(--ds-text-on-dark-secondary)",
             maxWidth: 400,
             margin: "16px auto 0",
             position: "relative",
@@ -101,15 +102,15 @@ export function CTASection() {
               fontSize: 14,
               fontWeight: 700,
               fontFamily: "var(--font-sintony), sans-serif",
-              backgroundColor: "#fff",
+              backgroundColor: "var(--ds-surface-white)",
               color: "var(--ds-green-800)",
               textDecoration: "none",
-              boxShadow: "0 4px 0 rgba(0,0,0,0.15)",
+              boxShadow: "0 4px 0 var(--ds-shadow-overlay)",
               minHeight: 44,
             }}
           >
             Request access
-            <span style={{ fontSize: 16 }}>→</span>
+            <ArrowRight size={16} strokeWidth={2.5} />
           </Link>
           <a
             href="#features"
@@ -122,8 +123,8 @@ export function CTASection() {
               fontWeight: 700,
               fontFamily: "var(--font-sintony), sans-serif",
               backgroundColor: "transparent",
-              color: "rgba(255,255,255,0.9)",
-              border: "1.5px solid rgba(255,255,255,0.3)",
+              color: "var(--ds-text-on-dark-soft)",
+              border: "1.5px solid var(--ds-border-on-dark-muted)",
               textDecoration: "none",
               minHeight: 44,
             }}

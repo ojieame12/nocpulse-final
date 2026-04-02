@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 export function Hero() {
@@ -160,15 +161,15 @@ export function Hero() {
               fontWeight: 700,
               fontFamily: "var(--font-sintony), sans-serif",
               backgroundColor: "var(--ds-green-800)",
-              color: "#fff",
+              color: "var(--ds-text-on-dark)",
               textDecoration: "none",
-              boxShadow: "0 4px 0 #002A15",
+              boxShadow: "0 4px 0 var(--ds-green-950)",
               transition: "transform 0.15s, box-shadow 0.15s",
               minHeight: 44,
             }}
           >
             Request access
-            <span style={{ fontSize: 16 }}>→</span>
+            <ArrowRight size={16} strokeWidth={2.5} />
           </Link>
           <a
             href="#how-it-works"

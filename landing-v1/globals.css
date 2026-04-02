@@ -17,6 +17,7 @@
   /* Semantic accents */
   --ds-red-100: #FEE2E2;
   --ds-red-500: #EF4444;
+  --ds-red-600: #DC2626;
   --ds-amber-100: #FEF3C7;
   --ds-amber-500: #F59E0B;
   --ds-blue-100: #DBEAFE;
@@ -37,6 +38,17 @@
   --ds-text-body: #474C54;
   --ds-text-muted: #8A8F98;
   --ds-text-on-dark: #FFFFFF;
+  --ds-text-on-dark-soft: rgba(255, 255, 255, 0.9);
+  --ds-text-on-dark-strong: rgba(255, 255, 255, 0.85);
+  --ds-text-on-dark-secondary: rgba(255, 255, 255, 0.7);
+  --ds-text-on-dark-muted: rgba(255, 255, 255, 0.6);
+  --ds-text-on-dark-faint: rgba(255, 255, 255, 0.5);
+  --ds-surface-on-dark-subtle: rgba(255, 255, 255, 0.08);
+  --ds-border-on-dark: rgba(255, 255, 255, 0.12);
+  --ds-border-on-dark-muted: rgba(255, 255, 255, 0.3);
+  --ds-divider-on-dark: rgba(255, 255, 255, 0.15);
+  --ds-shadow-overlay: rgba(0, 0, 0, 0.15);
+  --ds-green-950: #002A15;
 
   /* Shadows */
   --ds-shadow-btn: #002011;
@@ -966,6 +978,67 @@ textarea {
 @media (max-width: 400px) {
   .landing-features-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* ─── Decision Intelligence: 2×2 grid ─── */
+.landing-decision-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+@media (max-width: 767px) {
+  .landing-decision-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* ─── One Action: 3-col alert cards ─── */
+.landing-alerts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+@media (max-width: 767px) {
+  .landing-alerts-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* ─── Prairie Crops: 4-col grid ─── */
+.landing-crop-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 767px) {
+  .landing-crop-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 400px) {
+  .landing-crop-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Market Intelligence: price row ─── */
+.landing-price-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 32px;
+}
+@media (max-width: 480px) {
+  .landing-price-row {
+    flex-direction: column;
+    gap: 24px;
+  }
+  .landing-price-row > div:nth-child(2) {
+    width: 48px;
+    height: 1px;
   }
 }
 
