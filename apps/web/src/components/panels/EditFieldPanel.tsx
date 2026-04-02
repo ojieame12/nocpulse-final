@@ -50,6 +50,7 @@ export interface EditFieldPanelProps {
   growthStageSource: string | null;
   growthStageLabel: string | null;
   accumulatedGdd: string | null;
+  mutationNotice?: string | null;
   onClose: () => void;
   onRename?: (fieldId: string, newName: string) => void;
   onUpdateLld?: (fieldId: string, lld: string) => void;
@@ -164,6 +165,7 @@ export function EditFieldPanel({
   growthStageSource,
   growthStageLabel,
   accumulatedGdd,
+  mutationNotice = null,
   onClose,
   onRename,
   onUpdateLld,
@@ -254,6 +256,11 @@ export function EditFieldPanel({
           <div>
             <span className="fdp-lbl fdp-lbl--muted" style={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Edit Field</span>
             <h2 className="fdp__field-name" style={{ fontSize: 17, marginTop: 2 }}>{localName}</h2>
+            {mutationNotice ? (
+              <p style={{ marginTop: 6, maxWidth: 260, fontSize: 11, lineHeight: 1.5, color: 'var(--text-muted)' }}>
+                {mutationNotice}
+              </p>
+            ) : null}
           </div>
           <button type="button" className="fdp__close" onClick={onClose} aria-label="Close">
             <X size={14} />

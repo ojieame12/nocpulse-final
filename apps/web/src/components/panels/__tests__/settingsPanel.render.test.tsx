@@ -38,3 +38,16 @@ test("SettingsPanel hides archived field management for non-managers", () => {
 
   assert.doesNotMatch(markup, /ARCHIVED FIELDS/);
 });
+
+test("SettingsPanel shows an offline restore notice for managers", () => {
+  const markup = renderToStaticMarkup(
+    <SettingsPanel
+      workspaceId="workspace-1"
+      viewer={createViewer("manager")}
+      isOffline
+    />,
+  );
+
+  assert.match(markup, /ARCHIVED FIELDS/);
+  assert.match(markup, /Restore requires an online connection/);
+});

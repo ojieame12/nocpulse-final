@@ -38,6 +38,7 @@ interface SettingsPanelProps {
   viewer?: SettingsViewer | null;
   fieldId?: string | null;
   fieldName?: string | null;
+  isOffline?: boolean;
   onArchivedFieldRestored?: (field: {
     id: string;
     workspaceId: string;
@@ -172,6 +173,7 @@ export function SettingsPanel({
   viewer = null,
   fieldId = null,
   fieldName = null,
+  isOffline = false,
   onArchivedFieldRestored,
 }: SettingsPanelProps) {
   const profileName = viewer?.displayName ?? 'John Draper';
@@ -356,7 +358,7 @@ export function SettingsPanel({
   ]);
 
   async function handleRestoreField(field: ArchivedFieldListItem) {
-    if (!canManageArchivedFields || restorePendingFieldId) {
+    if (!canManageArchivedFields || restorePendingFieldId || isOffline) {
       return;
     }
 
@@ -455,6 +457,9 @@ export function SettingsPanel({
               <Archive size={14} style={{ color: 'var(--text-muted)' }} />
               <Lbl>ARCHIVED FIELDS</Lbl>
             </div>
+            {isOffline ? (
+              <Sub>Restore requires an online connection.</Sub>
+            ) : null}
             {!archivedFieldsLoaded ? (
               <Sub>Loading archived field history…</Sub>
             ) : archivedFieldsError ? (
@@ -487,7 +492,8 @@ export function SettingsPanel({
                     <button
                       type="button"
                       onClick={() => void handleRestoreField(field)}
-                      disabled={restorePendingFieldId === field.id}
+                      disabled={restorePendingFieldId === field.id || isOffline}
+                      title={isOffline ? 'Restore requires an online connection.' : undefined}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -497,8 +503,13 @@ export function SettingsPanel({
                         border: '1px solid var(--border-light)',
                         background: 'var(--surface-white)',
                         color: 'var(--text-primary)',
-                        cursor: restorePendingFieldId === field.id ? 'wait' : 'pointer',
-                        opacity: restorePendingFieldId === field.id ? 0.7 : 1,
+                        cursor:
+                          restorePendingFieldId === field.id
+                            ? 'wait'
+                            : isOffline
+                              ? 'not-allowed'
+                              : 'pointer',
+                        opacity: restorePendingFieldId === field.id || isOffline ? 0.7 : 1,
                         flexShrink: 0,
                       }}
                     >

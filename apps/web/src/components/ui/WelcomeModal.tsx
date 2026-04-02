@@ -11,9 +11,13 @@ import { MapPin, Upload, FileSpreadsheet } from 'lucide-react';
 export function WelcomeModal({
   onAddField,
   onDismiss,
+  addFieldDisabled = false,
+  addFieldDisabledReason = null,
 }: {
   onAddField: () => void;
   onDismiss: () => void;
+  addFieldDisabled?: boolean;
+  addFieldDisabledReason?: string | null;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -24,6 +28,10 @@ export function WelcomeModal({
   }, []);
 
   function handleAddField() {
+    if (addFieldDisabled) {
+      return;
+    }
+
     setVisible(false);
     setTimeout(onAddField, 200);
   }
@@ -83,9 +91,16 @@ export function WelcomeModal({
             type="button"
             className="welcome-modal__cta"
             onClick={handleAddField}
+            disabled={addFieldDisabled}
+            title={addFieldDisabledReason ?? undefined}
           >
             Add your first field
           </button>
+          {addFieldDisabledReason ? (
+            <p className="welcome-modal__subtitle" style={{ marginTop: -4 }}>
+              {addFieldDisabledReason}
+            </p>
+          ) : null}
 
           {/* Dismiss */}
           <button
