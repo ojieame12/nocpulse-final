@@ -4,13 +4,17 @@ import type {
   SpreadsheetImportIssue,
   SpreadsheetImportPreview,
 } from "../contracts/SpreadsheetImport";
+import { formatLld } from "../domain/lld/formatLld";
 import { deriveFieldGeometry } from "../domain/geometry/deriveFieldGeometry";
 import { buildBoundaryFromGridCells } from "../domain/spreadsheet/buildBoundaryFromGridCells";
 import {
   buildConnectedRowGroups,
   sortSpreadsheetRows,
 } from "../domain/spreadsheet/buildConnectedRowGroups";
-import { parseSpreadsheetRecord } from "../domain/spreadsheet/parseSpreadsheetRecord";
+import {
+  parseSpreadsheetRecord,
+  type SpreadsheetParseContext,
+} from "../domain/spreadsheet/parseSpreadsheetRecord";
 import { getQuarterGridCell } from "../domain/spreadsheet/quarterGrid";
 import type { ParsedSpreadsheetImportRow } from "../domain/spreadsheet/types";
 
@@ -19,12 +23,17 @@ export function previewSpreadsheetImportRecords(
 ): SpreadsheetImportPreview {
   const issues: SpreadsheetImportIssue[] = [];
   const parsedRows: ParsedSpreadsheetImportRow[] = [];
+  let validRowCount = 0;
+  let parseContext: SpreadsheetParseContext = {};
 
   input.records.forEach((record, index) => {
     const rowNumber = index + 2;
 
     try {
-      parsedRows.push(parseSpreadsheetRecord(record, rowNumber));
+      const parsed = parseSpreadsheetRecord(record, rowNumber, parseContext);
+      parsedRows.push(...parsed.rows);
+      validRowCount += 1;
+      parseContext = parsed.context;
     } catch (error) {
       issues.push({
         rowNumber,
@@ -44,7 +53,7 @@ export function previewSpreadsheetImportRecords(
     fileName: input.fileName ?? "Spreadsheet import",
     sheetName: input.sheetName ?? "Sheet1",
     rowCount: input.records.length,
-    validRowCount: parsedRows.length,
+    validRowCount,
     fieldCount: fields.length,
     issueCount: issues.length,
     issues,
@@ -85,9 +94,17 @@ function buildSpreadsheetImportCandidates(
       const cells = componentRows.map((row) => getQuarterGridCell(row.lldComponents));
       const boundary = buildBoundaryFromGridCells(cells, meridian);
       const geometry = deriveFieldGeometry(boundary);
-      const legalLandDescriptions = componentRows
-        .map((row) => row.legalLandDescription)
-        .sort();
+      const rowNumbers = Array.from(
+        new Set(componentRows.map((row) => row.rowNumber)),
+      ).sort((left, right) => left - right);
+      const legalLandDescriptions = Array.from(
+        new Set(componentRows.map((row) => row.legalLandDescription)),
+      ).sort();
+      const lldComponentsList = Array.from(
+        new Map(
+          componentRows.map((row) => [formatLld(row.lldComponents), row.lldComponents]),
+        ).values(),
+      );
 
       fields.push({
         id: `${getRowGroupKey(primaryRow)}::${index}`,
@@ -100,12 +117,12 @@ function buildSpreadsheetImportCandidates(
           boundary,
         },
         cropType: primaryRow.cropType,
-        rowCount: componentRows.length,
-        rowNumbers: componentRows.map((row) => row.rowNumber),
+        rowCount: rowNumbers.length,
+        rowNumbers,
         legalLandDescriptions,
         splitIndex: index + 1,
         splitCount,
-        lldComponentsList: componentRows.map((row) => row.lldComponents),
+        lldComponentsList,
       });
     });
   }

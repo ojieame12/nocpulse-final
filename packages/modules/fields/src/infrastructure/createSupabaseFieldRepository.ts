@@ -146,9 +146,35 @@ export function createSupabaseFieldRepository(
         })
         .single();
 
-      return mapFieldDetail(
+      const detail = mapFieldDetail(
         requireSupabaseData(result, "fields.create"),
       );
+
+      const legalLandDescription = input.legalLandDescription?.trim() ?? "";
+
+      if (!legalLandDescription || detail.legalLandDescription === legalLandDescription) {
+        return detail;
+      }
+
+      const updateResult = await client
+        .from("fields")
+        .update({
+          legal_land_description: legalLandDescription,
+        })
+        .eq("workspace_id", input.workspaceId)
+        .eq("id", detail.id)
+        .select("updated_at")
+        .single();
+      const updatedField = requireSupabaseData(updateResult, "fields.create.legalLandDescription");
+
+      return {
+        ...detail,
+        legalLandDescription,
+        updatedAt:
+          typeof updatedField.updated_at === "string"
+            ? updatedField.updated_at
+            : detail.updatedAt,
+      };
     },
 
     async getById(workspaceId, fieldId) {

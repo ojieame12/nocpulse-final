@@ -5,6 +5,14 @@ const HEADER_ALIASES = {
     "field",
     "name",
   ],
+  lldCode: [
+    "lld",
+    "lldcode",
+    "legallanddescription",
+    "legallanddesc",
+    "legaldescription",
+    "legaldesc",
+  ],
   quarter: [
     "lsdquarter",
     "lldquarter",
@@ -15,7 +23,13 @@ const HEADER_ALIASES = {
   township: ["townships", "township"],
   range: ["ranges", "range"],
   meridian: ["meridians", "meridian"],
-  cropType: ["crops", "crop", "croptype"],
+  cropType: [
+    "crops",
+    "crop",
+    "croptype",
+    "cropstobegrown",
+    "croptobegrown",
+  ],
 } as const;
 
 export type SpreadsheetHeaderKey = keyof typeof HEADER_ALIASES;

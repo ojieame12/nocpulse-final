@@ -77,6 +77,7 @@ export async function createDraftField(input: CreateDraftFieldInput) {
     serviceKey: input.runtime.env.supabase.serviceRoleKey!,
   });
   const fields = createSupabaseFieldRepository(client);
+  const legalLandDescription = input.legalLandDescription?.trim() ?? null;
   const ensured = await ensureWorkspaceField({
     repository: fields,
     actorUserId: input.actor.userId,
@@ -84,17 +85,18 @@ export async function createDraftField(input: CreateDraftFieldInput) {
       workspaceId: input.actor.workspaceId,
       name: input.name,
       areaHa: input.areaHa,
-      legalLandDescription: input.legalLandDescription ?? null,
+      legalLandDescription,
       boundary: input.boundary,
     },
   });
 
   const field =
-    input.legalLandDescription != null
+    legalLandDescription != null &&
+    ensured.field.legalLandDescription !== legalLandDescription
       ? await fields.setLegalLandDescription(
           input.actor.workspaceId,
           ensured.field.id,
-          input.legalLandDescription,
+          legalLandDescription,
         )
       : ensured.field;
 
