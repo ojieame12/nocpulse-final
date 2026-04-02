@@ -481,7 +481,7 @@ test("resolveCropStagePresentation treats derived zero-GDD stages as unverified 
   assert.equal(presentation.ruleStage, "vegetative");
   assert.equal(presentation.thresholdStageLabel, "Vegetative default stage");
   assert.equal(presentation.accumulatedGddLabel, "—");
-  assert.equal(presentation.gddUnitLabel, "Season GDD unavailable (base 5°C)");
+  assert.equal(presentation.gddUnitLabel, "Season heat units unavailable (base 5°C)");
   assert.equal(presentation.stageSourceLabel, "Weather-derived stage still initializing");
   assert.equal(presentation.hasCredibleAccumulatedGdd, false);
 });
@@ -769,7 +769,7 @@ test("buildActionProps returns watchlist state for heuristic-only dryness signal
   assert.equal(action.signalCount, 1);
 });
 
-test("buildActionProps prefers 7-day frost signals when they are available", () => {
+test("buildActionProps prioritizes spring seeding readiness over frost watch when seed-depth temperature is still missing", () => {
   const readModel = {
     ...createBaseReadModel(),
     summary: {
@@ -800,13 +800,18 @@ test("buildActionProps prefers 7-day frost signals when they are available", () 
   const action = buildActionProps(readModel, "North Quarter Demo");
 
   assert.equal(action.intelligenceState, "watchlist");
-  assert.equal(action.topRiskTitle, "Frost watch next 7d");
+  assert.equal(action.topRiskTitle, "Too early to seed");
   assert.equal(action.urgency, "Watch");
-  assert.match(action.recommendation, /low-lying and exposed parts of the field/i);
-  assert.equal(action.signalCount, 1);
-  assert.match(action.signals[0]?.label ?? "", /Frost min -1.8°C/);
-  assert.match(action.signals[0]?.detail ?? "", /2 frost-risk nights next 7d/i);
-  assert.match(action.questions[1]?.answer ?? "", /2 frost-risk nights/i);
+  assert.match(
+    action.recommendation,
+    /seed-depth soil temperature reaches 7°C for 3 consecutive days/i,
+  );
+  assert.equal(action.signalCount, 2);
+  assert.match(action.signals[0]?.label ?? "", /Soil @ 6 cm pending/i);
+  assert.match(action.signals[0]?.detail ?? "", /Target 7°C for 3d/i);
+  assert.match(action.signals[1]?.label ?? "", /Frost min -1.8°C/);
+  assert.match(action.signals[1]?.detail ?? "", /2 frost-risk nights next 7d/i);
+  assert.match(action.questions[1]?.answer ?? "", /7°C for 3d rule/i);
 });
 
 test("buildActionProps deduplicates active signals while preserving active intelligence counts", () => {
