@@ -4,6 +4,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, Search, FileSpreadsheet, Map as MapIcon, Plus, FileUp, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, Lbl, LblM, Sub, Mono } from './fieldDetailCardPrimitives';
 import {
+  type AddFieldRetryAction,
+  describeAddFieldApiError,
+  readAddFieldApiResult,
+  resolveAddFieldRetryLabel,
+} from './addFieldPanelErrors';
+import {
   chooseFirstInsightField,
   type FirstInsightFieldEntry,
 } from '../../features/fields/firstInsightChooser';
@@ -115,7 +121,14 @@ export type CommitBatchHydrationSummary = {
 
 type SpreadsheetCommitPayload = {
   batch: { status: string };
-  candidates: Array<{ field: { id: string; name: string }; action: string }>;
+  candidates: Array<{
+    field: { id: string; name: string };
+    action: string;
+    candidate: {
+      cropType?: string;
+      legalLandDescriptions: readonly string[];
+    };
+  }>;
   onboardingDispatches: Array<{ fieldId: string; action: string; receipts: Array<{ result: { id: string; key?: string; status?: string } }> }>;
   fieldHydrationSummaries?: readonly CommitFieldHydrationSummary[];
   batchHydrationSummary?: CommitBatchHydrationSummary;
@@ -172,6 +185,27 @@ type TrackedJob = {
   fieldId: string;
   fieldLabel: string;
   action: string;
+  fieldAction?: 'created' | 'reused';
+  cropType?: string | null;
+  legalLandDescriptions?: readonly string[];
+};
+
+type TrackedJobMetadata = {
+  fieldAction?: 'created' | 'reused';
+  cropType?: string | null;
+  legalLandDescriptions?: readonly string[];
+};
+
+type HydrationRetryPayload = {
+  replayResult: {
+    action: 'replayed' | 'skipped';
+    reason?: string;
+  } | null;
+  onboardingDispatches: Array<{
+    fieldId: string;
+    action: 'created' | 'reused';
+    receipts: Array<{ result: { id: string; key?: string; status?: string } }>;
+  }>;
 };
 
 const JOB_STATUS_POLL_MS = 3_000;
@@ -233,32 +267,53 @@ function buildTrackedJobs(
     | null
     | undefined,
   fieldLabelById?: Map<string, string>,
+  metadataByFieldId?: Map<string, TrackedJobMetadata>,
 ) {
   return (entries ?? []).flatMap((entry) =>
-    (Array.isArray(entry.receipts) ? entry.receipts : []).map((receipt) => ({
-      dispatchId: receipt.result.id,
-      fieldId: entry.fieldId,
-      fieldLabel: fieldLabelById?.get(entry.fieldId) ?? entry.fieldId,
-      action: entry.action,
-    })),
+    (Array.isArray(entry.receipts) ? entry.receipts : []).map((receipt) => {
+      const metadata = metadataByFieldId?.get(entry.fieldId);
+
+      return {
+        dispatchId: receipt.result.id,
+        fieldId: entry.fieldId,
+        fieldLabel: fieldLabelById?.get(entry.fieldId) ?? entry.fieldId,
+        action: entry.action,
+        fieldAction:
+          metadata?.fieldAction
+          ?? (entry.action === 'created' || entry.action === 'reused'
+            ? entry.action
+            : undefined),
+        cropType: metadata?.cropType ?? null,
+        legalLandDescriptions: metadata?.legalLandDescriptions,
+      };
+    }),
   );
 }
 
-async function readApiResult<T>(response: Response): Promise<T> {
-  const payload = (await response.json()) as {
-    result?: T;
-    error?: { message?: string };
-  };
-
-  if (!response.ok) {
-    throw new Error(payload.error?.message ?? 'Request failed.');
+function describeHydrationReplayResult(
+  replayResult: HydrationRetryPayload['replayResult'],
+) {
+  if (!replayResult) {
+    return 'Queued a fresh onboarding run for that field.';
   }
 
-  if (!payload.result) {
-    throw new Error('Request completed without a result payload.');
+  if (replayResult.action === 'replayed') {
+    return 'Copied hydrated parcel context, then queued a fresh onboarding run.';
   }
 
-  return payload.result;
+  if (replayResult.reason === 'no-source-field') {
+    return 'Could not find a matching hydrated source parcel, but queued a fresh onboarding run.';
+  }
+
+  if (replayResult.reason === 'no-hydrated-source') {
+    return 'Found a matching parcel, but no hydrated source was available yet. A fresh onboarding run is queued.';
+  }
+
+  if (replayResult.reason === 'missing-stable-key') {
+    return 'That field does not have a stable lookup key yet. A fresh onboarding run is queued.';
+  }
+
+  return 'Queued a fresh onboarding run for that field.';
 }
 
 function FieldInput({
@@ -590,12 +645,16 @@ export function SpreadsheetIssuesCard({
   );
 }
 
-function JobStatusCard({
+export function JobStatusCard({
   trackedJobs,
   jobStatuses,
+  onRetryHydration,
+  retryingFieldId = null,
 }: {
   trackedJobs: readonly TrackedJob[];
   jobStatuses: ReadonlyMap<string, JobDispatchSnapshot>;
+  onRetryHydration?: (job: TrackedJob) => void;
+  retryingFieldId?: string | null;
 }) {
   if (trackedJobs.length === 0) {
     return null;
@@ -609,6 +668,8 @@ function JobStatusCard({
     },
     { queued: 0, running: 0, completed: 0, failed: 0, cancelled: 0 },
   );
+  const failedJobCount = summary.failed + summary.cancelled;
+  const hasFailures = failedJobCount > 0;
 
   return (
     <Card span={-1}>
@@ -624,6 +685,12 @@ function JobStatusCard({
           <span className="fdp__chip" style={{ fontSize: 9 }}>Cancelled {summary.cancelled}</span>
         ) : null}
       </div>
+      {hasFailures ? (
+        <Sub>
+          {summary.completed} completed, {summary.failed} failed, {summary.cancelled} cancelled.
+          Retry the affected field without starting over.
+        </Sub>
+      ) : null}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {trackedJobs.slice(0, 6).map((job) => {
           const snapshot = jobStatuses.get(job.dispatchId);
@@ -633,16 +700,43 @@ function JobStatusCard({
               ? `${Math.round(snapshot.progressPct)}%`
               : null;
           const phaseLabel = snapshot?.activePhaseLabel || snapshot?.progressMessage || 'Awaiting worker';
+          const canRetry =
+            onRetryHydration
+            && (snapshot?.status === 'failed' || snapshot?.status === 'cancelled');
+          const retryBusy = retryingFieldId === job.fieldId;
 
           return (
             <div
               key={job.dispatchId}
               style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
                 <LblM>{job.fieldLabel}</LblM>
                 <Sub>{phaseLabel}</Sub>
                 {snapshot?.lastError ? <Sub>{snapshot.lastError}</Sub> : null}
+                {canRetry ? (
+                  <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                    <button
+                      type="button"
+                      onClick={() => onRetryHydration(job)}
+                      disabled={retryBusy}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(239,68,68,0.25)',
+                        background: 'rgba(239,68,68,0.08)',
+                        color: 'var(--text-primary)',
+                        fontFamily: 'var(--font-body)',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: retryBusy ? 'not-allowed' : 'pointer',
+                        opacity: retryBusy ? 0.6 : 1,
+                      }}
+                    >
+                      {retryBusy ? 'Retrying…' : 'Retry hydration'}
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'right', flexShrink: 0 }}>
                 <Mono>{statusLabel}</Mono>
@@ -680,27 +774,38 @@ export function AddFieldPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusTone, setStatusTone] = useState<NoticeTone>('neutral');
   const [statusText, setStatusText] = useState<string | null>(null);
+  const [retryAction, setRetryAction] = useState<AddFieldRetryAction | null>(null);
   const [previewCard, setPreviewCard] = useState<PreviewCard | null>(null);
   const [spreadsheetPreview, setSpreadsheetPreview] = useState<SpreadsheetPreviewPayload | null>(null);
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>([]);
+  const [retryingHydrationFieldId, setRetryingHydrationFieldId] = useState<string | null>(null);
+  const [retryingHydrationFieldLabel, setRetryingHydrationFieldLabel] = useState<string | null>(null);
   const [lldDraftReady, setLldDraftReady] = useState(false);
   const [boundaryDraftReady, setBoundaryDraftReady] = useState(false);
 
   /* Job statuses come from the parent shell (which owns the single polling
      loop). Fall back to an empty map if no parent supplies them. */
   const jobStatuses: ReadonlyMap<string, JobDispatchSnapshot> = parentJobStatuses ?? new Map();
+  const isRetryingHydration = retryingHydrationFieldId != null;
 
   const clearFeedback = () => {
     setStatusTone('neutral');
     setStatusText(null);
+    setRetryAction(null);
     setPreviewCard(null);
     setSpreadsheetPreview(null);
     setTrackedJobs([]);
+    setRetryingHydrationFieldId(null);
+    setRetryingHydrationFieldLabel(null);
     setLldDraftReady(false);
     setBoundaryDraftReady(false);
   };
 
   const primaryLabel = useMemo(() => {
+    if (isRetryingHydration) {
+      return 'Retrying Hydration';
+    }
+
     if (isSubmitting) {
       switch (method) {
         case 'lld':
@@ -720,7 +825,7 @@ export function AddFieldPanel({
       case 'kml':
         return boundaryDraftReady ? 'Create Field' : 'Parse Boundary';
     }
-  }, [boundaryDraftReady, isSubmitting, lldDraftReady, method, spreadsheetPreview]);
+  }, [boundaryDraftReady, isRetryingHydration, isSubmitting, lldDraftReady, method, spreadsheetPreview]);
 
   const primaryDisabled = useMemo(() => {
     if (isSubmitting) return true;
@@ -752,7 +857,7 @@ export function AddFieldPanel({
       }),
     });
 
-    const result = await readApiResult<LldLookupPayload>(response);
+    const result = await readAddFieldApiResult<LldLookupPayload>(response);
 
     setPreviewCard({
       title: 'LLD Draft Ready',
@@ -774,6 +879,7 @@ export function AddFieldPanel({
     );
     setLldDraftReady(true);
     setBoundaryDraftReady(false);
+    setRetryAction(null);
   };
 
   const handleCreateLldField = async () => {
@@ -792,7 +898,7 @@ export function AddFieldPanel({
       }),
     });
 
-    const result = await readApiResult<ManualFieldCreatePayload>(response);
+    const result = await readAddFieldApiResult<ManualFieldCreatePayload>(response);
     const queuedJobCount = countQueuedJobs(result.onboardingDispatches);
     const lldResolution = result.intakeMetadata?.lldResolution;
     const boundaryConfidenceLabel =
@@ -827,6 +933,21 @@ export function AddFieldPanel({
     const nextTrackedJobs = buildTrackedJobs(
       result.onboardingDispatches,
       new Map([[result.field.id, result.field.name]]),
+      new Map([
+        [
+          result.field.id,
+          {
+            fieldAction:
+              result.action === 'created' || result.action === 'reused'
+                ? result.action
+                : undefined,
+            cropType: result.cropContext?.cropType ?? (cropType.trim() || null),
+            legalLandDescriptions: result.field.legalLandDescription
+              ? [result.field.legalLandDescription]
+              : undefined,
+          },
+        ],
+      ]),
     );
     const fieldEntries = [{ fieldId: result.field.id, fieldName: result.field.name }] as const;
     const preferredFieldId = chooseFirstInsightField({
@@ -836,6 +957,7 @@ export function AddFieldPanel({
     });
     setTrackedJobs(nextTrackedJobs);
     setLldDraftReady(false);
+    setRetryAction(null);
     onOnboardingTracked?.({
       preferredFieldId,
       fieldIds: [result.field.id],
@@ -865,7 +987,7 @@ export function AddFieldPanel({
       body: formData,
     });
 
-    const result = await readApiResult<BoundaryPreviewPayload>(response);
+    const result = await readAddFieldApiResult<BoundaryPreviewPayload>(response);
 
     setPreviewCard({
       title: 'Boundary Preview Ready',
@@ -881,6 +1003,7 @@ export function AddFieldPanel({
     setStatusText('Boundary file parsed successfully.');
     setBoundaryDraftReady(true);
     setLldDraftReady(false);
+    setRetryAction(null);
   };
 
   const handleCreateBoundaryField = async () => {
@@ -909,7 +1032,7 @@ export function AddFieldPanel({
       body: formData,
     });
 
-    const result = await readApiResult<ManualFieldCreatePayload>(response);
+    const result = await readAddFieldApiResult<ManualFieldCreatePayload>(response);
     const queuedJobCount = countQueuedJobs(result.onboardingDispatches);
 
     setPreviewCard({
@@ -935,6 +1058,18 @@ export function AddFieldPanel({
     const nextTrackedJobs = buildTrackedJobs(
       result.onboardingDispatches,
       new Map([[result.field.id, result.field.name]]),
+      new Map([
+        [
+          result.field.id,
+          {
+            fieldAction:
+              result.action === 'created' || result.action === 'reused'
+                ? result.action
+                : undefined,
+            cropType: result.cropContext?.cropType ?? (cropType.trim() || null),
+          },
+        ],
+      ]),
     );
     const fieldEntries = [{ fieldId: result.field.id, fieldName: result.field.name }] as const;
     const preferredFieldId = chooseFirstInsightField({
@@ -944,6 +1079,7 @@ export function AddFieldPanel({
     });
     setTrackedJobs(nextTrackedJobs);
     setBoundaryDraftReady(false);
+    setRetryAction(null);
     onOnboardingTracked?.({
       preferredFieldId,
       fieldIds: [result.field.id],
@@ -970,7 +1106,7 @@ export function AddFieldPanel({
       body: formData,
     });
 
-    const result = await readApiResult<SpreadsheetPreviewPayload>(response);
+    const result = await readAddFieldApiResult<SpreadsheetPreviewPayload>(response);
     setSpreadsheetPreview(result);
     setLldDraftReady(false);
     setBoundaryDraftReady(false);
@@ -987,12 +1123,15 @@ export function AddFieldPanel({
         { label: 'Issues', value: String(result.issueCount) },
       ],
     });
-    setStatusTone(result.issueCount > 0 ? 'neutral' : 'positive');
+    setStatusTone(result.fieldCount === 0 ? 'danger' : result.issueCount > 0 ? 'neutral' : 'positive');
     setStatusText(
-      result.issueCount > 0
-        ? `Preview found ${result.issueCount} issue${result.issueCount === 1 ? '' : 's'}.`
-        : 'Spreadsheet preview completed successfully.',
+      result.fieldCount === 0
+        ? 'We could not find any importable field rows in that spreadsheet. Review the columns and upload a corrected file.'
+        : result.issueCount > 0
+          ? `Preview found ${result.issueCount} issue${result.issueCount === 1 ? '' : 's'}.`
+          : 'Spreadsheet preview completed successfully.',
     );
+    setRetryAction(null);
   };
 
   const handleCommitSpreadsheet = async () => {
@@ -1008,7 +1147,7 @@ export function AddFieldPanel({
         preview: spreadsheetPreview,
       }),
     });
-    const saved = await readApiResult<{ batch: { id: string } }>(saveResponse);
+    const saved = await readAddFieldApiResult<{ batch: { id: string } }>(saveResponse);
 
     const commitResponse = await fetch(
       `/api/field-intake/spreadsheet/batches/${saved.batch.id}/commit`,
@@ -1023,7 +1162,7 @@ export function AddFieldPanel({
         }),
       },
     );
-    const committed = await readApiResult<SpreadsheetCommitPayload>(commitResponse);
+    const committed = await readAddFieldApiResult<SpreadsheetCommitPayload>(commitResponse);
     const createdCount = committed.candidates.filter((entry) => entry.action === 'created').length;
     const reusedCount = committed.candidates.length - createdCount;
     const queuedFieldCount = countQueuedFields(committed.onboardingDispatches);
@@ -1051,6 +1190,19 @@ export function AddFieldPanel({
     const nextTrackedJobs = buildTrackedJobs(
       committed.onboardingDispatches,
       new Map(committed.candidates.map((entry) => [entry.field.id, entry.field.name])),
+      new Map(
+        committed.candidates.map((entry) => [
+          entry.field.id,
+          {
+            fieldAction:
+              entry.action === 'created' || entry.action === 'reused'
+                ? entry.action
+                : undefined,
+            cropType: entry.candidate.cropType ?? null,
+            legalLandDescriptions: entry.candidate.legalLandDescriptions,
+          },
+        ]),
+      ),
     );
     const fieldEntries = committed.candidates.map((entry) => ({
       fieldId: entry.field.id,
@@ -1066,6 +1218,7 @@ export function AddFieldPanel({
       hydrationSummaries: committed.fieldHydrationSummaries,
     });
     setTrackedJobs(nextTrackedJobs);
+    setRetryAction(null);
     onOnboardingTracked?.({
       preferredFieldId,
       fieldIds: committed.candidates.map((entry) => entry.field.id),
@@ -1084,6 +1237,20 @@ export function AddFieldPanel({
   };
 
   const handlePrimaryAction = async () => {
+    let attemptedAction: AddFieldRetryAction;
+
+    switch (method) {
+      case 'lld':
+        attemptedAction = lldDraftReady ? 'lld-create' : 'lld-lookup';
+        break;
+      case 'csv':
+        attemptedAction = spreadsheetPreview ? 'spreadsheet-commit' : 'spreadsheet-preview';
+        break;
+      case 'kml':
+        attemptedAction = boundaryDraftReady ? 'boundary-create' : 'boundary-parse';
+        break;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -1112,11 +1279,125 @@ export function AddFieldPanel({
       }
     } catch (error) {
       setStatusTone('danger');
-      setStatusText(error instanceof Error ? error.message : 'Field intake request failed.');
+      setStatusText(describeAddFieldApiError(error));
+      setRetryAction(attemptedAction);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleRetryAction = async () => {
+    if (!retryAction || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      switch (retryAction) {
+        case 'lld-lookup':
+          await handleLookupLld();
+          break;
+        case 'lld-create':
+          await handleCreateLldField();
+          break;
+        case 'boundary-parse':
+          await handlePreviewBoundaryFile();
+          break;
+        case 'boundary-create':
+          await handleCreateBoundaryField();
+          break;
+        case 'spreadsheet-preview':
+          await handlePreviewSpreadsheet();
+          break;
+        case 'spreadsheet-commit':
+          await handleCommitSpreadsheet();
+          break;
+      }
+    } catch (error) {
+      setStatusTone('danger');
+      setStatusText(describeAddFieldApiError(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRetryHydration = async (job: TrackedJob) => {
+    if (isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setRetryingHydrationFieldId(job.fieldId);
+    setRetryingHydrationFieldLabel(job.fieldLabel);
+
+    try {
+      const response = await fetch('/api/field-intake/hydration/retry', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          workspaceId: effectiveWorkspaceId ?? undefined,
+          fieldId: job.fieldId,
+          fieldName: job.fieldLabel,
+          fieldAction: job.fieldAction,
+          cropType: job.cropType ?? undefined,
+          legalLandDescriptions:
+            job.legalLandDescriptions && job.legalLandDescriptions.length > 0
+              ? job.legalLandDescriptions
+              : undefined,
+        }),
+      });
+
+      const result = await readAddFieldApiResult<HydrationRetryPayload>(response);
+      const nextTrackedJobs = buildTrackedJobs(
+        result.onboardingDispatches,
+        new Map([[job.fieldId, job.fieldLabel]]),
+        new Map([
+          [
+            job.fieldId,
+            {
+              fieldAction: job.fieldAction,
+              cropType: job.cropType ?? null,
+              legalLandDescriptions: job.legalLandDescriptions,
+            },
+          ],
+        ]),
+      );
+
+      setTrackedJobs((current) => [
+        ...current.filter((entry) => entry.fieldId !== job.fieldId),
+        ...nextTrackedJobs,
+      ]);
+      setStatusTone(result.replayResult?.action === 'replayed' ? 'positive' : 'neutral');
+      setStatusText(
+        `${job.fieldLabel}: ${describeHydrationReplayResult(result.replayResult)}`,
+      );
+      setRetryAction(null);
+      onOnboardingTracked?.({
+        preferredFieldId: job.fieldId,
+        fieldIds: [job.fieldId],
+        fieldEntries: [{ fieldId: job.fieldId, fieldName: job.fieldLabel }],
+        dispatchIds: Array.from(new Set(nextTrackedJobs.map((entry) => entry.dispatchId))),
+        workspaceId: effectiveWorkspaceId,
+        trackedJobs: nextTrackedJobs.map((entry) => ({
+          dispatchId: entry.dispatchId,
+          fieldId: entry.fieldId,
+          fieldLabel: entry.fieldLabel,
+        })),
+      });
+    } catch (error) {
+      setStatusTone('danger');
+      setStatusText(describeAddFieldApiError(error));
+    } finally {
+      setIsSubmitting(false);
+      setRetryingHydrationFieldId(null);
+      setRetryingHydrationFieldLabel(null);
+    }
+  };
+
+  const retryLabel = resolveAddFieldRetryLabel(retryAction);
 
   return (
     <div className="fdp" style={{ position: 'absolute', top: 'var(--space-lg)', right: 'var(--space-lg)', bottom: 'var(--space-xl)' }}>
@@ -1253,11 +1534,39 @@ export function AddFieldPanel({
         {statusText ? (
           <Card span={-1} accent={statusTone === 'danger' ? '#ef4444' : statusTone === 'positive' ? 'var(--primary-green)' : undefined}>
             <Sub>{statusText}</Sub>
+            {statusTone === 'danger' && retryLabel ? (
+              <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={handleRetryAction}
+                  disabled={isSubmitting}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(239,68,68,0.25)',
+                    background: 'rgba(239,68,68,0.08)',
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    opacity: isSubmitting ? 0.6 : 1,
+                  }}
+                >
+                  {retryLabel}
+                </button>
+              </div>
+            ) : null}
           </Card>
         ) : null}
 
         {previewCard ? <PreviewSummaryCard preview={previewCard} tone={statusTone} /> : null}
-        <JobStatusCard trackedJobs={trackedJobs} jobStatuses={jobStatuses} />
+        <JobStatusCard
+          trackedJobs={trackedJobs}
+          jobStatuses={jobStatuses}
+          onRetryHydration={handleRetryHydration}
+          retryingFieldId={retryingHydrationFieldId}
+        />
         {method === 'csv' && spreadsheetPreview && spreadsheetPreview.issues.length > 0 ? (
           <SpreadsheetIssuesCard issues={spreadsheetPreview.issues} />
         ) : null}
@@ -1272,19 +1581,21 @@ export function AddFieldPanel({
                 animation: 'fdp-spinner 600ms linear infinite', flexShrink: 0,
               }} />
               <Sub>
-                {method === 'lld' && !lldDraftReady && 'Searching land description databases…'}
-                {method === 'lld' && lldDraftReady && 'Creating field boundary and queuing satellite analysis…'}
-                {method === 'csv' && !spreadsheetPreview && 'Parsing spreadsheet and validating field data…'}
-                {method === 'csv' && spreadsheetPreview && 'Creating fields, resolving boundaries, and queuing satellite onboarding…'}
-                {method === 'kml' && !boundaryDraftReady && 'Parsing boundary geometry from file…'}
-                {method === 'kml' && boundaryDraftReady && 'Creating field from boundary and queuing analysis…'}
+                {isRetryingHydration && `Retrying hydration for ${retryingHydrationFieldLabel ?? 'that field'}…`}
+                {!isRetryingHydration && method === 'lld' && !lldDraftReady && 'Searching land description databases…'}
+                {!isRetryingHydration && method === 'lld' && lldDraftReady && 'Creating field boundary and queuing satellite analysis…'}
+                {!isRetryingHydration && method === 'csv' && !spreadsheetPreview && 'Parsing spreadsheet and validating field data…'}
+                {!isRetryingHydration && method === 'csv' && spreadsheetPreview && 'Creating fields, resolving boundaries, and queuing satellite onboarding…'}
+                {!isRetryingHydration && method === 'kml' && !boundaryDraftReady && 'Parsing boundary geometry from file…'}
+                {!isRetryingHydration && method === 'kml' && boundaryDraftReady && 'Creating field from boundary and queuing analysis…'}
               </Sub>
             </div>
             <Sub>
-              {method === 'csv' && !spreadsheetPreview && 'This usually takes 5–15 seconds depending on file size.'}
-              {method === 'csv' && spreadsheetPreview && `Importing ${spreadsheetPreview.fieldCount} fields — this may take up to a minute.`}
-              {method === 'lld' && 'LLD lookups typically resolve within a few seconds.'}
-              {method === 'kml' && 'Boundary parsing depends on file complexity.'}
+              {isRetryingHydration && 'We are replaying field hydration context and queuing a fresh onboarding run.'}
+              {!isRetryingHydration && method === 'csv' && !spreadsheetPreview && 'This usually takes 5–15 seconds depending on file size.'}
+              {!isRetryingHydration && method === 'csv' && spreadsheetPreview && `Importing ${spreadsheetPreview.fieldCount} fields — this may take up to a minute.`}
+              {!isRetryingHydration && method === 'lld' && 'LLD lookups typically resolve within a few seconds.'}
+              {!isRetryingHydration && method === 'kml' && 'Boundary parsing depends on file complexity.'}
             </Sub>
           </Card>
         )}
@@ -1294,7 +1605,7 @@ export function AddFieldPanel({
           label={primaryLabel}
           onPrimaryClick={handlePrimaryAction}
           disabled={primaryDisabled}
-          busy={isSubmitting}
+          busy={isSubmitting && !isRetryingHydration}
         />
       </div>
     </div>

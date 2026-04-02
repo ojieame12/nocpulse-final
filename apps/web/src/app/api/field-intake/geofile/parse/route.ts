@@ -1,7 +1,5 @@
 import {
-  jsonError,
   jsonOk,
-  jsonServerError,
 } from "../../../../../server/http/json";
 import {
   buildIpRateLimitRule,
@@ -18,6 +16,11 @@ import {
 } from "../../../../../server/http/uploads";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 import { RequestContextError } from "../../../../../server/runtime/resolveRequestContext";
+import {
+  handleFieldIntakeRouteError,
+  jsonFieldIntakeError,
+  withFieldIntakeRateLimitCode,
+} from "../../_shared/intakeErrors";
 
 const FIELD_INTAKE_GEOFILE_PARSE_IP_RATE_LIMIT = {
   scope: "field-intake-geofile-parse:ip",
@@ -35,7 +38,11 @@ export async function POST(request: Request) {
   try {
     formData = await request.formData();
   } catch {
-    return jsonError(400, "Expected multipart form data.");
+    return jsonFieldIntakeError({
+      status: 400,
+      code: "invalid_request_body",
+      message: "We could not read that boundary upload.",
+    });
   }
 
   try {
@@ -48,7 +55,11 @@ export async function POST(request: Request) {
     const runtime = getWebServerRuntime();
 
     if (runtime.mode !== "supabase") {
-      return jsonError(503, "Supabase runtime is not configured.");
+      return jsonFieldIntakeError({
+        status: 503,
+        code: "runtime_unavailable",
+        message: "Field intake is temporarily unavailable.",
+      });
     }
     const rateLimitResponse = await enforceRouteRateLimits({
       runtime,
@@ -62,7 +73,7 @@ export async function POST(request: Request) {
     });
 
     if (rateLimitResponse) {
-      return rateLimitResponse;
+      return withFieldIntakeRateLimitCode(rateLimitResponse);
     }
 
     const result = await runtime.services.fieldIntake.parseBoundaryFile({
@@ -77,13 +88,19 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof RequestContextError) {
-      return jsonError(error.status, error.message);
+      return handleFieldIntakeRouteError(error, {
+        event: "field-intake-geofile-parse-route",
+        code: "boundary_parse_failed",
+        message: "We could not parse that boundary file.",
+        status: error.status,
+      });
     }
 
-    return jsonServerError(error, {
-      status: 400,
+    return handleFieldIntakeRouteError(error, {
       event: "field-intake-geofile-parse-route",
-      message: "Geofile parsing failed.",
+      code: "boundary_parse_failed",
+      message: "We could not parse that boundary file.",
+      status: 400,
     });
   }
 }

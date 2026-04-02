@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { AddFieldPanel, SpreadsheetIssuesCard } from "../AddFieldPanel";
+import { AddFieldPanel, JobStatusCard, SpreadsheetIssuesCard } from "../AddFieldPanel";
 
 test("AddFieldPanel exposes the live add-field methods without manual entry", () => {
   const markup = renderToStaticMarkup(
@@ -33,4 +33,48 @@ test("SpreadsheetIssuesCard renders row-level CSV issues", () => {
   assert.match(markup, /Missing LLD value\./);
   assert.match(markup, /Row 7/);
   assert.match(markup, /Area must be a valid number\./);
+});
+
+test("JobStatusCard exposes retry hydration for failed onboarding jobs", () => {
+  const markup = renderToStaticMarkup(
+    <JobStatusCard
+      trackedJobs={[
+        {
+          dispatchId: "dispatch-1",
+          fieldId: "field-1",
+          fieldLabel: "North Quarter",
+          action: "created",
+          fieldAction: "created",
+          cropType: "Canola",
+          legalLandDescriptions: ["NW-25-042-04-W4"],
+        },
+      ]}
+      jobStatuses={
+        new Map([
+          [
+            "dispatch-1",
+            {
+              id: "dispatch-1",
+              key: "field.bootstrap-initial",
+              status: "failed",
+              activePhaseLabel: "Sync imagery",
+              progressPct: 65,
+              progressMessage: null,
+              updatedAt: "2026-04-02T10:00:00.000Z",
+              completedAt: null,
+              failedAt: "2026-04-02T10:00:00.000Z",
+              cancelledAt: null,
+              lastError: "Imagery provider timed out.",
+              fieldId: "field-1",
+            },
+          ],
+        ])
+      }
+      onRetryHydration={() => {}}
+    />,
+  );
+
+  assert.match(markup, /Failed 1/);
+  assert.match(markup, /Retry hydration/);
+  assert.match(markup, /Imagery provider timed out\./);
 });

@@ -1,7 +1,5 @@
 import {
-  jsonError,
   jsonOk,
-  jsonServerError,
 } from "../../../../../server/http/json";
 import {
   buildIpRateLimitRule,
@@ -13,6 +11,11 @@ import {
 } from "../../../../../server/http/uploads";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 import { RequestContextError } from "../../../../../server/runtime/resolveRequestContext";
+import {
+  handleFieldIntakeRouteError,
+  jsonFieldIntakeError,
+  withFieldIntakeRateLimitCode,
+} from "../../_shared/intakeErrors";
 
 const FIELD_INTAKE_SPREADSHEET_PREVIEW_IP_RATE_LIMIT = {
   scope: "field-intake-spreadsheet-preview-upload:ip",
@@ -26,7 +29,11 @@ export async function POST(request: Request) {
   try {
     formData = await request.formData();
   } catch {
-    return jsonError(400, "Expected multipart form data.");
+    return jsonFieldIntakeError({
+      status: 400,
+      code: "invalid_request_body",
+      message: "We could not read that spreadsheet upload.",
+    });
   }
 
   try {
@@ -36,7 +43,11 @@ export async function POST(request: Request) {
     const runtime = getWebServerRuntime();
 
     if (runtime.mode !== "supabase") {
-      return jsonError(503, "Supabase runtime is not configured.");
+      return jsonFieldIntakeError({
+        status: 503,
+        code: "runtime_unavailable",
+        message: "Field intake is temporarily unavailable.",
+      });
     }
     const rateLimitResponse = await enforceRouteRateLimits({
       runtime,
@@ -50,7 +61,7 @@ export async function POST(request: Request) {
     });
 
     if (rateLimitResponse) {
-      return rateLimitResponse;
+      return withFieldIntakeRateLimitCode(rateLimitResponse);
     }
 
     const result = await runtime.services.fieldIntake.previewSpreadsheetImport({
@@ -63,13 +74,19 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof RequestContextError) {
-      return jsonError(error.status, error.message);
+      return handleFieldIntakeRouteError(error, {
+        event: "field-intake-spreadsheet-preview-route",
+        code: "spreadsheet_preview_failed",
+        message: "We could not preview that spreadsheet import.",
+        status: error.status,
+      });
     }
 
-    return jsonServerError(error, {
-      status: 400,
+    return handleFieldIntakeRouteError(error, {
       event: "field-intake-spreadsheet-preview-route",
-      message: "Spreadsheet preview failed.",
+      code: "spreadsheet_preview_failed",
+      message: "We could not preview that spreadsheet import.",
+      status: 400,
     });
   }
 }

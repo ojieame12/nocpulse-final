@@ -24,12 +24,18 @@ type DraftFieldRuntime = {
       dispatchInitialPlan(input: {
         workspaceId: string;
         fieldId: string;
+        fieldName?: string;
         dryRun?: boolean;
+        cropType?: string;
+        legalLandDescriptions?: readonly string[];
       }): Promise<readonly unknown[]>;
       dispatchRefreshPlan(input: {
         workspaceId: string;
         fieldId: string;
+        fieldName?: string;
         dryRun?: boolean;
+        cropType?: string;
+        legalLandDescriptions?: readonly string[];
       }): Promise<readonly unknown[]>;
     };
   };
@@ -116,18 +122,27 @@ export async function createDraftField(input: CreateDraftFieldInput) {
       })
     : null;
 
+  const legalLandDescriptions =
+    legalLandDescription != null ? [legalLandDescription] : undefined;
+
   const receipts =
     input.dispatchOnboarding
       ? ensured.action === "created"
         ? await input.runtime.services.fieldOnboarding.dispatchInitialPlan({
             workspaceId: input.actor.workspaceId,
             fieldId: field.id,
+            fieldName: field.name,
             dryRun: false,
+            cropType: input.cropType ?? undefined,
+            legalLandDescriptions,
           })
         : await input.runtime.services.fieldOnboarding.dispatchRefreshPlan({
             workspaceId: input.actor.workspaceId,
             fieldId: field.id,
+            fieldName: field.name,
             dryRun: false,
+            cropType: input.cropType ?? undefined,
+            legalLandDescriptions,
           })
       : [];
 
