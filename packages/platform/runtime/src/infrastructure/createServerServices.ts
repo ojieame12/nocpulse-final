@@ -696,6 +696,21 @@ export function createServerServices(
       saveSpreadsheetImportPreview(input) {
         return saveSpreadsheetImportPreview(repositories, input);
       },
+      async replayFieldHydration(input) {
+        if (!options.hydrationReplay) {
+          throw new Error(
+            "[runtime] field hydration replay requested without a replay service",
+          );
+        }
+
+        return options.hydrationReplay.replayFromImportCandidate({
+          targetWorkspaceId: input.workspaceId,
+          targetFieldId: input.fieldId,
+          fieldName: input.fieldName,
+          cropType: input.cropType,
+          legalLandDescriptions: input.legalLandDescriptions,
+        });
+      },
       commitSpreadsheetImportBatch(input) {
         return commitFieldImportBatch(repositories, options, input);
       },

@@ -64,6 +64,8 @@ export {
   type LookupLldBoundaryInput,
   type ParseFieldBoundaryFileInput,
   type ParsedFieldBoundaryFile,
+  type ReplayFieldHydrationFromImportInput,
+  type FieldHydrationReplayResult,
   type ListFieldImageryProviderProbeHistoryInput,
   type ProbeFieldImageryProvidersInput,
   type PreviewSpreadsheetImportFileInput,

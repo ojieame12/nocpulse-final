@@ -616,6 +616,35 @@ export type BatchHydrationSummary = {
   unknownConfidenceFields: number;
 };
 
+export type ReplayFieldHydrationFromImportInput = {
+  workspaceId: WorkspaceId;
+  fieldId: string;
+  fieldName: string;
+  cropType?: string;
+  legalLandDescriptions: readonly string[];
+};
+
+export type FieldHydrationReplayResult = {
+  action: "replayed" | "skipped";
+  reason?:
+    | "missing-stable-key"
+    | "no-source-field"
+    | "no-hydrated-source"
+    | "target-workspace-only";
+  sourceFieldId?: string;
+  sourceWorkspaceId?: string;
+  sourceWorkspaceSlug?: string | null;
+  copied?: {
+    cropContext: boolean;
+    weatherObservationCount: number;
+    weatherForecastCount: number;
+    weatherSignalSet: boolean;
+    moistureSnapshotCount: number;
+    moistureCellCount: number;
+    rasterObservation: boolean;
+  };
+};
+
 export type CommitFieldImportBatchResult = {
   batch: FieldImportBatch;
   candidates: CommitSpreadsheetImportBatchResult["candidates"];
@@ -655,6 +684,9 @@ export type ServerServices = {
     saveSpreadsheetImportPreview(
       input: SaveSpreadsheetImportPreviewInput,
     ): Promise<SaveSpreadsheetImportPreviewResult>;
+    replayFieldHydration(
+      input: ReplayFieldHydrationFromImportInput,
+    ): Promise<FieldHydrationReplayResult>;
     commitSpreadsheetImportBatch(
       input: CommitFieldImportBatchInput,
     ): Promise<CommitFieldImportBatchResult>;

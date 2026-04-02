@@ -31,72 +31,12 @@ import type {
   SaveSpreadsheetImportPreviewResult,
 } from "../contracts/ServerServices";
 import { createDefaultMoistureCellDerivationStrategy } from "./createDefaultMoistureCellDerivationStrategy";
-import type { FieldHydrationReplay } from "./createSupabaseFieldHydrationReplay";
-
-const HYDRATION_REPLAY_MAX_ATTEMPTS = 4;
-const HYDRATION_REPLAY_RETRY_DELAYS_MS = [150, 400, 900] as const;
 const HYDRATION_STAGE_LABELS = {
   soil: "Soil properties",
   weather: "Weather observations",
   imagery: "Satellite imagery",
   moisture: "Moisture model",
 } as const;
-
-function delay(ms: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-async function replayFieldHydrationWithRetry(
-  hydrationReplay: FieldHydrationReplay,
-  input: Parameters<FieldHydrationReplay["replayFromImportCandidate"]>[0],
-) {
-  let lastError: unknown = null;
-
-  for (let attempt = 0; attempt < HYDRATION_REPLAY_MAX_ATTEMPTS; attempt += 1) {
-    try {
-      return await hydrationReplay.replayFromImportCandidate(input);
-    } catch (error) {
-      lastError = error;
-      if (attempt >= HYDRATION_REPLAY_RETRY_DELAYS_MS.length) {
-        break;
-      }
-      await delay(HYDRATION_REPLAY_RETRY_DELAYS_MS[attempt]!);
-    }
-  }
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error(String(lastError ?? "Unknown hydration replay error"));
-}
-
-async function replayFieldHydrationBatchWithRetry(
-  hydrationReplay: FieldHydrationReplay,
-  input: Parameters<FieldHydrationReplay["replayFromCommittedBatch"]>[0],
-) {
-  let lastError: unknown = null;
-
-  for (let attempt = 0; attempt < HYDRATION_REPLAY_MAX_ATTEMPTS; attempt += 1) {
-    try {
-      return await hydrationReplay.replayFromCommittedBatch(input);
-    } catch (error) {
-      lastError = error;
-      if (attempt >= HYDRATION_REPLAY_RETRY_DELAYS_MS.length) {
-        break;
-      }
-      await delay(HYDRATION_REPLAY_RETRY_DELAYS_MS[attempt]!);
-    }
-  }
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error(String(lastError ?? "Unknown hydration replay batch error"));
-}
-
-type HydrationReplayOutcome = Awaited<
-  ReturnType<FieldHydrationReplay["replayFromImportCandidate"]>
->;
 
 function hasSoilContext(snapshot: FieldMoistureSnapshot | null) {
   const inputs = snapshot?.inputs;
@@ -215,19 +155,18 @@ async function buildFieldHydrationSummary(
     workspaceId: string;
     action: "created" | "reused";
     receipts: CommitFieldImportBatchResult["onboardingDispatches"][number]["receipts"];
-    replayResult: HydrationReplayOutcome | null;
   },
 ): Promise<FieldHydrationSummary> {
   const hydrationMode: FieldHydrationSummary["hydrationMode"] =
-    input.action === "reused"
-      ? "existing"
-      : input.replayResult?.action === "replayed"
-        ? "inline-replay"
-        : input.receipts.some((receipt) => receipt.key === "field.refresh-intake")
-          ? "refresh"
+    input.receipts.some((receipt) => receipt.key === "field.refresh-intake")
+      ? "refresh"
+      : input.receipts.some((receipt) => receipt.key === "field.bootstrap-initial")
+        ? "cold-bootstrap"
+        : input.action === "reused"
+          ? "existing"
           : "cold-bootstrap";
 
-  if (hydrationMode === "cold-bootstrap" || hydrationMode === "refresh") {
+  if (hydrationMode !== "existing") {
     const phaseLabel =
       hydrationMode === "refresh"
         ? "Queued for refresh"
@@ -241,9 +180,6 @@ async function buildFieldHydrationSummary(
       status: "queued",
       progressPct: 0,
       phaseLabel,
-      sourceFieldId: input.replayResult?.sourceFieldId,
-      sourceWorkspaceId: input.replayResult?.sourceWorkspaceId,
-      sourceWorkspaceSlug: input.replayResult?.sourceWorkspaceSlug ?? null,
       stages: buildQueuedStages(phaseLabel),
       coverage: {
         hasSoilContext: false,
@@ -251,10 +187,10 @@ async function buildFieldHydrationSummary(
         hasWeatherForecast: false,
         hasRasterObservation: false,
         hasMoistureSnapshot: false,
-        weatherObservationCount: input.replayResult?.copied?.weatherObservationCount ?? null,
-        weatherForecastCount: input.replayResult?.copied?.weatherForecastCount ?? null,
-        moistureSnapshotCount: input.replayResult?.copied?.moistureSnapshotCount ?? null,
-        moistureCellCount: input.replayResult?.copied?.moistureCellCount ?? null,
+        weatherObservationCount: null,
+        weatherForecastCount: null,
+        moistureSnapshotCount: null,
+        moistureCellCount: null,
       },
       moistureConfidence: null,
     };
@@ -293,19 +229,13 @@ async function buildFieldHydrationSummary(
     hydrationMode,
     status: "completed",
     progressPct: 100,
-    phaseLabel:
-      hydrationMode === "inline-replay"
-        ? "Hydration replay completed"
-        : "Field data available",
-    sourceFieldId: input.replayResult?.sourceFieldId,
-    sourceWorkspaceId: input.replayResult?.sourceWorkspaceId,
-    sourceWorkspaceSlug: input.replayResult?.sourceWorkspaceSlug ?? null,
+    phaseLabel: "Field data available",
     stages: buildCompletedStages({
       hasSoilContext: soilReady,
       hasWeatherObservation: weatherReady,
       hasRasterObservation: imageryReady,
       hasMoistureSnapshot: moistureReady,
-      replayed: hydrationMode === "inline-replay",
+      replayed: false,
     }),
     coverage: {
       hasSoilContext: soilReady,
@@ -313,11 +243,10 @@ async function buildFieldHydrationSummary(
       hasWeatherForecast: forecasts.length > 0,
       hasRasterObservation: imageryReady,
       hasMoistureSnapshot: moistureReady,
-      weatherObservationCount: input.replayResult?.copied?.weatherObservationCount ?? null,
-      weatherForecastCount:
-        input.replayResult?.copied?.weatherForecastCount ?? forecasts.length,
-      moistureSnapshotCount: input.replayResult?.copied?.moistureSnapshotCount ?? null,
-      moistureCellCount: input.replayResult?.copied?.moistureCellCount ?? null,
+      weatherObservationCount: null,
+      weatherForecastCount: forecasts.length,
+      moistureSnapshotCount: null,
+      moistureCellCount: null,
     },
     moistureConfidence: buildMoistureConfidenceSummary(latestMoistureSnapshot),
   };
@@ -457,7 +386,6 @@ export async function commitFieldImportBatch(
   repositories: ServerRepositories,
   options: {
     jobDispatcher?: ServerJobDispatcher;
-    hydrationReplay?: FieldHydrationReplay;
   },
   input: CommitFieldImportBatchInput,
 ): Promise<CommitFieldImportBatchResult> {
@@ -472,125 +400,61 @@ export async function commitFieldImportBatch(
   const onboardingDispatches: Array<
     CommitFieldImportBatchResult["onboardingDispatches"][number]
   > = [];
-  const replayResultsByFieldId = new Map<string, HydrationReplayOutcome>();
-
-  if (options.hydrationReplay) {
-    const createdCandidates = committed.candidates.filter(
-      (candidate) => candidate.action === "created",
-    );
-
-    if (createdCandidates.length > 0) {
-      try {
-        const replayResults = await replayFieldHydrationBatchWithRetry(
-          options.hydrationReplay,
-          {
-            targetWorkspaceId: input.workspaceId,
-            batchId: input.batchId,
-          },
-        );
-
-        for (const replayResult of replayResults) {
-          replayResultsByFieldId.set(replayResult.targetFieldId, {
-            action: replayResult.action,
-            reason: replayResult.reason,
-            sourceFieldId: replayResult.sourceFieldId,
-            sourceWorkspaceId: replayResult.sourceWorkspaceId,
-            sourceWorkspaceSlug: replayResult.sourceWorkspaceSlug,
-            copied: replayResult.copied,
-          });
-        }
-      } catch (error) {
-        console.warn(
-          `[field-intake] hydration replay batch skipped for batch ${input.batchId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
+  const dispatchedEntries = await Promise.all(
+    committed.candidates.map(async (candidate) => {
+      if (!options.jobDispatcher) {
+        return {
+          fieldId: candidate.field.id,
+          action: candidate.action,
+          receipts: [],
+        } satisfies CommitFieldImportBatchResult["onboardingDispatches"][number];
       }
-    }
-  }
 
-  for (const candidate of committed.candidates) {
-    if (candidate.candidate.cropType) {
-      await repositories.fieldCropContexts.upsertContext({
-        workspaceId: candidate.field.workspaceId,
-        fieldId: candidate.field.id,
-        seasonYear: new Date(candidate.candidate.createdAt).getUTCFullYear(),
-        cropType: candidate.candidate.cropType,
-        growthStage: null,
-        growthStageSource: "imported",
-        accumulatedGdd: 0,
-        sourceKey: "field-intake:spreadsheet-commit",
-        metadata: {
-          batchId: committed.batch.id,
-          candidateId: candidate.candidate.id,
-          commitAction: candidate.action,
-          sourceType: committed.batch.sourceType,
-        },
-      });
-    }
-
-    let hydrationReplayAction: "replayed" | "skipped" = "skipped";
-    if (candidate.action === "created" && options.hydrationReplay) {
-      const batchReplayResult = replayResultsByFieldId.get(candidate.field.id);
-
-      if (batchReplayResult) {
-        hydrationReplayAction = batchReplayResult.action;
-      } else {
-        try {
-          const replayResult =
-            await replayFieldHydrationWithRetry(options.hydrationReplay, {
-              targetWorkspaceId: candidate.field.workspaceId,
-              targetFieldId: candidate.field.id,
-              fieldName: candidate.field.name,
-              cropType: candidate.candidate.cropType,
-              legalLandDescriptions: candidate.candidate.legalLandDescriptions,
-            });
-          hydrationReplayAction = replayResult.action;
-        } catch (error) {
-          console.warn(
-            `[field-intake] hydration replay skipped for field ${candidate.field.id}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-        }
-      }
-    }
-
-    if (!options.jobDispatcher) {
-      onboardingDispatches.push({
-        fieldId: candidate.field.id,
-        action: candidate.action,
-        receipts: [],
-      });
-      continue;
-    }
-
-    const receipts = await dispatchFieldOnboardingPlan({
-      dispatcher: {
-        enqueue(job: FieldOnboardingJobRequest) {
-          return options.jobDispatcher!.enqueue(job);
-        },
-      },
-      plan:
-        candidate.action === "created" && hydrationReplayAction !== "replayed"
+      const plan =
+        candidate.action === "created"
           ? buildInitialFieldOnboardingPlan({
               workspaceId: candidate.field.workspaceId,
               fieldId: candidate.field.id,
+              fieldName: candidate.field.name,
               dryRun: input.onboardingDryRun,
+              cropType: candidate.candidate.cropType,
+              legalLandDescriptions: candidate.candidate.legalLandDescriptions,
+              importBatchId: committed.batch.id,
+              importCandidateId: candidate.candidate.id,
+              importSourceType: committed.batch.sourceType,
+              importAction: candidate.action,
             })
           : buildRefreshFieldOnboardingPlan({
               workspaceId: candidate.field.workspaceId,
               fieldId: candidate.field.id,
+              fieldName: candidate.field.name,
               dryRun: input.onboardingDryRun,
-            }),
-    });
+              cropType: candidate.candidate.cropType,
+              legalLandDescriptions: candidate.candidate.legalLandDescriptions,
+              importBatchId: committed.batch.id,
+              importCandidateId: candidate.candidate.id,
+              importSourceType: committed.batch.sourceType,
+              importAction: candidate.action,
+            });
 
-    onboardingDispatches.push({
-      fieldId: candidate.field.id,
-      action: candidate.action,
-      receipts,
-    });
-  }
+      const receipts = await dispatchFieldOnboardingPlan({
+        dispatcher: {
+          enqueue(job: FieldOnboardingJobRequest) {
+            return options.jobDispatcher!.enqueue(job);
+          },
+        },
+        plan,
+      });
+
+      return {
+        fieldId: candidate.field.id,
+        action: candidate.action,
+        receipts,
+      } satisfies CommitFieldImportBatchResult["onboardingDispatches"][number];
+    }),
+  );
+
+  onboardingDispatches.push(...dispatchedEntries);
 
   const fieldHydrationSummaries = await Promise.all(
     committed.candidates.map(async (candidate) => {
@@ -604,7 +468,6 @@ export async function commitFieldImportBatch(
         workspaceId: candidate.field.workspaceId,
         action: candidate.action,
         receipts: dispatchEntry?.receipts ?? [],
-        replayResult: replayResultsByFieldId.get(candidate.field.id) ?? null,
       });
     }),
   );
