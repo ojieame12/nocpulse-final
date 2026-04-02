@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 
 export function LandingNavbar() {
   const [scrolled, setScrolled] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 100);
@@ -14,10 +14,10 @@ export function LandingNavbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  /* Hydrate from stored preference or system */
+  /* Hydrate from stored preference, default dark */
   useEffect(() => {
     const stored = localStorage.getItem("nocpulse-theme") as "light" | "dark" | null;
-    const preferred = stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const preferred = stored ?? "dark";
     setTheme(preferred);
     document.documentElement.setAttribute("data-theme", preferred);
   }, []);
@@ -52,7 +52,7 @@ export function LandingNavbar() {
     >
       <Link href="/">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-light.svg" alt="NocPulse" className="landing-nav-logo" style={{ height: 18 }} />
+        <img src={theme === "dark" ? "/logo-light.svg" : "/logo.svg"} alt="NocPulse" style={{ height: 18, transition: "opacity 0.3s" }} />
       </Link>
 
       <div className="landing-nav-links">
