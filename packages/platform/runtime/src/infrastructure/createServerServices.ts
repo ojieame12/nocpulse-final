@@ -672,6 +672,15 @@ export function createServerServices(
           input.legalLandDescription,
         );
       },
+      async archiveField(input) {
+        await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
+
+        await repositories.fields.archiveField(
+          input.workspaceId,
+          input.fieldId,
+          input.actorUserId,
+        );
+      },
       async deleteField(input) {
         await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
 

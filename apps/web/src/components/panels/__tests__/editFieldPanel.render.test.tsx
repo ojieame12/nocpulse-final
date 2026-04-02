@@ -52,3 +52,19 @@ test("EditFieldPanel renders the clear-manual option when a manual override is a
   assert.match(markup, /Auto \(clear manual override\)/);
   assert.match(markup, /Flowering stage · manual/);
 });
+
+test("EditFieldPanel renders archive and permanent delete guidance in the danger zone", () => {
+  const markup = renderToStaticMarkup(
+    <EditFieldPanel
+      {...createBaseProps()}
+      onArchive={() => {}}
+      onDeletePermanently={() => {}}
+    />,
+  );
+
+  assert.match(markup, /Danger Zone/);
+  assert.match(markup, /Archive removes/);
+  assert.match(markup, /Archive this field/);
+  assert.match(markup, /Delete permanently/);
+  assert.match(markup, /detaches import batch history/);
+});

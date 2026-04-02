@@ -158,6 +158,10 @@ export type DeleteFieldInput = {
   fieldId: string;
 };
 
+export type ArchiveFieldInput = DeleteFieldInput & {
+  actorUserId: UserId;
+};
+
 export type LoadFieldDetailByWorkspaceInput = {
   workspaceId: WorkspaceId;
   fieldId: string;
@@ -682,6 +686,7 @@ export type ServerServices = {
     setLegalLandDescription(
       input: UpdateFieldLegalLandDescriptionInput,
     ): Promise<FieldDetail>;
+    archiveField(input: ArchiveFieldInput): Promise<void>;
     deleteField(input: DeleteFieldInput): Promise<void>;
   };
   fieldIntake: {

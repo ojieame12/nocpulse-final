@@ -251,6 +251,20 @@ export function createSupabaseFieldRepository(
       return detail;
     },
 
+    async archiveField(workspaceId, fieldId, actorUserId) {
+      const result = await client
+        .from("fields")
+        .update({
+          archived_at: new Date().toISOString(),
+          archived_by: actorUserId,
+        })
+        .eq("workspace_id", workspaceId)
+        .eq("id", fieldId)
+        .is("archived_at", null);
+
+      requireSupabaseSuccess(result, "fields.archiveField");
+    },
+
     async deleteField(workspaceId, fieldId) {
       const result = await client
         .from("fields")

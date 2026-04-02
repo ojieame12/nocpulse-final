@@ -1274,23 +1274,9 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     ],
   );
 
-  const handleFieldDelete = useCallback(
+  const removeFieldFromWorkspace = useCallback(
     async (fieldId: string) => {
       const fallbackFieldId = selectFallbackFieldId(sidebarFields, fieldId);
-      const response = await fetch(`/api/fields/${fieldId}`, {
-        method: 'DELETE',
-        headers: {
-          'x-fieldpulse-workspace-id': workspaceId,
-        },
-      });
-
-      if (!response.ok) {
-        setFieldSwitchError(
-          await readApiErrorMessage(response, 'Unable to delete this field right now.'),
-        );
-        return;
-      }
-
       syncSidebarFieldsAcrossCache((fields) => removeSidebarField(fields, fieldId));
       setWorkspaceFieldFeatures((prev) =>
         prev.filter((feature) => feature.properties.fieldId !== fieldId),
@@ -1349,6 +1335,51 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       syncSidebarFieldsAcrossCache,
       workspaceId,
     ],
+  );
+
+  const handleFieldArchive = useCallback(
+    async (fieldId: string) => {
+      const response = await fetch(`/api/fields/${fieldId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-fieldpulse-workspace-id': workspaceId,
+        },
+      });
+
+      if (!response.ok) {
+        setFieldSwitchError(
+          await readApiErrorMessage(response, 'Unable to archive this field right now.'),
+        );
+        return;
+      }
+
+      await removeFieldFromWorkspace(fieldId);
+    },
+    [removeFieldFromWorkspace, workspaceId],
+  );
+
+  const handleFieldDeletePermanently = useCallback(
+    async (fieldId: string) => {
+      const response = await fetch(`/api/fields/${fieldId}?mode=permanent`, {
+        method: 'DELETE',
+        headers: {
+          'x-fieldpulse-workspace-id': workspaceId,
+        },
+      });
+
+      if (!response.ok) {
+        setFieldSwitchError(
+          await readApiErrorMessage(
+            response,
+            'Unable to permanently delete this field right now.',
+          ),
+        );
+        return;
+      }
+
+      await removeFieldFromWorkspace(fieldId);
+    },
+    [removeFieldFromWorkspace, workspaceId],
   );
 
   const handleFieldsChanged = useCallback(async (result: {
@@ -2216,7 +2247,8 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             onRename={handleFieldRename}
             onUpdateLld={handleFieldLldUpdate}
             onUpdateCrop={handleFieldCropUpdate}
-            onDelete={handleFieldDelete}
+            onArchive={handleFieldArchive}
+            onDeletePermanently={handleFieldDeletePermanently}
           />
         ) : (
           renderCanonicalDetailPanel()
@@ -2388,7 +2420,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
               onSearchOpen={isGuestSession ? undefined : () => setPaletteOpen(true)}
               onboardingProgress={fieldOnboardingProgress}
               onFieldRename={canManageFieldMutations ? handleFieldRename : undefined}
-              onFieldDelete={canManageFieldMutations ? handleFieldDelete : undefined}
+              onFieldArchive={canManageFieldMutations ? handleFieldArchive : undefined}
               onFieldEdit={canManageFieldMutations ? ((fieldId) => {
                 handleFieldSelect(fieldId);
                 switchPanel('edit-field');

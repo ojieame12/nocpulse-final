@@ -7,6 +7,11 @@ export type FieldRepository = {
   listByWorkspace(workspaceId: WorkspaceId): Promise<readonly FieldSummary[]>;
   getById(workspaceId: WorkspaceId, fieldId: EntityId): Promise<FieldDetail | null>;
   create(input: CreateFieldInput, actorUserId: UserId): Promise<FieldDetail>;
+  archiveField(
+    workspaceId: WorkspaceId,
+    fieldId: EntityId,
+    actorUserId: UserId,
+  ): Promise<void>;
   renameField(
     workspaceId: WorkspaceId,
     fieldId: EntityId,
