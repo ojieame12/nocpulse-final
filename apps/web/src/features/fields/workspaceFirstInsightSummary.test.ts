@@ -110,6 +110,35 @@ test("buildWorkspaceFirstInsightSummary returns null when there are not enough s
   assert.equal(result, null);
 });
 
+test("buildWorkspaceFirstInsightSummary excludes limited fields even when moisture confidence is medium", () => {
+  const result = buildWorkspaceFirstInsightSummary({
+    workspaceId: "workspace-1",
+    activeFieldId: "field-a",
+    fields: [
+      {
+        fieldId: "field-a",
+        fieldName: "Ready Field",
+        summary: makeSummary(),
+      },
+      {
+        fieldId: "field-b",
+        fieldName: "Limited Field",
+        summary: makeSummary({
+          dataQuality: {
+            label: "Limited",
+            tone: "warning",
+            summary: "Usable but still thin.",
+            reasons: ["Vegetation history is still thin."],
+          },
+          moistureConfidenceLevel: "medium",
+        }),
+      },
+    ],
+  });
+
+  assert.equal(result, null);
+});
+
 test("buildWorkspaceFirstInsightSummary respects the Hope Creek allowlist when the active field is weak", () => {
   const result = buildWorkspaceFirstInsightSummary({
     workspaceId: "8f2afceb-aefe-4e90-a24e-7ab07c4423fe",

@@ -13,9 +13,11 @@ const DEFAULT_SOURCE_KEY = "action-brief-generator";
 const DEFAULT_MODEL_KEY = "action-brief-v1";
 const ACTION_BRIEF_DEDUPE_KEY = "action-brief:material-change:v1";
 const MAX_COMPARISON_AGE_HOURS = 24 * 14;
+const MAX_LATEST_SNAPSHOT_AGE_HOURS = 72;
 const MIN_DELTA_PCT = 8;
 const MEDIUM_DELTA_PCT = 12;
 const HIGH_DELTA_PCT = 18;
+const MIN_FRESHNESS_FACTOR = 0.2;
 
 type LoadFieldMoistureSnapshotsRepository = Pick<
   FieldMoistureSnapshotRepository,
@@ -106,11 +108,51 @@ function toConfidenceScore(
   }
 }
 
+function compareSnapshotsByObservedAtDesc(
+  left: FieldMoistureSnapshot,
+  right: FieldMoistureSnapshot,
+) {
+  return new Date(right.observedAt).getTime() - new Date(left.observedAt).getTime();
+}
+
+function hasWeakSourceProvenance(snapshot: FieldMoistureSnapshot) {
+  return (
+    snapshot.inputs.rasterMode === "synthetic" ||
+    snapshot.inputs.rasterMode === "none" ||
+    snapshot.inputs.signalBlend === "seeded"
+  );
+}
+
+function hasWeakFreshnessFactor(snapshot: FieldMoistureSnapshot) {
+  const freshnessFactor = snapshot.inputs.freshnessFactor;
+  return (
+    typeof freshnessFactor === "number" &&
+    Number.isFinite(freshnessFactor) &&
+    freshnessFactor < MIN_FRESHNESS_FACTOR
+  );
+}
+
 function isComparableSnapshot(snapshot: FieldMoistureSnapshot) {
   return (
     snapshot.inputs.derivationMode === "source-backed" &&
-    (snapshot.confidence === "high" || snapshot.confidence === "medium")
+    (snapshot.confidence === "high" || snapshot.confidence === "medium") &&
+    !hasWeakSourceProvenance(snapshot) &&
+    !hasWeakFreshnessFactor(snapshot)
   );
+}
+
+function isLatestSnapshotFresh(
+  snapshot: FieldMoistureSnapshot,
+  requestedAt: string,
+) {
+  const requestedAtMillis = new Date(requestedAt).getTime();
+  const observedAtMillis = new Date(snapshot.observedAt).getTime();
+
+  if (!Number.isFinite(requestedAtMillis) || !Number.isFinite(observedAtMillis)) {
+    return false;
+  }
+
+  return (requestedAtMillis - observedAtMillis) / 3_600_000 <= MAX_LATEST_SNAPSHOT_AGE_HOURS;
 }
 
 function classifySeverity(deltaPct: number) {
@@ -190,14 +232,21 @@ function assessActionBrief(input: {
   existing: FieldIntelligenceFinding | null;
   requestedAt: string;
 }): ActionBriefAssessment | null {
-  const latestSnapshot = input.snapshots.find(isComparableSnapshot) ?? null;
+  const orderedSnapshots = [...input.snapshots].sort(compareSnapshotsByObservedAtDesc);
+  const mostRecentSnapshot = orderedSnapshots[0] ?? null;
 
-  if (!latestSnapshot) {
+  if (
+    !mostRecentSnapshot ||
+    !isComparableSnapshot(mostRecentSnapshot) ||
+    !isLatestSnapshotFresh(mostRecentSnapshot, input.requestedAt)
+  ) {
     return null;
   }
 
+  const latestSnapshot = mostRecentSnapshot;
+
   const previousSnapshot =
-    input.snapshots.find(
+    orderedSnapshots.find(
       (snapshot) =>
         snapshot.id !== latestSnapshot.id &&
         snapshot.observedAt < latestSnapshot.observedAt &&
@@ -305,7 +354,14 @@ export async function generateActionBriefFindings(
     requestedAt: input.input.requestedAt,
   });
 
-  const latestSnapshot = assessment?.latestSnapshot ?? snapshots.find(isComparableSnapshot) ?? null;
+  const orderedSnapshots = [...snapshots].sort(compareSnapshotsByObservedAtDesc);
+  const latestComparableSnapshot =
+    orderedSnapshots[0] &&
+    isComparableSnapshot(orderedSnapshots[0]) &&
+    isLatestSnapshotFresh(orderedSnapshots[0], input.input.requestedAt)
+      ? orderedSnapshots[0]
+      : null;
+  const latestSnapshot = assessment?.latestSnapshot ?? latestComparableSnapshot;
   const previousSnapshot = assessment?.previousSnapshot ?? null;
 
   const run = await input.runs.upsertRun({

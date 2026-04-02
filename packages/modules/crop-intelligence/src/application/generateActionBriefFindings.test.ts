@@ -15,6 +15,9 @@ function createSnapshot(input: {
   rootZonePct: number;
   confidence?: "high" | "medium" | "low";
   derivationMode?: "source-backed" | "seeded-range";
+  rasterMode?: "provider" | "synthetic" | "none";
+  signalBlend?: "raster+weather" | "raster-only" | "weather-only" | "seeded";
+  freshnessFactor?: number;
 }): FieldMoistureSnapshot {
   return {
     id: input.id,
@@ -27,8 +30,9 @@ function createSnapshot(input: {
     confidence: input.confidence ?? "high",
     inputs: {
       derivationMode: input.derivationMode ?? "source-backed",
-      rasterMode: "provider",
-      signalBlend: "raster+weather",
+      rasterMode: input.rasterMode ?? "provider",
+      signalBlend: input.signalBlend ?? "raster+weather",
+      freshnessFactor: input.freshnessFactor,
     },
     createdAt: input.observedAt,
   };
@@ -232,4 +236,83 @@ test("generateActionBriefFindings resolves an active action brief when the chang
   assert.equal(result.findings[0]?.status, "resolved");
   assert.match(result.findings[0]?.title ?? "", /Field stabilized after recent change/);
   assert.equal(result.findings[0]?.endedAt, "2026-04-02T12:05:00.000Z");
+});
+
+test("generateActionBriefFindings suppresses the alert when the latest snapshot is stale", async () => {
+  const findingRepository = new FakeFindingRepository();
+
+  const result = await generateActionBriefFindings({
+    moistureSnapshots: {
+      async listRecentByField() {
+        return [
+          createSnapshot({
+            id: "snapshot-latest",
+            observedAt: "2026-03-28T12:00:00.000Z",
+            rootZonePct: 33,
+          }),
+          createSnapshot({
+            id: "snapshot-previous",
+            observedAt: "2026-03-24T12:00:00.000Z",
+            rootZonePct: 46,
+          }),
+        ];
+      },
+    },
+    weatherSignalSets: {
+      async getLatestByField() {
+        return createWeatherSignals();
+      },
+    },
+    runs: new FakeRunRepository(),
+    findings: findingRepository,
+    input: {
+      workspaceId: "workspace-1",
+      fieldId: "field-1",
+      requestedAt: "2026-04-02T12:05:00.000Z",
+    },
+  });
+
+  assert.equal(result.findings.length, 0);
+  assert.equal(result.moistureSnapshotId, null);
+  assert.equal(findingRepository.upsertInputs.length, 0);
+});
+
+test("generateActionBriefFindings suppresses the alert when the latest snapshot is low confidence", async () => {
+  const findingRepository = new FakeFindingRepository();
+
+  const result = await generateActionBriefFindings({
+    moistureSnapshots: {
+      async listRecentByField() {
+        return [
+          createSnapshot({
+            id: "snapshot-latest",
+            observedAt: "2026-04-02T12:00:00.000Z",
+            rootZonePct: 33,
+            confidence: "low",
+          }),
+          createSnapshot({
+            id: "snapshot-previous",
+            observedAt: "2026-03-30T12:00:00.000Z",
+            rootZonePct: 46,
+          }),
+        ];
+      },
+    },
+    weatherSignalSets: {
+      async getLatestByField() {
+        return createWeatherSignals();
+      },
+    },
+    runs: new FakeRunRepository(),
+    findings: findingRepository,
+    input: {
+      workspaceId: "workspace-1",
+      fieldId: "field-1",
+      requestedAt: "2026-04-02T12:05:00.000Z",
+    },
+  });
+
+  assert.equal(result.findings.length, 0);
+  assert.equal(result.moistureSnapshotId, null);
+  assert.equal(findingRepository.upsertInputs.length, 0);
 });
