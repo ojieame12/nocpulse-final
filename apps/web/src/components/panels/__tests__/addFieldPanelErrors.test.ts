@@ -43,6 +43,30 @@ test("describeAddFieldApiError returns hydration retry guidance", () => {
   assert.match(message, /retry field hydration/i);
 });
 
+test("describeAddFieldApiError returns timeout and network guidance", () => {
+  assert.match(
+    describeAddFieldApiError(
+      new AddFieldApiError({
+        status: 408,
+        code: "request_timeout",
+        message: "Timed out.",
+      }),
+    ),
+    /took too long/i,
+  );
+
+  assert.match(
+    describeAddFieldApiError(
+      new AddFieldApiError({
+        status: 0,
+        code: "network_unreachable",
+        message: "Network failed.",
+      }),
+    ),
+    /check your connection/i,
+  );
+});
+
 test("readAddFieldApiResult throws AddFieldApiError with code and detail", async () => {
   const response = Response.json(
     {
@@ -61,6 +85,24 @@ test("readAddFieldApiResult throws AddFieldApiError with code and detail", async
       assert.ok(error instanceof AddFieldApiError);
       assert.equal(error.code, "spreadsheet_preview_failed");
       assert.equal(error.detail, "Workbook parser exploded");
+      return true;
+    },
+  );
+});
+
+test("readAddFieldApiResult throws AddFieldApiError for unreadable responses", async () => {
+  const response = new Response("<html>gateway exploded</html>", {
+    status: 502,
+    headers: {
+      "content-type": "text/html",
+    },
+  });
+
+  await assert.rejects(
+    () => readAddFieldApiResult(response),
+    (error: unknown) => {
+      assert.ok(error instanceof AddFieldApiError);
+      assert.equal(error.code, "invalid_response");
       return true;
     },
   );

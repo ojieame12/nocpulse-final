@@ -29,7 +29,7 @@ export type AddFieldRetryAction =
   | "spreadsheet-commit";
 
 export async function readAddFieldApiResult<T>(response: Response): Promise<T> {
-  const payload = (await response.json()) as {
+  let payload: {
     result?: T;
     error?: {
       code?: string;
@@ -38,6 +38,26 @@ export async function readAddFieldApiResult<T>(response: Response): Promise<T> {
       details?: unknown;
     };
   };
+
+  try {
+    payload = (await response.json()) as {
+      result?: T;
+      error?: {
+        code?: string;
+        message?: string;
+        detail?: string;
+        details?: unknown;
+      };
+    };
+  } catch {
+    throw new AddFieldApiError({
+      status: response.status,
+      code: "invalid_response",
+      message: response.ok
+        ? "Field intake completed with an unreadable response."
+        : "Field intake returned an unreadable error response.",
+    });
+  }
 
   if (!response.ok) {
     throw new AddFieldApiError({
@@ -76,6 +96,12 @@ export function describeAddFieldApiError(error: unknown) {
       return "You do not have access to add fields in this workspace.";
     case "runtime_unavailable":
       return "Field intake is temporarily unavailable. Retry in a minute.";
+    case "request_timeout":
+      return "That field intake step took too long to respond. Retry in a moment.";
+    case "network_unreachable":
+      return "We could not reach field intake. Check your connection and retry.";
+    case "invalid_response":
+      return "Field intake returned an unreadable response. Retry in a moment.";
     case "file_required":
       return "Choose a file before continuing.";
     case "file_empty":
