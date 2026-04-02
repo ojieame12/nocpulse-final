@@ -340,71 +340,13 @@ function createDispatcher(recordedKeys: string[]): ServerJobDispatcher {
   };
 }
 
-test("commitFieldImportBatch uses refresh onboarding after hydration replay", async () => {
+test("commitFieldImportBatch queues bootstrap onboarding with import context for created fields", async () => {
   const recordedJobKeys: string[] = [];
   const repositories = createRepositories();
   const result = await commitFieldImportBatch(
     repositories,
     {
       jobDispatcher: createDispatcher(recordedJobKeys),
-      hydrationReplay: {
-        async replayFromCommittedBatch() {
-          return [
-            {
-              targetFieldId: FIELD_ID,
-              action: "replayed" as const,
-              sourceFieldId: "source-field-1",
-              sourceWorkspaceId: "source-workspace-1",
-            },
-          ];
-        },
-        async replayFromImportCandidate() {
-          return {
-            action: "replayed",
-            sourceFieldId: "source-field-1",
-            sourceWorkspaceId: "source-workspace-1",
-          };
-        },
-      },
-    },
-    {
-      actorUserId: ACTOR_USER_ID,
-      workspaceId: WORKSPACE_ID,
-      batchId: BATCH_ID,
-    },
-  );
-
-  assert.equal(result.candidates[0]?.action, "created");
-  assert.deepEqual(recordedJobKeys, ["field.refresh-intake"]);
-  assert.equal(result.fieldHydrationSummaries[0]?.status, "completed");
-  assert.equal(result.fieldHydrationSummaries[0]?.moistureConfidence?.level, "high");
-  assert.equal(result.batchHydrationSummary.highConfidenceFields, 1);
-});
-
-test("commitFieldImportBatch uses bootstrap onboarding when hydration replay skips", async () => {
-  const recordedJobKeys: string[] = [];
-  const repositories = createRepositories();
-  const result = await commitFieldImportBatch(
-    repositories,
-    {
-      jobDispatcher: createDispatcher(recordedJobKeys),
-      hydrationReplay: {
-        async replayFromCommittedBatch() {
-          return [
-            {
-              targetFieldId: FIELD_ID,
-              action: "skipped" as const,
-              reason: "no-source-field" as const,
-            },
-          ];
-        },
-        async replayFromImportCandidate() {
-          return {
-            action: "skipped",
-            reason: "no-source-field",
-          };
-        },
-      },
     },
     {
       actorUserId: ACTOR_USER_ID,
@@ -416,48 +358,54 @@ test("commitFieldImportBatch uses bootstrap onboarding when hydration replay ski
   assert.equal(result.candidates[0]?.action, "created");
   assert.deepEqual(recordedJobKeys, ["field.bootstrap-initial"]);
   assert.equal(result.fieldHydrationSummaries[0]?.status, "queued");
+  assert.equal(result.fieldHydrationSummaries[0]?.hydrationMode, "cold-bootstrap");
+  assert.equal(result.batchHydrationSummary.queuedFields, 1);
+  assert.deepEqual(result.onboardingDispatches[0]?.receipts[0]?.payload, {
+    workspaceId: WORKSPACE_ID,
+    fieldId: FIELD_ID,
+    fieldName: "Hope Creek North",
+    requestedAt: result.onboardingDispatches[0]?.receipts[0]?.payload.requestedAt,
+    providers: undefined,
+    dryRun: undefined,
+    cropType: "canola",
+    legalLandDescriptions: ["NW-36-042-28-W4"],
+    importBatchId: BATCH_ID,
+    importCandidateId: CANDIDATE_ID,
+    importSourceType: "spreadsheet",
+    importAction: "created",
+  });
+});
+
+test("commitFieldImportBatch uses refresh onboarding for reused fields", async () => {
+  const recordedJobKeys: string[] = [];
+  const repositories = createRepositories();
+  repositories.fields.listOverviewByWorkspace = async () => [createFieldOverview()];
+  const result = await commitFieldImportBatch(
+    repositories,
+    {
+      jobDispatcher: createDispatcher(recordedJobKeys),
+    },
+    {
+      actorUserId: ACTOR_USER_ID,
+      workspaceId: WORKSPACE_ID,
+      batchId: BATCH_ID,
+    },
+  );
+
+  assert.equal(result.candidates[0]?.action, "reused");
+  assert.deepEqual(recordedJobKeys, ["field.refresh-intake"]);
+  assert.equal(result.fieldHydrationSummaries[0]?.status, "queued");
   assert.equal(result.fieldHydrationSummaries[0]?.moistureConfidence, null);
+  assert.equal(result.fieldHydrationSummaries[0]?.hydrationMode, "refresh");
 });
 
-test("commitFieldImportBatch retries hydration replay before falling back", async () => {
-  const recordedJobKeys: string[] = [];
+test("commitFieldImportBatch returns existing hydration summary when no dispatcher is configured for reused fields", async () => {
   const repositories = createRepositories();
-  let attempts = 0;
+  repositories.fields.listOverviewByWorkspace = async () => [createFieldOverview()];
 
   const result = await commitFieldImportBatch(
     repositories,
-    {
-      jobDispatcher: createDispatcher(recordedJobKeys),
-      hydrationReplay: {
-        async replayFromCommittedBatch() {
-          attempts += 1;
-          if (attempts < 3) {
-            throw new Error("transient replay failure");
-          }
-
-          return [
-            {
-              targetFieldId: FIELD_ID,
-              action: "replayed" as const,
-              sourceFieldId: "source-field-1",
-              sourceWorkspaceId: "source-workspace-1",
-            },
-          ];
-        },
-        async replayFromImportCandidate() {
-          attempts += 1;
-          if (attempts < 3) {
-            throw new Error("transient replay failure");
-          }
-
-          return {
-            action: "replayed",
-            sourceFieldId: "source-field-1",
-            sourceWorkspaceId: "source-workspace-1",
-          };
-        },
-      },
-    },
+    {},
     {
       actorUserId: ACTOR_USER_ID,
       workspaceId: WORKSPACE_ID,
@@ -465,42 +413,8 @@ test("commitFieldImportBatch retries hydration replay before falling back", asyn
     },
   );
 
-  assert.equal(result.candidates[0]?.action, "created");
-  assert.equal(attempts, 3);
-  assert.deepEqual(recordedJobKeys, ["field.refresh-intake"]);
-});
-
-test("commitFieldImportBatch falls back to per-field replay when batch replay omits a field", async () => {
-  const recordedJobKeys: string[] = [];
-  const repositories = createRepositories();
-  let perFieldAttempts = 0;
-
-  const result = await commitFieldImportBatch(
-    repositories,
-    {
-      jobDispatcher: createDispatcher(recordedJobKeys),
-      hydrationReplay: {
-        async replayFromCommittedBatch() {
-          return [];
-        },
-        async replayFromImportCandidate() {
-          perFieldAttempts += 1;
-          return {
-            action: "replayed",
-            sourceFieldId: "source-field-1",
-            sourceWorkspaceId: "source-workspace-1",
-          };
-        },
-      },
-    },
-    {
-      actorUserId: ACTOR_USER_ID,
-      workspaceId: WORKSPACE_ID,
-      batchId: BATCH_ID,
-    },
-  );
-
-  assert.equal(result.candidates[0]?.action, "created");
-  assert.equal(perFieldAttempts, 1);
-  assert.deepEqual(recordedJobKeys, ["field.refresh-intake"]);
+  assert.equal(result.candidates[0]?.action, "reused");
+  assert.equal(result.fieldHydrationSummaries[0]?.status, "completed");
+  assert.equal(result.fieldHydrationSummaries[0]?.hydrationMode, "existing");
+  assert.equal(result.fieldHydrationSummaries[0]?.moistureConfidence?.level, "high");
 });

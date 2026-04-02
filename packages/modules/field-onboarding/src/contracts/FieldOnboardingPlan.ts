@@ -3,9 +3,16 @@ import type { ImageryProvider } from "@fieldpulse/module-imagery";
 export type FieldOnboardingJobPayload = {
   workspaceId: string;
   fieldId: string;
+  fieldName?: string;
   requestedAt?: string;
   providers?: readonly ImageryProvider[];
   dryRun?: boolean;
+  cropType?: string;
+  legalLandDescriptions?: readonly string[];
+  importBatchId?: string;
+  importCandidateId?: string;
+  importSourceType?: "spreadsheet";
+  importAction?: "created" | "reused";
 };
 
 export type BuildInitialFieldOnboardingPlanInput = FieldOnboardingJobPayload;

@@ -17,9 +17,16 @@ export function buildInitialFieldOnboardingPlan(
       payload: {
         workspaceId: input.workspaceId,
         fieldId: input.fieldId,
+        fieldName: input.fieldName,
         requestedAt,
         providers: input.providers,
         dryRun: input.dryRun,
+        cropType: input.cropType,
+        legalLandDescriptions: input.legalLandDescriptions,
+        importBatchId: input.importBatchId,
+        importCandidateId: input.importCandidateId,
+        importSourceType: input.importSourceType,
+        importAction: input.importAction,
       },
     }],
   };

@@ -5,6 +5,7 @@ import {
   type JobExecutionControls,
 } from "@fieldpulse/platform-jobs";
 import type {
+  FieldHydrationReplayResult,
   GenerateFieldDiseaseRiskFindingsInput,
   GenerateFieldHailRiskFindingsInput,
   GenerateFieldMoistureStressFindingsInput,
@@ -21,6 +22,7 @@ import type {
 import type { ImageryProviderProbeRecord } from "@fieldpulse/module-imagery";
 import type { FieldAlert } from "@fieldpulse/module-alerts";
 import type { WorkerJobContext } from "./contracts/WorkerJobContext";
+import { prepareImportedFieldOnboarding } from "./intakeFieldPreparation";
 import { refreshMarketQuotes } from "../marketRefreshQuotes";
 import { enrichFieldSoilProperties, type SoilEnrichResult } from "../soilEnrich";
 import { notifyFieldAlerts } from "../notifyFieldAlerts";
@@ -33,9 +35,16 @@ type LongRunningSmokeInput = {
 type IntakeFieldOnboardingJobInput = {
   workspaceId: string;
   fieldId: string;
+  fieldName?: string;
   requestedAt?: string;
   providers?: SyncLatestFieldImageryInput["providers"];
   dryRun?: boolean;
+  cropType?: string;
+  legalLandDescriptions?: readonly string[];
+  importBatchId?: string;
+  importCandidateId?: string;
+  importSourceType?: "spreadsheet";
+  importAction?: "created" | "reused";
 };
 
 type IntakeFieldOnboardingJobResult = {
@@ -90,6 +99,7 @@ type IntakeFieldOnboardingJobResult = {
         >
       >
     | null;
+  replayResult: FieldHydrationReplayResult | null;
 };
 
 function isMissingFieldRuntimeError(
@@ -124,7 +134,8 @@ function buildSkippedIntakeFieldOnboardingJobResult(input: {
     moistureStress: null,
     weatherRisk: null,
     diseaseRisk: null,
-    actionCuration: null,
+  actionCuration: null,
+  replayResult: null,
   };
 }
 
@@ -150,6 +161,7 @@ type IntakeFieldOnboardingJobState = {
   weatherRisk: IntakeFieldOnboardingJobResult["weatherRisk"];
   diseaseRisk: IntakeFieldOnboardingJobResult["diseaseRisk"];
   actionCuration: IntakeFieldOnboardingJobResult["actionCuration"];
+  replayResult: IntakeFieldOnboardingJobResult["replayResult"];
 };
 
 type ScheduleWorkspaceImageryProviderProbesInput = {
@@ -430,6 +442,7 @@ async function runIntakeFieldOnboardingJob(input: {
         weatherRisk: null as IntakeFieldOnboardingJobResult["weatherRisk"],
         diseaseRisk: null as IntakeFieldOnboardingJobResult["diseaseRisk"],
         actionCuration: null as IntakeFieldOnboardingJobResult["actionCuration"],
+        replayResult: null as IntakeFieldOnboardingJobResult["replayResult"],
       } satisfies IntakeFieldOnboardingJobState,
       phases: [
       {
@@ -440,6 +453,26 @@ async function runIntakeFieldOnboardingJob(input: {
           return currentState;
         },
       },
+      ...(input.payload.dryRun
+        ? []
+        : [{
+            key: "prepare-import-context",
+            progressPct: 12,
+            progressMessage: "applying import context and hydration replay",
+            async run(currentState: IntakeFieldOnboardingJobState) {
+              const preparation = await prepareImportedFieldOnboarding({
+                services: input.context.runtime.services,
+                payload: input.payload,
+                requestedAt,
+                mode: input.mode,
+              });
+
+              return {
+                ...currentState,
+                replayResult: preparation.replayResult,
+              };
+            },
+          }]),
       ...(input.includeProbe && !input.payload.dryRun
         ? [{
             key: "record-provider-probe",
@@ -790,6 +823,7 @@ async function runIntakeFieldOnboardingJob(input: {
     weatherRisk: state.weatherRisk,
     diseaseRisk: state.diseaseRisk,
     actionCuration: state.actionCuration,
+    replayResult: state.replayResult,
   };
 }
 
