@@ -25,7 +25,7 @@ export type FirstInsightHydrationSummary = {
   } | null;
 };
 
-const WORKSPACE_FIRST_INSIGHT_ALLOWLIST: Readonly<Record<string, readonly string[]>> = {
+export const WORKSPACE_FIRST_INSIGHT_ALLOWLIST: Readonly<Record<string, readonly string[]>> = {
   '8f2afceb-aefe-4e90-a24e-7ab07c4423fe': [
     'Main Farm',
     'Rath',
@@ -39,6 +39,14 @@ const WORKSPACE_FIRST_INSIGHT_ALLOWLIST: Readonly<Record<string, readonly string
     'Towes Dugout',
   ],
 };
+
+export function getWorkspaceFirstInsightAllowlist(workspaceId?: string | null) {
+  if (!workspaceId) {
+    return null;
+  }
+
+  return WORKSPACE_FIRST_INSIGHT_ALLOWLIST[workspaceId] ?? null;
+}
 
 function normalizeFieldName(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? null;

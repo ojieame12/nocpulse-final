@@ -14134,6 +14134,69 @@ img {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   HYDRATION OVERLAY — onboarding progress over the field panel
+   ═══════════════════════════════════════════════════════════════════ */
+
+.hydration-overlay {
+  position: absolute;
+  top: var(--space-lg);
+  right: var(--space-lg);
+  bottom: var(--space-xl);
+  width: var(--panel-width);
+  max-width: 100%;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0px);
+  border-radius: var(--radius-xl, 20px);
+  transition:
+    background 350ms cubic-bezier(0.22, 1, 0.36, 1),
+    backdrop-filter 350ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.hydration-overlay--visible {
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+}
+
+.hydration-overlay__card {
+  width: calc(100% - 48px);
+  max-width: 340px;
+  opacity: 0;
+  transform: translateY(8px) scale(0.97);
+  transition:
+    opacity 350ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 350ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hydration-overlay--visible .hydration-overlay__card {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* When the overlay is active, restyle the tracker card to float on glass */
+.hydration-overlay .hydration-stage-tracker {
+  margin: 0;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+[data-theme="dark"] .hydration-overlay .hydration-stage-tracker {
+  background: rgba(20, 28, 22, 0.92);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    HYDRATION TOAST — completion notification
    ═══════════════════════════════════════════════════════════════════ */
 
