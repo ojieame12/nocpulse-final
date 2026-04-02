@@ -14,6 +14,7 @@ export interface HydrationStage {
   statusText: string;
 }
 
+/** Pre-built stage data from the commit response (FieldHydrationSummary.stages). */
 export interface PrebuiltStage {
   key: 'soil' | 'weather' | 'imagery' | 'moisture';
   label: string;
@@ -65,7 +66,10 @@ export interface HydrationStageTrackerProps {
   } | null;
   /** Raw progressMessage from the dispatch snapshot, if available. */
   progressMessage?: string | null;
-  /** Pre-built stage array from the commit response's `fieldHydrationSummaries`. */
+  /**
+   * Pre-built stage array from the commit response's `fieldHydrationSummaries`.
+   * When present, these are used directly instead of parsing worker messages.
+   */
   prebuiltStages?: readonly PrebuiltStage[] | null;
 }
 
@@ -76,9 +80,14 @@ function fromPrebuiltStages(
   const isComplete = onboardingStatus?.status === 'completed';
 
   return STAGE_DEFS.map((def) => {
-    const match = prebuilt.find((s) => s.key === def.key);
+    const match = prebuilt.find((stage) => stage.key === def.key);
     if (!match) {
-      return { key: def.key, label: def.label, state: 'pending' as const, statusText: 'Queued' };
+      return {
+        key: def.key,
+        label: def.label,
+        state: 'pending' as const,
+        statusText: 'Queued',
+      };
     }
 
     if (match.state === 'completed' || isComplete) {
@@ -238,8 +247,8 @@ export function HydrationStageTracker({
 
   const stages =
     prebuiltStages && prebuiltStages.length > 0
-    ? fromPrebuiltStages(prebuiltStages, onboardingStatus)
-    : deriveStages(onboardingStatus, progressMessage);
+      ? fromPrebuiltStages(prebuiltStages, onboardingStatus)
+      : deriveStages(onboardingStatus, progressMessage);
   const allComplete = stages.every((s) => s.state === 'completed');
   const isFadingOut = allComplete && !showFarewell;
 

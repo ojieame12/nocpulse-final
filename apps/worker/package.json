@@ -32,6 +32,7 @@
     "drain": "tsx src/drain.ts",
     "enqueue": "tsx src/enqueue.ts",
     "report:read-model": "tsx src/fieldReportReadModel.ts",
+    "report:quality": "tsx src/fieldQualityAudit.ts",
     "hail:cadence": "tsx src/hailRefreshCadence.ts",
     "hail:report": "tsx src/hailRefreshReport.ts",
     "health": "tsx src/health.ts",

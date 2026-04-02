@@ -11,6 +11,7 @@ import {
   deriveSummaryStatusLabel,
   deriveSummaryConfidenceBreakdown,
   deriveSummaryDataSources,
+  deriveSummaryDataQuality,
 } from "./buildFieldOverviewViewModel";
 import { buildActionProps } from "./buildFieldOverviewViewModel.action";
 import { resolveHistoricalAnomalyFromReadModel } from "./buildFieldOverviewViewModel.shared";
@@ -992,18 +993,27 @@ test("resolveHistoricalAnomalyFromReadModel returns null when percentile is null
   assert.equal(result, null);
 });
 
-test("resolveHistoricalAnomalyFromReadModel defaults description to empty string when absent", () => {
+test("resolveHistoricalAnomalyFromReadModel returns null when description is absent", () => {
   const result = resolveHistoricalAnomalyFromReadModel({
     historicalAnomalyPercentile: 60,
   });
 
-  assert.equal(result!.description, "");
-  assert.equal(result!.anomalyClass, "normal");
+  assert.equal(result, null);
+});
+
+test("resolveHistoricalAnomalyFromReadModel returns null when description is blank", () => {
+  const result = resolveHistoricalAnomalyFromReadModel({
+    historicalAnomalyPercentile: 60,
+    historicalAnomalyDescription: "   ",
+  });
+
+  assert.equal(result, null);
 });
 
 test("resolveHistoricalAnomalyFromReadModel boundary: percentile exactly 75 is normal", () => {
   const result = resolveHistoricalAnomalyFromReadModel({
     historicalAnomalyPercentile: 75,
+    historicalAnomalyDescription: "Within normal range for early April",
   });
   assert.equal(result!.anomalyClass, "normal");
 });
@@ -1011,6 +1021,7 @@ test("resolveHistoricalAnomalyFromReadModel boundary: percentile exactly 75 is n
 test("resolveHistoricalAnomalyFromReadModel boundary: percentile exactly 25 is normal", () => {
   const result = resolveHistoricalAnomalyFromReadModel({
     historicalAnomalyPercentile: 25,
+    historicalAnomalyDescription: "Within normal range for early April",
   });
   assert.equal(result!.anomalyClass, "normal");
 });
@@ -1190,6 +1201,109 @@ test("deriveSummaryDataSources: weather only when no snapshot", () => {
   assert.ok(result);
   assert.equal(result.satellite, null);
   assert.equal(result.weather, "Available");
+});
+
+test("deriveSummaryDataSources: exposes soil dataset label when present", () => {
+  const result = deriveSummaryDataSources(
+    {
+      sourceKey: "sentinel-hub:sentinel-2",
+      inputs: {
+        soilDataset: "SoilGrids-v2",
+      },
+    },
+    null,
+  );
+  assert.ok(result);
+  assert.equal(result.soil, "SoilGrids");
+});
+
+/* ── deriveSummaryDataQuality ── */
+
+test("deriveSummaryDataQuality: returns Ready for fresh source-backed field with depth", () => {
+  const result = deriveSummaryDataQuality({
+    snapshot: {
+      confidence: "high",
+      observedAt: "2099-04-01T10:00:00Z",
+      inputs: {
+        derivationMode: "source-backed",
+        signalBlend: "raster+weather",
+        rasterMode: "provider",
+        freshnessFactor: 0.9,
+        baselineDataset: "ERA5-Land",
+        usedWeatherSoilMoisture: true,
+      },
+    },
+    confidence: "high",
+    weatherAvailability: { latestObservation: true, forecasts: true },
+    opticalObservationCount: 3,
+  });
+  assert.ok(result);
+  assert.equal(result.label, "Ready");
+  assert.equal(result.tone, "positive");
+});
+
+test("deriveSummaryDataQuality: returns Limited when optical history is thin", () => {
+  const result = deriveSummaryDataQuality({
+    snapshot: {
+      confidence: "high",
+      observedAt: "2099-04-01T10:00:00Z",
+      inputs: {
+        derivationMode: "source-backed",
+        signalBlend: "raster+weather",
+        rasterMode: "provider",
+        freshnessFactor: 0.9,
+        soilDataset: "SoilGrids",
+        usedWeatherSoilMoisture: true,
+      },
+    },
+    confidence: "high",
+    weatherAvailability: { latestObservation: true, forecasts: true },
+    opticalObservationCount: 1,
+  });
+  assert.ok(result);
+  assert.equal(result.label, "Limited");
+  assert.match(result.summary, /vegetation history/i);
+});
+
+test("deriveSummaryDataQuality: returns Modeled for seeded fallback", () => {
+  const result = deriveSummaryDataQuality({
+    snapshot: {
+      confidence: "low",
+      inputs: {
+        derivationMode: "seeded-range",
+        signalBlend: "seeded",
+        rasterMode: "none",
+      },
+    },
+    confidence: "low",
+    weatherAvailability: null,
+    opticalObservationCount: 0,
+  });
+  assert.ok(result);
+  assert.equal(result.label, "Modeled");
+  assert.equal(result.tone, "danger");
+});
+
+test("deriveSummaryDataQuality: returns Stale for old source-backed readings", () => {
+  const result = deriveSummaryDataQuality({
+    snapshot: {
+      confidence: "medium",
+      observedAt: "2026-03-20T10:00:00Z",
+      inputs: {
+        derivationMode: "source-backed",
+        signalBlend: "raster-only",
+        rasterMode: "provider",
+        freshnessFactor: 0.1,
+        baselineDataset: "ERA5-Land",
+      },
+    },
+    confidence: "medium",
+    weatherAvailability: { latestObservation: true },
+    opticalObservationCount: 2,
+  });
+  assert.ok(result);
+  assert.equal(result.label, "Stale");
+  assert.equal(result.tone, "muted");
 });
 
 test("buildEffectiveMoistureSummary preserves snapshot inputs for provenance mapping", () => {

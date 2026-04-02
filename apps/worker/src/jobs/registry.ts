@@ -42,9 +42,11 @@ type IntakeFieldOnboardingJobResult = {
   requestedAt: string;
   mode: "bootstrap-initial" | "refresh-intake";
   probeRecords: readonly ImageryProviderProbeRecord[];
-  imagery: Awaited<
-    ReturnType<WorkerJobContext["runtime"]["services"]["imagery"]["syncLatestFieldImagery"]>
-  >;
+  imagery:
+    | Awaited<
+        ReturnType<WorkerJobContext["runtime"]["services"]["imagery"]["syncLatestFieldImagery"]>
+      >
+    | null;
   weather:
     | Awaited<
         ReturnType<WorkerJobContext["runtime"]["services"]["weather"]["refreshFieldWeather"]>
@@ -87,6 +89,52 @@ type IntakeFieldOnboardingJobResult = {
       >
     | null;
 };
+
+function isMissingFieldRuntimeError(
+  error: unknown,
+  payload: Pick<IntakeFieldOnboardingJobInput, "workspaceId" | "fieldId">,
+) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const exactMessage = `[runtime] field ${payload.fieldId} was not found in workspace ${payload.workspaceId}`;
+  return error.message === exactMessage;
+}
+
+function buildSkippedIntakeFieldOnboardingJobResult(input: {
+  payload: IntakeFieldOnboardingJobInput;
+  requestedAt: string;
+  mode: "bootstrap-initial" | "refresh-intake";
+}): IntakeFieldOnboardingJobResult {
+  return {
+    workspaceId: input.payload.workspaceId,
+    fieldId: input.payload.fieldId,
+    requestedAt: input.requestedAt,
+    mode: input.mode,
+    probeRecords: [],
+    imagery: null,
+    weather: null,
+    hail: null,
+    soilEnrich: null,
+    moistureEstimate: null,
+    moistureCells: null,
+    moistureStress: null,
+    weatherRisk: null,
+    diseaseRisk: null,
+    actionCuration: null,
+  };
+}
+
+function logSkippedDeletedFieldJob(input: {
+  context: WorkerJobContext;
+  jobKey: string;
+  payload: Pick<IntakeFieldOnboardingJobInput, "workspaceId" | "fieldId">;
+}) {
+  input.context.logger.warn(
+    `[worker] skipping ${input.jobKey} for deleted field ${input.payload.fieldId} in workspace ${input.payload.workspaceId}`,
+  );
+}
 
 type IntakeFieldOnboardingJobState = {
   probeRecords: readonly ImageryProviderProbeRecord[];
@@ -364,21 +412,24 @@ async function runIntakeFieldOnboardingJob(input: {
 }): Promise<IntakeFieldOnboardingJobResult> {
   const requestedAt = input.payload.requestedAt ?? new Date().toISOString();
 
-  const state = await runJobPhases(input.execution, {
-    initialState: {
-      probeRecords: [] as readonly ImageryProviderProbeRecord[],
-      imagery: null as IntakeFieldOnboardingJobResult["imagery"] | null,
-      weather: null as IntakeFieldOnboardingJobResult["weather"],
-      hail: null as IntakeFieldOnboardingJobResult["hail"],
-      soilEnrich: null as IntakeFieldOnboardingJobResult["soilEnrich"],
-      moistureEstimate: null as IntakeFieldOnboardingJobResult["moistureEstimate"],
-      moistureCells: null as IntakeFieldOnboardingJobResult["moistureCells"],
-      moistureStress: null as IntakeFieldOnboardingJobResult["moistureStress"],
-      weatherRisk: null as IntakeFieldOnboardingJobResult["weatherRisk"],
-      diseaseRisk: null as IntakeFieldOnboardingJobResult["diseaseRisk"],
-      actionCuration: null as IntakeFieldOnboardingJobResult["actionCuration"],
-    } satisfies IntakeFieldOnboardingJobState,
-    phases: [
+  let state: IntakeFieldOnboardingJobState;
+
+  try {
+    state = await runJobPhases(input.execution, {
+      initialState: {
+        probeRecords: [] as readonly ImageryProviderProbeRecord[],
+        imagery: null as IntakeFieldOnboardingJobResult["imagery"] | null,
+        weather: null as IntakeFieldOnboardingJobResult["weather"],
+        hail: null as IntakeFieldOnboardingJobResult["hail"],
+        soilEnrich: null as IntakeFieldOnboardingJobResult["soilEnrich"],
+        moistureEstimate: null as IntakeFieldOnboardingJobResult["moistureEstimate"],
+        moistureCells: null as IntakeFieldOnboardingJobResult["moistureCells"],
+        moistureStress: null as IntakeFieldOnboardingJobResult["moistureStress"],
+        weatherRisk: null as IntakeFieldOnboardingJobResult["weatherRisk"],
+        diseaseRisk: null as IntakeFieldOnboardingJobResult["diseaseRisk"],
+        actionCuration: null as IntakeFieldOnboardingJobResult["actionCuration"],
+      } satisfies IntakeFieldOnboardingJobState,
+      phases: [
       {
         key: "validate-request",
         progressPct: 5,
@@ -650,8 +701,22 @@ async function runIntakeFieldOnboardingJob(input: {
           return currentState;
         },
       },
-    ],
-  });
+      ],
+    });
+  } catch (error) {
+    if (isMissingFieldRuntimeError(error, input.payload)) {
+      input.context.logger.warn(
+        `[worker] skipping ${input.mode} for deleted field ${input.payload.fieldId} in workspace ${input.payload.workspaceId}`,
+      );
+      return buildSkippedIntakeFieldOnboardingJobResult({
+        payload: input.payload,
+        requestedAt,
+        mode: input.mode,
+      });
+    }
+
+    throw error;
+  }
 
   if (!state.imagery) {
     throw new Error(`[worker] ${input.mode} completed without an imagery result`);
@@ -742,50 +807,71 @@ export const jobs = [
     },
     async run(context: WorkerJobContext, payload, execution) {
       const requestedAt = payload.requestedAt ?? new Date().toISOString();
-      const state = await runJobPhases(execution, {
-        initialState: {
-          result: null as RecordFieldImageryProviderProbeResult | null,
-        },
-        phases: [
-          {
-            key: "validate-request",
-            progressPct: 10,
-            progressMessage: "validating provider probe request",
-            run(currentState) {
-              return currentState;
-            },
+      let state: { result: RecordFieldImageryProviderProbeResult | null };
+
+      try {
+        state = await runJobPhases(execution, {
+          initialState: {
+            result: null as RecordFieldImageryProviderProbeResult | null,
           },
-          {
-            key: "record-probes",
-            progressPct: 70,
-            progressMessage: "recording imagery provider probes",
-            async run(currentState) {
-              return {
-                ...currentState,
-                result: {
-                  workspaceId: payload.workspaceId,
-                  fieldId: payload.fieldId,
-                  requestedAt,
-                  records:
-                    await context.runtime.services.imagery.recordProviderProbeForField({
-                      workspaceId: payload.workspaceId,
-                      fieldId: payload.fieldId,
-                      requestedAt,
-                    }),
-                },
-              };
+          phases: [
+            {
+              key: "validate-request",
+              progressPct: 10,
+              progressMessage: "validating provider probe request",
+              run(currentState) {
+                return currentState;
+              },
             },
-          },
-          {
-            key: "finalize-result",
-            progressPct: 90,
-            progressMessage: "finalizing imagery provider probe result",
-            run(currentState) {
-              return currentState;
+            {
+              key: "record-probes",
+              progressPct: 70,
+              progressMessage: "recording imagery provider probes",
+              async run(currentState) {
+                return {
+                  ...currentState,
+                  result: {
+                    workspaceId: payload.workspaceId,
+                    fieldId: payload.fieldId,
+                    requestedAt,
+                    records:
+                      await context.runtime.services.imagery.recordProviderProbeForField({
+                        workspaceId: payload.workspaceId,
+                        fieldId: payload.fieldId,
+                        requestedAt,
+                      }),
+                  },
+                };
+              },
             },
-          },
-        ],
-      });
+            {
+              key: "finalize-result",
+              progressPct: 90,
+              progressMessage: "finalizing imagery provider probe result",
+              run(currentState) {
+                return currentState;
+              },
+            },
+          ],
+        });
+      } catch (error) {
+        if (isMissingFieldRuntimeError(error, payload)) {
+          logSkippedDeletedFieldJob({
+            context,
+            jobKey: "imagery.record-provider-probe",
+            payload,
+          });
+
+          return {
+            workspaceId: payload.workspaceId,
+            fieldId: payload.fieldId,
+            requestedAt,
+            records: [],
+          };
+        }
+
+        throw error;
+      }
 
       if (!state.result) {
         throw new Error("[worker] imagery provider probe job completed without a result");
@@ -997,44 +1083,63 @@ export const jobs = [
       };
     },
     async run(context: WorkerJobContext, payload, execution) {
-      const state = await runJobPhases(execution, {
-        initialState: {
-          result: null as Awaited<
-            ReturnType<WorkerJobContext["runtime"]["services"]["imagery"]["syncLatestFieldImagery"]>
-          > | null,
-        },
-        phases: [
-          {
-            key: "validate-request",
-            progressPct: 10,
-            progressMessage: "validating imagery sync request",
-            run(currentState) {
-              return currentState;
-            },
+      let state: {
+        result: Awaited<
+          ReturnType<WorkerJobContext["runtime"]["services"]["imagery"]["syncLatestFieldImagery"]>
+        > | null;
+      };
+
+      try {
+        state = await runJobPhases(execution, {
+          initialState: {
+            result: null as Awaited<
+              ReturnType<WorkerJobContext["runtime"]["services"]["imagery"]["syncLatestFieldImagery"]>
+            > | null,
           },
-          {
-            key: "sync-imagery",
-            progressPct: 70,
-            progressMessage: "syncing imagery for field",
-            async run(currentState) {
-              return {
-                ...currentState,
-                result: await context.runtime.services.imagery.syncLatestFieldImagery(
-                  payload,
-                ),
-              };
+          phases: [
+            {
+              key: "validate-request",
+              progressPct: 10,
+              progressMessage: "validating imagery sync request",
+              run(currentState) {
+                return currentState;
+              },
             },
-          },
-          {
-            key: "finalize-result",
-            progressPct: 90,
-            progressMessage: "finalizing imagery sync result",
-            run(currentState) {
-              return currentState;
+            {
+              key: "sync-imagery",
+              progressPct: 70,
+              progressMessage: "syncing imagery for field",
+              async run(currentState) {
+                return {
+                  ...currentState,
+                  result: await context.runtime.services.imagery.syncLatestFieldImagery(
+                    payload,
+                  ),
+                };
+              },
             },
-          },
-        ],
-      });
+            {
+              key: "finalize-result",
+              progressPct: 90,
+              progressMessage: "finalizing imagery sync result",
+              run(currentState) {
+                return currentState;
+              },
+            },
+          ],
+        });
+      } catch (error) {
+        if (isMissingFieldRuntimeError(error, payload)) {
+          logSkippedDeletedFieldJob({
+            context,
+            jobKey: "imagery.sync-latest",
+            payload,
+          });
+          return null;
+        }
+
+        throw error;
+      }
 
       if (!state.result) {
         throw new Error("[worker] imagery job completed without a result");

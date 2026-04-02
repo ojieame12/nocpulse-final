@@ -22,7 +22,10 @@ import type { ResolvedGuestShareSession } from "../../server/auth/guestShareSess
 import { getWebServerRuntime } from "../../server/runtime/getWebServerRuntime";
 import { resolveServerComponentActorContext } from "../../server/runtime/resolveServerComponentActorContext";
 import type { SidebarFieldItem } from "../../components/layout/Sidebar";
-import type { FieldSummaryProps } from "../../components/panels/SummaryTab";
+import type {
+  FieldDataQualitySummary,
+  FieldSummaryProps,
+} from "../../components/panels/SummaryTab";
 import type { FieldNotesProps } from "../../components/panels/NotesTab";
 import type { FieldMarketProps } from "../../components/panels/MarketTab";
 import type { AlertsPanelProps, AlertItem, ResolvedAlertItem } from "../../components/panels/AlertsPanel";
@@ -110,6 +113,22 @@ function hasObservationMetric(
   }
 
   return averageAgronomicMeasurement(observation.cells, metricKey) != null;
+}
+
+function countUsableObservations(
+  observations: readonly (FieldRasterObservation | null | undefined)[],
+) {
+  const keys = new Set<string>();
+
+  for (const observation of observations) {
+    if (!observation || !Array.isArray(observation.cells) || observation.cells.length === 0) {
+      continue;
+    }
+
+    keys.add(`${observation.sourceKey}:${observation.observedAt}`);
+  }
+
+  return keys.size;
 }
 
 export function buildEffectiveMoistureSummary(rm: any) {
@@ -823,6 +842,11 @@ export async function buildFieldOverviewViewModel(
   const hasRootPct = rootPct != null && Number.isFinite(rootPct);
   const hasSurfPct = surfPct != null && Number.isFinite(surfPct);
   const confidence = latestMoisture?.confidence ?? "unknown";
+  const opticalObservationCount = countUsableObservations([
+    ...(effectiveReadModel.imagery?.opticalRasterHistory ?? []),
+    effectiveReadModel.imagery?.latestOpticalRasterObservation ?? null,
+    effectiveReadModel.imagery?.previousOpticalRasterObservation ?? null,
+  ]);
   const latestOpticalCapture =
     effectiveReadModel.imagery?.latestOpticalCapture ?? null;
   const latestSarCapture =
@@ -969,6 +993,12 @@ export async function buildFieldOverviewViewModel(
 
     // Data sources
     dataSources: deriveSummaryDataSources(latestMoisture, weatherDataAvailability),
+    dataQuality: deriveSummaryDataQuality({
+      snapshot: latestMoisture,
+      confidence,
+      weatherAvailability: weatherDataAvailability,
+      opticalObservationCount,
+    }),
   };
 
   const viewModel = {
@@ -1245,10 +1275,146 @@ export function deriveSummaryDataSources(
     weather = "Available";
   }
 
-  // Soil source — currently not directly tracked, placeholder for probe integration
-  const soil: string | null = null;
+  let soil: string | null = null;
+  const soilDataset =
+    typeof snapshot?.inputs?.soilDataset === "string" && snapshot.inputs.soilDataset.length > 0
+      ? snapshot.inputs.soilDataset
+      : typeof snapshot?.inputs?.baselineDataset === "string" &&
+          snapshot.inputs.baselineDataset.length > 0
+        ? snapshot.inputs.baselineDataset
+        : null;
+  if (soilDataset) {
+    const normalized = soilDataset.toLowerCase();
+    if (normalized.includes("soilgrids")) soil = "SoilGrids";
+    else if (normalized.includes("era5")) soil = "ERA5-Land baseline";
+    else if (normalized.includes("open-meteo")) soil = "Open-Meteo baseline";
+    else soil = soilDataset;
+  }
 
   return { satellite, weather, soil };
+}
+
+function isSummarySnapshotStale(snapshot: any | null | undefined) {
+  const freshnessFactor =
+    typeof snapshot?.inputs?.freshnessFactor === "number" &&
+    Number.isFinite(snapshot.inputs.freshnessFactor)
+      ? snapshot.inputs.freshnessFactor
+      : null;
+
+  if (freshnessFactor != null) {
+    return freshnessFactor < 0.2;
+  }
+
+  if (typeof snapshot?.observedAt === "string" && !Number.isNaN(Date.parse(snapshot.observedAt))) {
+    return Date.now() - new Date(snapshot.observedAt).getTime() >= 72 * 3_600_000;
+  }
+
+  return false;
+}
+
+export function deriveSummaryDataQuality(input: {
+  snapshot: any | null | undefined;
+  confidence: string | null | undefined;
+  weatherAvailability: { latestObservation?: boolean; forecasts?: boolean } | null | undefined;
+  opticalObservationCount: number;
+}): FieldDataQualitySummary | null {
+  const snapshot = input.snapshot;
+  if (!snapshot) {
+    return {
+      label: "Limited",
+      tone: "warning",
+      summary: "Field hydration is still incomplete, so the current reading should be treated as partial context.",
+      reasons: ["No current moisture snapshot yet"],
+    };
+  }
+
+  const derivationMode = snapshot?.inputs?.derivationMode ?? null;
+  const rasterMode = snapshot?.inputs?.rasterMode ?? null;
+  const signalBlend = snapshot?.inputs?.signalBlend ?? null;
+  const weatherReady = Boolean(
+    input.weatherAvailability?.latestObservation ||
+      input.weatherAvailability?.forecasts ||
+      snapshot?.inputs?.usedWeather === true,
+  );
+  const soilReady = Boolean(
+    snapshot?.inputs?.usedWeatherSoilMoisture === true ||
+      (typeof snapshot?.inputs?.soilDataset === "string" &&
+        snapshot.inputs.soilDataset.length > 0) ||
+      (typeof snapshot?.inputs?.baselineDataset === "string" &&
+        snapshot.inputs.baselineDataset.length > 0),
+  );
+  const opticalReady = input.opticalObservationCount >= 2;
+  const confidence = input.confidence ?? snapshot?.confidence ?? "unknown";
+  const stale = isSummarySnapshotStale(snapshot);
+
+  const reasons: string[] = [];
+  if (weatherReady) reasons.push("Weather context loaded");
+  else reasons.push("Weather context is still missing");
+
+  if (soilReady) reasons.push("Soil context loaded");
+  else reasons.push("Soil context is still missing");
+
+  if (input.opticalObservationCount >= 2) {
+    reasons.push(`${input.opticalObservationCount} optical observations support trend analysis`);
+  } else if (input.opticalObservationCount === 1) {
+    reasons.push("Vegetation history is still thin");
+  } else {
+    reasons.push("No optical vegetation history yet");
+  }
+
+  if (confidence === "high") reasons.push("High moisture confidence");
+  else if (confidence === "medium") reasons.push("Moderate moisture confidence");
+  else if (confidence === "low") reasons.push("Low moisture confidence");
+
+  if (
+    derivationMode === "seeded-range" ||
+    signalBlend === "seeded" ||
+    rasterMode === "synthetic" ||
+    rasterMode === "none"
+  ) {
+    return {
+      label: "Modeled",
+      tone: "danger",
+      summary: "Current moisture is modeled from fallback inputs until stronger live field sources arrive.",
+      reasons,
+    };
+  }
+
+  if (stale) {
+    return {
+      label: "Stale",
+      tone: "muted",
+      summary: "Current readings are older than the target freshness window and should be treated as lagging context.",
+      reasons,
+    };
+  }
+
+  if (
+    derivationMode !== "source-backed" ||
+    !weatherReady ||
+    !soilReady ||
+    !opticalReady ||
+    confidence === "low" ||
+    confidence === "unknown"
+  ) {
+    return {
+      label: "Limited",
+      tone: "warning",
+      summary: !opticalReady
+        ? "Current moisture is usable, but vegetation history is still too thin for strong trend analysis."
+        : !weatherReady || !soilReady
+          ? "Current moisture is source-backed, but parts of the supporting field context are still filling in."
+          : "Current field signals are usable, but confidence is not yet strong enough for a full-ready label.",
+      reasons,
+    };
+  }
+
+  return {
+    label: "Ready",
+    tone: "positive",
+    summary: "Current moisture is source-backed and fresh, with enough supporting context for field interpretation.",
+    reasons,
+  };
 }
 
 /** Build an extended source tag with freshness for the donut caption. */
