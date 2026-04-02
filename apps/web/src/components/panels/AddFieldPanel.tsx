@@ -1185,7 +1185,7 @@ export function AddFieldPanel({
     setSpreadsheetPreview(null);
     setStatusTone('positive');
     setStatusText(
-      `Imported ${committed.candidates.length} field${committed.candidates.length === 1 ? '' : 's'} and queued ${queuedJobCount} follow-up job${queuedJobCount === 1 ? '' : 's'}.`,
+      `Imported ${committed.candidates.length} field${committed.candidates.length === 1 ? '' : 's'} and queued ${queuedJobCount} follow-up job${queuedJobCount === 1 ? '' : 's'}. Fields will appear in the strip as each one finishes onboarding.`,
     );
     const nextTrackedJobs = buildTrackedJobs(
       committed.onboardingDispatches,
