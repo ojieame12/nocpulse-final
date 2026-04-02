@@ -162,18 +162,18 @@ test("moisture mode vitals include 'Surface' label", () => {
   assert.ok(labels.includes("Surface"));
 });
 
-test("ndvi mode vitals include 'NDVI' label", () => {
+test("ndvi mode vitals include 'Crop Health' label", () => {
   const mapModel = createSurfaceMapModel({ metricKey: "ndvi" });
   const result = buildFieldDetailModeData(createMinimalInput({ mode: "ndvi", mapModel }));
   const labels = result.vitals.map((v) => v.label);
-  assert.ok(labels.includes("NDVI"));
+  assert.ok(labels.includes("Crop Health"));
 });
 
-test("ndre mode vitals include 'NDRE' label", () => {
+test("ndre mode vitals include 'Canopy Vigor' label", () => {
   const mapModel = createSurfaceMapModel({ metricKey: "ndre" });
   const result = buildFieldDetailModeData(createMinimalInput({ mode: "ndre", mapModel }));
   const labels = result.vitals.map((v) => v.label);
-  assert.ok(labels.includes("NDRE"));
+  assert.ok(labels.includes("Canopy Vigor"));
 });
 
 test("severity: all-healthy cells (0% stressed) -> hero.sev is 'positive'", () => {
