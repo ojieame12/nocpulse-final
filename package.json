@@ -16,6 +16,7 @@
     "ops:beta-readiness": "corepack pnpm -C ./apps/worker run report:beta-readiness",
     "ops:field-quality": "corepack pnpm -C ./apps/worker run report:quality",
     "ops:first-insight-funnel": "corepack pnpm -C ./apps/worker run report:first-insight-funnel",
+    "ops:first-insight-followup": "corepack pnpm -C ./apps/worker run report:first-insight-followup",
     "ops:launch-visible": "corepack pnpm -C ./apps/worker run report:launch-visible",
     "ops:readiness": "corepack pnpm -C ./apps/worker run report:readiness",
     "ops:source-utilization": "corepack pnpm -C ./apps/worker run sources:utilization",

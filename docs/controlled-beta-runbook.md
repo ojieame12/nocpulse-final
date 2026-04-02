@@ -70,12 +70,14 @@ Look for:
 ```bash
 corepack pnpm -C /Users/ojieame/FieldPulse-v3/apps/worker run report:first-insight -- --workspace-slug hope-creek --json
 corepack pnpm -C /Users/ojieame/FieldPulse-v3/apps/worker run report:first-insight-funnel -- --days 30 --json
+corepack pnpm -C /Users/ojieame/FieldPulse-v3 ops:first-insight-followup -- --days 30 --json
 ```
 
 Use this to confirm:
 - real users are reaching first insight
 - the focus fields are the intended launch-visible ones
 - comparison depth is high enough to support the surface
+- granted workspaces without first insight have a concrete next action instead of sitting in limbo
 
 ## 6. Only widen beta when these are true
 
