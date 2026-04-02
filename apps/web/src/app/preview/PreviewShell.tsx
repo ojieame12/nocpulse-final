@@ -46,6 +46,10 @@ import {
   MODE_TO_METRIC_KEY,
   type ModeKey,
 } from '../../components/panels/FieldDetailPanel';
+import {
+  chooseFirstInsightField,
+  type FirstInsightFieldEntry,
+} from '../../features/fields/firstInsightChooser';
 import type { FieldCropProps as LiveCropPanelProps } from '../../features/fields/tabs/CropTab';
 
 /* ── Types ── */
@@ -1224,11 +1228,19 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
   const handleFieldsChanged = useCallback(async (result: {
     preferredFieldId?: string | null;
     fieldIds: string[];
+    fieldEntries?: readonly FirstInsightFieldEntry[];
+    fieldHydrationSummaries?: readonly CommitFieldHydrationSummary[];
   }) => {
-    const preferredFieldId = result.preferredFieldId ?? null;
+    const preferredFieldId = chooseFirstInsightField({
+      workspaceId,
+      preferredFieldId: result.preferredFieldId ?? null,
+      fieldEntries:
+        result.fieldEntries ??
+        result.fieldIds.map((fieldId) => ({ fieldId })),
+      hydrationSummaries: result.fieldHydrationSummaries,
+    });
     const previousFieldId = activeFieldId;
-    const revealedFieldId = preferredFieldId ?? result.fieldIds[0] ?? null;
-    setRevealedFieldId(revealedFieldId);
+    setRevealedFieldId(preferredFieldId);
 
     /* When the current field is the empty placeholder (fresh workspace), pick
        the best real field from the import result and switch to it. */
@@ -1236,7 +1248,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       isPlaceholderFieldId(activeFieldId) && result.fieldIds.length > 0;
     const switchTargetId =
       shouldSwitchFromPlaceholder
-        ? (preferredFieldId ?? result.fieldIds[0]!)
+        ? preferredFieldId
         : preferredFieldId;
 
     if (
@@ -1272,6 +1284,10 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       return;
     }
 
+    if (shouldSwitchFromPlaceholder && !switchTargetId) {
+      return;
+    }
+
     const nextField = await fetchFieldOverview(activeFieldId, { force: true });
     if (!nextField || nextField.fieldId !== activeFieldId) {
       return;
@@ -1282,11 +1298,12 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       setPanelAnim('entering');
     }
     applyFieldData(nextField);
-  }, [activeFieldId, applyFieldData, fetchFieldOverview, revertFailedFieldSwitch]);
+  }, [activeFieldId, applyFieldData, fetchFieldOverview, revertFailedFieldSwitch, workspaceId]);
 
   const handleOnboardingTracked = useCallback((result: {
     preferredFieldId?: string | null;
     fieldIds: string[];
+    fieldEntries?: readonly FirstInsightFieldEntry[];
     dispatchIds: string[];
     workspaceId?: string | null;
     trackedJobs?: readonly { dispatchId: string; fieldId: string; fieldLabel: string }[];
@@ -1318,10 +1335,30 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         ...(prev?.fieldIds ?? []),
         ...result.fieldIds,
       ]));
+      const mergedFieldEntries = Array.from(merged.values()).map((info) => ({
+        fieldId: info.fieldId,
+        fieldName: info.fieldLabel,
+      }));
+      const nextPreferredFieldId = chooseFirstInsightField({
+        workspaceId: result.workspaceId ?? prev?.workspaceId ?? workspaceId,
+        preferredFieldId: result.preferredFieldId ?? prev?.preferredFieldId ?? null,
+        fieldEntries:
+          result.fieldEntries && result.fieldEntries.length > 0
+            ? Array.from(
+                new Map(
+                  [...mergedFieldEntries, ...result.fieldEntries].map((entry) => [
+                    entry.fieldId,
+                    entry,
+                  ] as const),
+                ).values(),
+              )
+            : mergedFieldEntries,
+        hydrationSummaries: result.fieldHydrationSummaries,
+      });
 
       return {
         workspaceId: result.workspaceId ?? prev?.workspaceId,
-        preferredFieldId: result.preferredFieldId ?? prev?.preferredFieldId,
+        preferredFieldId: nextPreferredFieldId,
         fieldIds: mergedFieldIds,
         dispatchIds: mergedDispatchIds,
         dispatchFieldMap: merged,
@@ -1380,7 +1417,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         return next;
       });
     }
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     if (!pendingOnboardingWatch || pendingOnboardingWatch.dispatchIds.length === 0) {
@@ -1451,8 +1488,19 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
 
         /* All dispatches finished — refresh the active field and clean up. */
         const refreshFieldId = isPlaceholderFieldId(activeFieldId)
-          ? (pendingOnboardingWatch.preferredFieldId ?? pendingOnboardingWatch.fieldIds[0] ?? activeFieldId)
+          ? (
+              pendingOnboardingWatch.preferredFieldId ??
+              (pendingOnboardingWatch.fieldIds.length === 1
+                ? (pendingOnboardingWatch.fieldIds[0] ?? null)
+                : null)
+            )
           : activeFieldId;
+
+        if (!refreshFieldId) {
+          setPendingOnboardingWatch(null);
+          setOnboardingStatuses(new Map());
+          return;
+        }
 
         const nextField = await fetchFieldOverview(refreshFieldId, { force: true });
         if (cancelled) return;

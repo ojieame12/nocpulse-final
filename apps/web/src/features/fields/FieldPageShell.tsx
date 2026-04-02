@@ -59,6 +59,10 @@ import {
   MODE_TO_METRIC_KEY,
   type ModeKey,
 } from "../../components/panels/FieldDetailPanel";
+import {
+  chooseFirstInsightField,
+  type FirstInsightFieldEntry,
+} from "./firstInsightChooser";
 import { SettingsPanel } from "../../components/panels/SettingsPanel";
 import {
   AddFieldPanel,
@@ -1417,8 +1421,17 @@ export function FieldPageShell({
   const handleFieldsChanged = useCallback((result: {
     preferredFieldId?: string | null;
     fieldIds: string[];
+    fieldEntries?: readonly FirstInsightFieldEntry[];
+    fieldHydrationSummaries?: readonly CommitFieldHydrationSummary[];
   }) => {
-    const preferredFieldId = result.preferredFieldId ?? null;
+    const preferredFieldId = chooseFirstInsightField({
+      workspaceId,
+      preferredFieldId: result.preferredFieldId ?? null,
+      fieldEntries:
+        result.fieldEntries ??
+        result.fieldIds.map((fieldId) => ({ fieldId })),
+      hydrationSummaries: result.fieldHydrationSummaries,
+    });
 
     if (
       preferredFieldId &&
@@ -1435,9 +1448,10 @@ export function FieldPageShell({
     }
 
     router.refresh();
-  }, [activeFieldId, router]);
+  }, [activeFieldId, router, workspaceId]);
 
   const handleOnboardingTracked = useCallback((watch: PendingOnboardingWatch & {
+    fieldEntries?: readonly FirstInsightFieldEntry[];
     trackedJobs?: readonly { dispatchId: string; fieldId: string; fieldLabel: string }[];
     fieldHydrationSummaries?: readonly CommitFieldHydrationSummary[];
   }) => {
@@ -1457,6 +1471,17 @@ export function FieldPageShell({
         fieldId: job.fieldId,
         fieldLabel: job.fieldLabel,
       })) ?? [];
+    const preferredFieldId = chooseFirstInsightField({
+      workspaceId,
+      preferredFieldId: watch.preferredFieldId ?? null,
+      fieldEntries:
+        watch.fieldEntries ??
+        dispatchFieldEntries.map((entry) => ({
+          fieldId: entry.fieldId,
+          fieldName: entry.fieldLabel,
+        })),
+      hydrationSummaries,
+    });
 
     if (hydrationSummaries && hydrationSummaries.length > 0) {
       setOnboardingStatuses((prev) => {
@@ -1508,6 +1533,7 @@ export function FieldPageShell({
 
     const nextWatch: PendingOnboardingWatch = {
       ...watch,
+      preferredFieldId,
       dispatchFieldEntries,
     };
 
@@ -1519,7 +1545,7 @@ export function FieldPageShell({
         JSON.stringify(nextWatch),
       );
     }
-  }, []);
+  }, [workspaceId]);
 
   function handlePanelClose() {
     if (panelView !== "none") {

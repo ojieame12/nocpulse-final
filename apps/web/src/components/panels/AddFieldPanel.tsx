@@ -3,16 +3,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X, Search, FileSpreadsheet, Map as MapIcon, Plus, FileUp, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, Lbl, LblM, Sub, Mono } from './fieldDetailCardPrimitives';
+import {
+  chooseFirstInsightField,
+  type FirstInsightFieldEntry,
+} from '../../features/fields/firstInsightChooser';
 
 interface AddFieldPanelProps {
   onClose?: () => void;
   onFieldsChanged?: (result: {
     preferredFieldId?: string | null;
     fieldIds: string[];
+    fieldEntries?: readonly FirstInsightFieldEntry[];
+    fieldHydrationSummaries?: readonly CommitFieldHydrationSummary[];
   }) => void;
   onOnboardingTracked?: (result: {
     preferredFieldId?: string | null;
     fieldIds: string[];
+    fieldEntries?: readonly FirstInsightFieldEntry[];
     dispatchIds: string[];
     workspaceId?: string | null;
     /** Per-dispatch mapping to field context for progress derivation */
@@ -821,18 +828,26 @@ export function AddFieldPanel({
       result.onboardingDispatches,
       new Map([[result.field.id, result.field.name]]),
     );
+    const fieldEntries = [{ fieldId: result.field.id, fieldName: result.field.name }] as const;
+    const preferredFieldId = chooseFirstInsightField({
+      workspaceId: effectiveWorkspaceId,
+      preferredFieldId: result.field.id,
+      fieldEntries,
+    });
     setTrackedJobs(nextTrackedJobs);
     setLldDraftReady(false);
     onOnboardingTracked?.({
-      preferredFieldId: result.field.id,
+      preferredFieldId,
       fieldIds: [result.field.id],
+      fieldEntries,
       dispatchIds: Array.from(new Set(nextTrackedJobs.map((job) => job.dispatchId))),
       workspaceId: effectiveWorkspaceId,
       trackedJobs: nextTrackedJobs,
     });
     onFieldsChanged?.({
-      preferredFieldId: result.field.id,
+      preferredFieldId,
       fieldIds: [result.field.id],
+      fieldEntries,
     });
   };
 
@@ -921,18 +936,26 @@ export function AddFieldPanel({
       result.onboardingDispatches,
       new Map([[result.field.id, result.field.name]]),
     );
+    const fieldEntries = [{ fieldId: result.field.id, fieldName: result.field.name }] as const;
+    const preferredFieldId = chooseFirstInsightField({
+      workspaceId: effectiveWorkspaceId,
+      preferredFieldId: result.field.id,
+      fieldEntries,
+    });
     setTrackedJobs(nextTrackedJobs);
     setBoundaryDraftReady(false);
     onOnboardingTracked?.({
-      preferredFieldId: result.field.id,
+      preferredFieldId,
       fieldIds: [result.field.id],
+      fieldEntries,
       dispatchIds: Array.from(new Set(nextTrackedJobs.map((job) => job.dispatchId))),
       workspaceId: effectiveWorkspaceId,
       trackedJobs: nextTrackedJobs,
     });
     onFieldsChanged?.({
-      preferredFieldId: result.field.id,
+      preferredFieldId,
       fieldIds: [result.field.id],
+      fieldEntries,
     });
   };
 
@@ -1029,24 +1052,34 @@ export function AddFieldPanel({
       committed.onboardingDispatches,
       new Map(committed.candidates.map((entry) => [entry.field.id, entry.field.name])),
     );
-    setTrackedJobs(nextTrackedJobs);
-    onOnboardingTracked?.({
+    const fieldEntries = committed.candidates.map((entry) => ({
+      fieldId: entry.field.id,
+      fieldName: entry.field.name,
+    }));
+    const preferredFieldId = chooseFirstInsightField({
+      workspaceId: effectiveWorkspaceId,
       preferredFieldId:
         committed.candidates.length === 1
           ? (committed.candidates[0]?.field.id ?? null)
           : null,
+      fieldEntries,
+      hydrationSummaries: committed.fieldHydrationSummaries,
+    });
+    setTrackedJobs(nextTrackedJobs);
+    onOnboardingTracked?.({
+      preferredFieldId,
       fieldIds: committed.candidates.map((entry) => entry.field.id),
+      fieldEntries,
       dispatchIds: Array.from(new Set(nextTrackedJobs.map((job) => job.dispatchId))),
       workspaceId: effectiveWorkspaceId,
       trackedJobs: nextTrackedJobs,
       fieldHydrationSummaries: committed.fieldHydrationSummaries,
     });
     onFieldsChanged?.({
-      preferredFieldId:
-        committed.candidates.length === 1
-          ? (committed.candidates[0]?.field.id ?? null)
-          : null,
+      preferredFieldId,
       fieldIds: committed.candidates.map((entry) => entry.field.id),
+      fieldEntries,
+      fieldHydrationSummaries: committed.fieldHydrationSummaries,
     });
   };
 
