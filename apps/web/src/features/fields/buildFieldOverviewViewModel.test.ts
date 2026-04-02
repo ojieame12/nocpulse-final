@@ -14,7 +14,10 @@ import {
   deriveSummaryDataQuality,
 } from "./buildFieldOverviewViewModel";
 import { buildActionProps } from "./buildFieldOverviewViewModel.action";
-import { resolveHistoricalAnomalyFromReadModel } from "./buildFieldOverviewViewModel.shared";
+import {
+  filterFieldQualityDependentAlertRecords,
+  resolveHistoricalAnomalyFromReadModel,
+} from "./buildFieldOverviewViewModel.shared";
 
 function createBaseReadModel() {
   return {
@@ -632,6 +635,77 @@ test("buildReportProps surfaces unavailable alert data without presenting an all
   assert.equal(props.alerts.length, 0);
   assert.equal(props.alertsEmptyStateTitle, "Alert data unavailable");
   assert.match(props.alertsEmptyStateDescription ?? "", /could not be loaded/i);
+});
+
+test("filterFieldQualityDependentAlertRecords keeps only independent alert families on limited fields", () => {
+  const alerts = filterFieldQualityDependentAlertRecords(
+    [
+      { id: "moisture", family: "moisture_stress" },
+      { id: "action", family: "action_brief" },
+      { id: "weather", family: "weather_risk" },
+      { id: "hail", family: "hail_risk" },
+    ],
+    "Limited",
+  );
+
+  assert.deepEqual(
+    alerts.map((alert) => alert.id),
+    ["weather", "hail"],
+  );
+});
+
+test("buildReportProps suppresses field-quality-dependent alerts on limited fields", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    summary: {
+      ...createBaseReadModel().summary,
+      activeAlertCount: 2,
+      dataQuality: {
+        label: "Limited",
+      },
+    },
+    dataAvailability: {
+      activeAlerts: true,
+      resolvedAlerts: true,
+    },
+    alerts: [
+      {
+        id: "alert-1",
+        family: "moisture_stress",
+        severity: "medium",
+        title: "Moisture stress building",
+        summary: "Drying is starting to spread.",
+        evidence: { trackedZoneIds: [] },
+      },
+      {
+        id: "alert-2",
+        family: "weather_risk",
+        severity: "critical",
+        title: "Critical frost risk next 24h",
+        summary: "Forecast minimum breaches the frost threshold.",
+        evidence: { trackedZoneIds: [] },
+      },
+    ],
+    findings: [],
+    zones: { zones: [] },
+    weather: {
+      profile: {
+        latestObservation: null,
+        forecasts: [],
+      },
+      signals: null,
+    },
+  };
+
+  const props = buildReportProps(
+    readModel,
+    "North Quarter Demo",
+    () => "just now",
+  );
+
+  assert.equal(props.alerts.length, 1);
+  assert.equal(props.alerts[0]?.text, "Forecast minimum breaches the frost threshold.");
+  assert.equal(props.healthStatus, "Needs Attention");
 });
 
 test("buildReportProps returns a full seven-day outlook when seven forecast days are available", () => {
