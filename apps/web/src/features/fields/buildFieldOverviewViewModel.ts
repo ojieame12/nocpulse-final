@@ -643,6 +643,7 @@ export async function buildFieldOverviewViewModel(
     );
     const notesPanel: FieldNotesProps = buildNotesProps(
       effectiveReadModel,
+      field.workspaceId,
       field.id,
       field.name,
       scoutNotes,

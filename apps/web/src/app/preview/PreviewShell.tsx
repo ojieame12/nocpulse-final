@@ -71,6 +71,7 @@ import {
   loadOfflineFieldSnapshot,
   saveOfflineFieldSnapshot,
 } from '../../features/offline/offlineRecentFieldCache';
+import { flushOfflineScoutNotesQueue } from '../../features/offline/offlineScoutNotesQueue';
 
 /* ── Types ── */
 
@@ -1140,6 +1141,44 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
 
     applyFieldData(nextField);
   }, [activeFieldId, applyFieldData, fetchFieldOverview]);
+
+  useEffect(() => {
+    if (isGuestSession) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncQueuedScoutNotes = async () => {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return;
+      }
+
+      const result = await flushOfflineScoutNotesQueue();
+      for (const fieldId of result.syncedFieldIds) {
+        const nextField = await fetchFieldOverview(fieldId, { force: true });
+        if (cancelled || !nextField) {
+          continue;
+        }
+
+        if (fieldId === activeFieldId && nextField.fieldId === activeFieldId) {
+          applyFieldData(nextField);
+        }
+      }
+    };
+
+    void syncQueuedScoutNotes();
+
+    const handleOnline = () => {
+      void syncQueuedScoutNotes();
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [activeFieldId, applyFieldData, fetchFieldOverview, isGuestSession]);
 
   const handleFieldRename = useCallback(
     async (fieldId: string, newName: string) => {

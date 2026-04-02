@@ -14,6 +14,11 @@ import {
 } from "./NotesTab";
 import { titleCaseLabel } from "./fieldDetailHelpers";
 import { Card, Lbl, LblM, Sub } from "./fieldDetailCardPrimitives";
+import {
+  flushOfflineScoutNotesQueue,
+  listQueuedOfflineScoutNotes,
+  queueOfflineScoutNote,
+} from "../../features/offline/offlineScoutNotesQueue";
 
 export function NotesSubPage({
   notes,
@@ -36,6 +41,9 @@ export function NotesSubPage({
   const [submittedNoteEntries, setSubmittedNoteEntries] = useState<
     readonly FieldNotesProps["entries"][number][]
   >([]);
+  const [queuedNoteEntries, setQueuedNoteEntries] = useState<
+    readonly FieldNotesProps["entries"][number][]
+  >([]);
 
   /* Reset form state when inspection target changes */
   useEffect(() => {
@@ -45,12 +53,38 @@ export function NotesSubPage({
     setNoteSubmitStatus(null);
     setIsSubmittingNote(false);
     setSubmittedNoteEntries([]);
+    setQueuedNoteEntries([]);
   }, [
     effectiveInspectionTarget?.cellKey,
     effectiveInspectionTarget?.findingId,
     effectiveInspectionTarget?.zoneId,
     notes?.fieldId,
   ]);
+
+  const reloadQueuedNotes = useCallback(async () => {
+    if (!notes?.fieldId) {
+      setQueuedNoteEntries([]);
+      return;
+    }
+
+    const queuedNotes = await listQueuedOfflineScoutNotes(notes.fieldId);
+    setQueuedNoteEntries(
+      queuedNotes.map((note) => ({
+        id: `offline:${note.id}`,
+        date: note.payload.observedAt ?? note.createdAt,
+        text: note.payload.noteText,
+        status: note.payload.outcome,
+        syncStatus: note.syncStatus,
+        findingId: note.payload.findingId,
+        zoneId: note.payload.zoneId,
+        cellKey: note.payload.cellKey,
+      })),
+    );
+  }, [notes?.fieldId]);
+
+  useEffect(() => {
+    void reloadQueuedNotes();
+  }, [reloadQueuedNotes]);
 
   /* Compute scoped + submitted note entries */
   const scopedBaseNoteEntries =
@@ -65,10 +99,66 @@ export function NotesSubPage({
               entry.cellKey === selectedNotesTarget.cellKey),
         )
       : (notes?.entries ?? []);
-  const noteEntries = [...submittedNoteEntries, ...scopedBaseNoteEntries].filter(
+  const scopedQueuedNoteEntries =
+    selectedNotesTarget != null
+      ? queuedNoteEntries.filter(
+          (entry) =>
+            (selectedNotesTarget.findingId != null &&
+              entry.findingId === selectedNotesTarget.findingId) ||
+            (selectedNotesTarget.zoneId != null &&
+              entry.zoneId === selectedNotesTarget.zoneId) ||
+            (selectedNotesTarget.cellKey != null &&
+              entry.cellKey === selectedNotesTarget.cellKey),
+        )
+      : queuedNoteEntries;
+  const noteEntries = [...scopedQueuedNoteEntries, ...submittedNoteEntries, ...scopedBaseNoteEntries].filter(
     (entry, index, entries) =>
       entries.findIndex((candidate) => candidate.id === entry.id) === index,
   );
+
+  const flushQueuedNotes = useCallback(async () => {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      return;
+    }
+
+    const result = await flushOfflineScoutNotesQueue();
+    if (!notes?.fieldId) {
+      return;
+    }
+
+    const syncedNotes = result.syncedNotes
+      .filter((entry) => entry.fieldId === notes.fieldId)
+      .map((entry) => ({
+        id: entry.note.id,
+        date: entry.note.observedAt,
+        text: entry.note.noteText,
+        status: entry.note.outcome,
+        findingId: entry.note.findingId ?? null,
+        zoneId: entry.note.zoneId ?? null,
+        cellKey: entry.note.cellKey ?? null,
+      }));
+
+    if (syncedNotes.length > 0) {
+      setSubmittedNoteEntries((current) => [...syncedNotes, ...current]);
+      setNoteSubmitStatus("Offline scout notes synced.");
+      setNoteSubmitError(null);
+    }
+
+    await reloadQueuedNotes();
+  }, [notes?.fieldId, reloadQueuedNotes]);
+
+  useEffect(() => {
+    void flushQueuedNotes();
+
+    const handleOnline = () => {
+      void flushQueuedNotes();
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [flushQueuedNotes]);
 
   const handleNoteSubmit = useCallback(async () => {
     const trimmed = noteDraft.trim();
@@ -86,19 +176,54 @@ export function NotesSubPage({
     setNoteSubmitError(null);
     setNoteSubmitStatus(null);
 
+    const payload = {
+      outcome: selOutcome,
+      noteText: trimmed,
+      findingId: effectiveInspectionTarget?.findingId ?? null,
+      zoneId: effectiveInspectionTarget?.zoneId ?? null,
+      cellKey: effectiveInspectionTarget?.cellKey ?? null,
+      observedAt: null,
+    } as const;
+
+    const queueCurrentNote = async () => {
+      const queuedNote = await queueOfflineScoutNote({
+        fieldId: notes.fieldId,
+        workspaceId: notes.workspaceId,
+        submitUrl: notes.submitUrl,
+        payload,
+      });
+
+      setQueuedNoteEntries((current) => [
+        {
+          id: `offline:${queuedNote.id}`,
+          date: queuedNote.createdAt,
+          text: queuedNote.payload.noteText,
+          status: queuedNote.payload.outcome,
+          syncStatus: queuedNote.syncStatus,
+          findingId: queuedNote.payload.findingId,
+          zoneId: queuedNote.payload.zoneId,
+          cellKey: queuedNote.payload.cellKey,
+        },
+        ...current,
+      ]);
+      setNoteDraft("");
+      setNoteSubmitStatus("Saved offline. This scout note will sync when the connection returns.");
+    };
+
     try {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        await queueCurrentNote();
+        return;
+      }
+
       const response = await fetch(notes.submitUrl, {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "content-type": "application/json",
+          "x-fieldpulse-workspace-id": notes.workspaceId,
         },
-        body: JSON.stringify({
-          outcome: selOutcome,
-          noteText: trimmed,
-          findingId: effectiveInspectionTarget?.findingId ?? null,
-          zoneId: effectiveInspectionTarget?.zoneId ?? null,
-          cellKey: effectiveInspectionTarget?.cellKey ?? null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const body = (await response.json().catch(() => null)) as
@@ -136,9 +261,26 @@ export function NotesSubPage({
       setNoteDraft("");
       setNoteSubmitStatus("Scout note saved.");
     } catch (error) {
-      setNoteSubmitError(
-        error instanceof Error ? error.message : "Scout note submission failed.",
-      );
+      if (
+        error instanceof TypeError ||
+        (error instanceof Error &&
+          /network|fetch|offline/i.test(error.message))
+      ) {
+        try {
+          await queueCurrentNote();
+          setNoteSubmitError(null);
+          return;
+        } catch (queueError) {
+          setNoteSubmitError(
+            queueError instanceof Error
+              ? queueError.message
+              : "Scout note submission failed.",
+          );
+          return;
+        }
+      }
+
+      setNoteSubmitError(error instanceof Error ? error.message : "Scout note submission failed.");
     } finally {
       setIsSubmittingNote(false);
     }
@@ -264,6 +406,9 @@ export function NotesSubPage({
             )}
           </div>
           <span style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--text-body)", lineHeight: 1.6 }}>{n.text}</span>
+          {n.syncStatus ? (
+            <Sub>{n.syncStatus === "pending" ? "Pending sync" : "Sync failed. Will retry when online."}</Sub>
+          ) : null}
         </Card>
       ))}
       {noteEntries.length === 0 ? (

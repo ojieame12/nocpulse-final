@@ -35,6 +35,7 @@ function severityRank(value: string | null | undefined) {
 
 export function buildNotesProps(
   rm: any,
+  workspaceId: string,
   fieldId: string,
   fieldName: string,
   notes: readonly {
@@ -68,6 +69,7 @@ export function buildNotesProps(
       : null;
 
   return {
+    workspaceId,
     fieldId,
     name: fieldName,
     lld: rm.intake?.legalLandDescription ?? "No legal land description",
