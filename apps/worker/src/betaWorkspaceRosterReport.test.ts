@@ -30,9 +30,14 @@ test("buildBetaWorkspaceRosterReport marks granted workspaces without activity a
       }],
     },
     launchVisibleByWorkspaceId: new Map(),
+    workspaceById: new Map([
+      ["w1", { id: "w1", slug: "hope-creek", name: "Hope Creek" }],
+    ]),
   });
 
   assert.equal(report.rows[0]?.status, "needs-intake");
+  assert.equal(report.rows[0]?.workspaceSlug, "hope-creek");
+  assert.equal(report.rows[0]?.workspaceName, "Hope Creek");
   assert.equal(report.statusCounts["needs-intake"], 1);
 });
 
@@ -66,9 +71,13 @@ test("buildBetaWorkspaceRosterReport marks workspaces with weak launch-visible f
     launchVisibleByWorkspaceId: new Map([
       ["w1", { scopedFieldCount: 5, readyCount: 1, hasEnoughReadyFields: false }],
     ]),
+    workspaceById: new Map([
+      ["w1", { id: "w1", slug: "hope-creek", name: "Hope Creek" }],
+    ]),
   });
 
   assert.equal(report.rows[0]?.status, "needs-curation");
+  assert.equal(report.rows[0]?.workspaceName, "Hope Creek");
   assert.equal(report.statusCounts["needs-curation"], 1);
 });
 
@@ -101,6 +110,9 @@ test("buildBetaWorkspaceRosterReport marks insight-complete workspaces as ready-
     },
     launchVisibleByWorkspaceId: new Map([
       ["w1", { scopedFieldCount: 5, readyCount: 3, hasEnoughReadyFields: true }],
+    ]),
+    workspaceById: new Map([
+      ["w1", { id: "w1", slug: "hope-creek", name: "Hope Creek" }],
     ]),
   });
 

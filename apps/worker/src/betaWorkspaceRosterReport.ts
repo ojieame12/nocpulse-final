@@ -24,6 +24,12 @@ type LaunchVisibleSnapshot = {
   hasEnoughReadyFields: boolean;
 };
 
+type WorkspaceSummary = {
+  id: string;
+  slug: string | null;
+  name: string | null;
+};
+
 export type BetaWorkspaceRosterStatus =
   | "ready-for-outreach"
   | "needs-curation"
@@ -36,6 +42,8 @@ export type BetaWorkspaceRosterRow = {
   email: string;
   farmName: string;
   workspaceId: string | null;
+  workspaceSlug: string | null;
+  workspaceName: string | null;
   grantedAt: string | null;
   firstFieldActivityAt: string | null;
   firstInsightAt: string | null;
@@ -56,10 +64,13 @@ export function buildBetaWorkspaceRosterReport(input: {
   generatedAt?: string;
   funnel: ReturnType<typeof buildFirstInsightFunnelReport>;
   launchVisibleByWorkspaceId: ReadonlyMap<string, LaunchVisibleSnapshot>;
+  workspaceById?: ReadonlyMap<string, WorkspaceSummary>;
 }): BetaWorkspaceRosterReport {
   const rows: BetaWorkspaceRosterRow[] = input.funnel.rows.map((row) => {
     const launchVisible =
       row.workspaceId != null ? input.launchVisibleByWorkspaceId.get(row.workspaceId) ?? null : null;
+    const workspace =
+      row.workspaceId != null ? input.workspaceById?.get(row.workspaceId) ?? null : null;
 
     let status: BetaWorkspaceRosterStatus;
     let nextAction: string;
@@ -86,6 +97,8 @@ export function buildBetaWorkspaceRosterReport(input: {
       email: row.email,
       farmName: row.farmName,
       workspaceId: row.workspaceId,
+      workspaceSlug: workspace?.slug ?? null,
+      workspaceName: workspace?.name ?? null,
       grantedAt: row.grantedAt,
       firstFieldActivityAt: row.firstFieldActivityAt,
       firstInsightAt: row.firstInsightAt,
@@ -258,11 +271,17 @@ async function main() {
   ];
 
   const launchVisibleByWorkspaceId = new Map<string, LaunchVisibleSnapshot>();
+  const workspaceById = new Map<string, WorkspaceSummary>();
   for (const workspaceId of workspaceIds) {
     const audit = await runFieldQualityAudit({
       client,
       workspaceId,
       lookbackDays: 45,
+    });
+    workspaceById.set(workspaceId, {
+      id: workspaceId,
+      slug: audit.workspaceSlug,
+      name: audit.fields[0]?.workspaceName ?? null,
     });
     const report = buildLaunchVisibleReadinessReport({
       workspaceId: audit.workspaceId,
@@ -281,6 +300,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     funnel,
     launchVisibleByWorkspaceId,
+    workspaceById,
   });
 
   if (asJson) {
@@ -300,6 +320,7 @@ async function main() {
     report.rows.map((row) => ({
       email: row.email,
       farm: row.farmName,
+      workspace: row.workspaceName ?? row.workspaceSlug ?? "",
       workspaceId: row.workspaceId ?? "",
       status: row.status,
       launchVisibleReady: row.launchVisible ? `${row.launchVisible.readyCount}/${row.launchVisible.scopedFieldCount}` : "",
