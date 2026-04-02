@@ -5,10 +5,17 @@ import { X, Search, FileSpreadsheet, Map as MapIcon, Plus, FileUp, Calendar, Che
 import { Card, Lbl, LblM, Sub, Mono } from './fieldDetailCardPrimitives';
 import {
   type AddFieldRetryAction,
+  AddFieldApiError,
   describeAddFieldApiError,
   readAddFieldApiResult,
   resolveAddFieldRetryLabel,
 } from './addFieldPanelErrors';
+import {
+  applySuggestedFieldName,
+  resolveAddFieldPrimaryLabel,
+  resolveAddFieldProgressCopy,
+  type AddFieldSubmitPhase,
+} from './addFieldPanelFlow.shared';
 import {
   chooseFirstInsightField,
   type FirstInsightFieldEntry,
@@ -210,6 +217,7 @@ type HydrationRetryPayload = {
 
 const JOB_STATUS_POLL_MS = 3_000;
 const EMPTY_PREVIEW_ID = "__empty__";
+const INTAKE_REQUEST_TIMEOUT_MS = 20_000;
 
 function normalizeWorkspaceId(workspaceId?: string | null) {
   return workspaceId && workspaceId !== EMPTY_PREVIEW_ID ? workspaceId : null;
@@ -777,16 +785,30 @@ export function AddFieldPanel({
   const [retryAction, setRetryAction] = useState<AddFieldRetryAction | null>(null);
   const [previewCard, setPreviewCard] = useState<PreviewCard | null>(null);
   const [spreadsheetPreview, setSpreadsheetPreview] = useState<SpreadsheetPreviewPayload | null>(null);
+  const [savedSpreadsheetBatchId, setSavedSpreadsheetBatchId] = useState<string | null>(null);
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>([]);
   const [retryingHydrationFieldId, setRetryingHydrationFieldId] = useState<string | null>(null);
   const [retryingHydrationFieldLabel, setRetryingHydrationFieldLabel] = useState<string | null>(null);
   const [lldDraftReady, setLldDraftReady] = useState(false);
   const [boundaryDraftReady, setBoundaryDraftReady] = useState(false);
+  const [activeSubmitPhase, setActiveSubmitPhase] = useState<AddFieldSubmitPhase | null>(null);
+  const activeIntakeRequestRef = useRef<AbortController | null>(null);
+  const activeIntakeRequestIdRef = useRef(0);
 
   /* Job statuses come from the parent shell (which owns the single polling
      loop). Fall back to an empty map if no parent supplies them. */
   const jobStatuses: ReadonlyMap<string, JobDispatchSnapshot> = parentJobStatuses ?? new Map();
   const isRetryingHydration = retryingHydrationFieldId != null;
+
+  const cancelActiveIntakeRequest = useCallback(() => {
+    activeIntakeRequestRef.current?.abort();
+    activeIntakeRequestRef.current = null;
+    activeIntakeRequestIdRef.current += 1;
+  }, []);
+
+  useEffect(() => () => {
+    cancelActiveIntakeRequest();
+  }, [cancelActiveIntakeRequest]);
 
   const clearFeedback = () => {
     setStatusTone('neutral');
@@ -794,38 +816,116 @@ export function AddFieldPanel({
     setRetryAction(null);
     setPreviewCard(null);
     setSpreadsheetPreview(null);
+    setSavedSpreadsheetBatchId(null);
     setTrackedJobs([]);
     setRetryingHydrationFieldId(null);
     setRetryingHydrationFieldLabel(null);
     setLldDraftReady(false);
     setBoundaryDraftReady(false);
+    setActiveSubmitPhase(null);
   };
 
-  const primaryLabel = useMemo(() => {
-    if (isRetryingHydration) {
-      return 'Retrying Hydration';
-    }
+  const performIntakeRequest = useCallback(
+    async <T,>(path: string, init: RequestInit) => {
+      const requestId = activeIntakeRequestIdRef.current + 1;
+      activeIntakeRequestIdRef.current = requestId;
 
-    if (isSubmitting) {
-      switch (method) {
-        case 'lld':
-          return lldDraftReady ? 'Creating' : 'Looking Up';
-        case 'csv':
-          return spreadsheetPreview ? 'Importing' : 'Uploading';
-        case 'kml':
-          return boundaryDraftReady ? 'Creating' : 'Parsing';
+      activeIntakeRequestRef.current?.abort();
+      const controller = new AbortController();
+      activeIntakeRequestRef.current = controller;
+
+      let timedOut = false;
+      const timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, INTAKE_REQUEST_TIMEOUT_MS);
+
+      try {
+        const headers = new Headers(init.headers);
+        if (effectiveWorkspaceId) {
+          headers.set('x-fieldpulse-workspace-id', effectiveWorkspaceId);
+        }
+
+        const response = await fetch(path, {
+          ...init,
+          headers,
+          credentials: 'same-origin',
+          signal: controller.signal,
+        });
+        const result = await readAddFieldApiResult<T>(response);
+
+        if (activeIntakeRequestIdRef.current !== requestId) {
+          throw new AddFieldApiError({
+            status: 499,
+            code: 'request_cancelled',
+            message: 'Field intake request cancelled.',
+          });
+        }
+
+        return result;
+      } catch (error) {
+        if (error instanceof AddFieldApiError) {
+          throw error;
+        }
+
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          throw new AddFieldApiError({
+            status: timedOut ? 408 : 499,
+            code: timedOut ? 'request_timeout' : 'request_cancelled',
+            message: timedOut
+              ? 'Field intake request timed out.'
+              : 'Field intake request cancelled.',
+          });
+        }
+
+        if (error instanceof TypeError) {
+          throw new AddFieldApiError({
+            status: 0,
+            code: 'network_unreachable',
+            message: 'Field intake network request failed.',
+          });
+        }
+
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+        if (activeIntakeRequestIdRef.current === requestId) {
+          activeIntakeRequestRef.current = null;
+        }
       }
-    }
+    },
+    [effectiveWorkspaceId],
+  );
 
-    switch (method) {
-      case 'lld':
-        return lldDraftReady ? 'Create Field' : 'Lookup LLD';
-      case 'csv':
-        return spreadsheetPreview ? `Import ${spreadsheetPreview.fieldCount} Fields` : 'Upload & Preview';
-      case 'kml':
-        return boundaryDraftReady ? 'Create Field' : 'Parse Boundary';
-    }
-  }, [boundaryDraftReady, isRetryingHydration, isSubmitting, lldDraftReady, method, spreadsheetPreview]);
+  const primaryLabel = useMemo(() => {
+    return resolveAddFieldPrimaryLabel({
+      isRetryingHydration,
+      isSubmitting,
+      method,
+      lldDraftReady,
+      boundaryDraftReady,
+      spreadsheetPreviewFieldCount: spreadsheetPreview?.fieldCount ?? null,
+      activeSubmitPhase,
+    });
+  }, [
+    activeSubmitPhase,
+    boundaryDraftReady,
+    isRetryingHydration,
+    isSubmitting,
+    lldDraftReady,
+    method,
+    spreadsheetPreview,
+  ]);
+
+  const progressCopy = useMemo(
+    () =>
+      resolveAddFieldProgressCopy({
+        activeSubmitPhase,
+        retryingHydrationFieldLabel,
+        spreadsheetPreviewFieldCount: spreadsheetPreview?.fieldCount ?? null,
+      }),
+    [activeSubmitPhase, retryingHydrationFieldLabel, spreadsheetPreview],
+  );
 
   const primaryDisabled = useMemo(() => {
     if (isSubmitting) return true;
@@ -840,13 +940,17 @@ export function AddFieldPanel({
   }, [isSubmitting, lldCode, method, selectedFile]);
 
   const handleMethodSelect = (nextMethod: MethodKey) => {
+    cancelActiveIntakeRequest();
+    setIsSubmitting(false);
     setMethod(nextMethod);
     setSelectedFile(null);
     clearFeedback();
   };
 
   const handleLookupLld = async () => {
-    const response = await fetch('/api/field-intake/lld/lookup', {
+    setActiveSubmitPhase('lld-lookup');
+
+    const result = await performIntakeRequest<LldLookupPayload>('/api/field-intake/lld/lookup', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -856,8 +960,7 @@ export function AddFieldPanel({
         suggestedFieldName: fieldName.trim() || undefined,
       }),
     });
-
-    const result = await readAddFieldApiResult<LldLookupPayload>(response);
+    setFieldName((current) => applySuggestedFieldName(current, result.draft.name));
 
     setPreviewCard({
       title: 'LLD Draft Ready',
@@ -883,7 +986,9 @@ export function AddFieldPanel({
   };
 
   const handleCreateLldField = async () => {
-    const response = await fetch('/api/field-intake/lld/create', {
+    setActiveSubmitPhase('lld-create');
+
+    const result = await performIntakeRequest<ManualFieldCreatePayload>('/api/field-intake/lld/create', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -897,8 +1002,6 @@ export function AddFieldPanel({
         seedingDate: seedingDate || undefined,
       }),
     });
-
-    const result = await readAddFieldApiResult<ManualFieldCreatePayload>(response);
     const queuedJobCount = countQueuedJobs(result.onboardingDispatches);
     const lldResolution = result.intakeMetadata?.lldResolution;
     const boundaryConfidenceLabel =
@@ -975,6 +1078,7 @@ export function AddFieldPanel({
 
   const handlePreviewBoundaryFile = async () => {
     if (!selectedFile) return;
+    setActiveSubmitPhase('boundary-parse');
 
     const formData = new FormData();
     formData.set('file', selectedFile);
@@ -982,12 +1086,11 @@ export function AddFieldPanel({
       formData.set('suggestedFieldName', fieldName.trim());
     }
 
-    const response = await fetch('/api/field-intake/geofile/parse', {
+    const result = await performIntakeRequest<BoundaryPreviewPayload>('/api/field-intake/geofile/parse', {
       method: 'POST',
       body: formData,
     });
-
-    const result = await readAddFieldApiResult<BoundaryPreviewPayload>(response);
+    setFieldName((current) => applySuggestedFieldName(current, result.draft.name));
 
     setPreviewCard({
       title: 'Boundary Preview Ready',
@@ -1008,6 +1111,7 @@ export function AddFieldPanel({
 
   const handleCreateBoundaryField = async () => {
     if (!selectedFile) return;
+    setActiveSubmitPhase('boundary-create');
 
     const formData = new FormData();
     formData.set('file', selectedFile);
@@ -1027,12 +1131,10 @@ export function AddFieldPanel({
       formData.set('seedingDate', seedingDate);
     }
 
-    const response = await fetch('/api/field-intake/geofile/create', {
+    const result = await performIntakeRequest<ManualFieldCreatePayload>('/api/field-intake/geofile/create', {
       method: 'POST',
       body: formData,
     });
-
-    const result = await readAddFieldApiResult<ManualFieldCreatePayload>(response);
     const queuedJobCount = countQueuedJobs(result.onboardingDispatches);
 
     setPreviewCard({
@@ -1097,17 +1199,17 @@ export function AddFieldPanel({
 
   const handlePreviewSpreadsheet = async () => {
     if (!selectedFile) return;
+    setActiveSubmitPhase('csv-preview');
 
     const formData = new FormData();
     formData.set('file', selectedFile);
 
-    const response = await fetch('/api/field-intake/spreadsheet/preview', {
+    const result = await performIntakeRequest<SpreadsheetPreviewPayload>('/api/field-intake/spreadsheet/preview', {
       method: 'POST',
       body: formData,
     });
-
-    const result = await readAddFieldApiResult<SpreadsheetPreviewPayload>(response);
     setSpreadsheetPreview(result);
+    setSavedSpreadsheetBatchId(null);
     setLldDraftReady(false);
     setBoundaryDraftReady(false);
     setPreviewCard({
@@ -1136,21 +1238,30 @@ export function AddFieldPanel({
 
   const handleCommitSpreadsheet = async () => {
     if (!spreadsheetPreview) return;
+    let batchId = savedSpreadsheetBatchId;
 
-    const saveResponse = await fetch('/api/field-intake/spreadsheet/batches', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        workspaceId: effectiveWorkspaceId ?? undefined,
-        preview: spreadsheetPreview,
-      }),
-    });
-    const saved = await readAddFieldApiResult<{ batch: { id: string } }>(saveResponse);
+    if (!batchId) {
+      setActiveSubmitPhase('csv-save');
+      const saved = await performIntakeRequest<{ batch: { id: string } }>(
+        '/api/field-intake/spreadsheet/batches',
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            workspaceId: effectiveWorkspaceId ?? undefined,
+            preview: spreadsheetPreview,
+          }),
+        },
+      );
+      batchId = saved.batch.id;
+      setSavedSpreadsheetBatchId(batchId);
+    }
 
-    const commitResponse = await fetch(
-      `/api/field-intake/spreadsheet/batches/${saved.batch.id}/commit`,
+    setActiveSubmitPhase('csv-commit');
+    const committed = await performIntakeRequest<SpreadsheetCommitPayload>(
+      `/api/field-intake/spreadsheet/batches/${batchId}/commit`,
       {
         method: 'POST',
         headers: {
@@ -1162,7 +1273,6 @@ export function AddFieldPanel({
         }),
       },
     );
-    const committed = await readAddFieldApiResult<SpreadsheetCommitPayload>(commitResponse);
     const createdCount = committed.candidates.filter((entry) => entry.action === 'created').length;
     const reusedCount = committed.candidates.length - createdCount;
     const queuedFieldCount = countQueuedFields(committed.onboardingDispatches);
@@ -1183,6 +1293,7 @@ export function AddFieldPanel({
       ],
     });
     setSpreadsheetPreview(null);
+    setSavedSpreadsheetBatchId(null);
     setStatusTone('positive');
     setStatusText(
       `Imported ${committed.candidates.length} field${committed.candidates.length === 1 ? '' : 's'} and queued ${queuedJobCount} follow-up job${queuedJobCount === 1 ? '' : 's'}. Fields will appear in the strip as each one finishes onboarding.`,
@@ -1252,6 +1363,7 @@ export function AddFieldPanel({
     }
 
     setIsSubmitting(true);
+    setRetryAction(null);
 
     try {
       switch (method) {
@@ -1278,11 +1390,15 @@ export function AddFieldPanel({
           break;
       }
     } catch (error) {
+      if (error instanceof AddFieldApiError && error.code === 'request_cancelled') {
+        return;
+      }
       setStatusTone('danger');
       setStatusText(describeAddFieldApiError(error));
       setRetryAction(attemptedAction);
     } finally {
       setIsSubmitting(false);
+      setActiveSubmitPhase(null);
     }
   };
 
@@ -1292,6 +1408,7 @@ export function AddFieldPanel({
     }
 
     setIsSubmitting(true);
+    setRetryAction(null);
 
     try {
       switch (retryAction) {
@@ -1315,10 +1432,14 @@ export function AddFieldPanel({
           break;
       }
     } catch (error) {
+      if (error instanceof AddFieldApiError && error.code === 'request_cancelled') {
+        return;
+      }
       setStatusTone('danger');
       setStatusText(describeAddFieldApiError(error));
     } finally {
       setIsSubmitting(false);
+      setActiveSubmitPhase(null);
     }
   };
 
@@ -1328,11 +1449,12 @@ export function AddFieldPanel({
     }
 
     setIsSubmitting(true);
+    setActiveSubmitPhase('hydration-retry');
     setRetryingHydrationFieldId(job.fieldId);
     setRetryingHydrationFieldLabel(job.fieldLabel);
 
     try {
-      const response = await fetch('/api/field-intake/hydration/retry', {
+      const result = await performIntakeRequest<HydrationRetryPayload>('/api/field-intake/hydration/retry', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -1349,8 +1471,6 @@ export function AddFieldPanel({
               : undefined,
         }),
       });
-
-      const result = await readAddFieldApiResult<HydrationRetryPayload>(response);
       const nextTrackedJobs = buildTrackedJobs(
         result.onboardingDispatches,
         new Map([[job.fieldId, job.fieldLabel]]),
@@ -1388,10 +1508,14 @@ export function AddFieldPanel({
         })),
       });
     } catch (error) {
+      if (error instanceof AddFieldApiError && error.code === 'request_cancelled') {
+        return;
+      }
       setStatusTone('danger');
       setStatusText(describeAddFieldApiError(error));
     } finally {
       setIsSubmitting(false);
+      setActiveSubmitPhase(null);
       setRetryingHydrationFieldId(null);
       setRetryingHydrationFieldLabel(null);
     }
@@ -1490,8 +1614,12 @@ export function AddFieldPanel({
               accept=".csv,.xlsx,.xls"
               selectedFile={selectedFile}
               onFileSelect={(file) => {
+                cancelActiveIntakeRequest();
+                setIsSubmitting(false);
                 setSelectedFile(file);
                 setSpreadsheetPreview(null);
+                setSavedSpreadsheetBatchId(null);
+                setActiveSubmitPhase(null);
               }}
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1514,8 +1642,11 @@ export function AddFieldPanel({
               accept=".kml,.kmz,.geojson,.shp,.zip"
               selectedFile={selectedFile}
               onFileSelect={(file) => {
+                cancelActiveIntakeRequest();
+                setIsSubmitting(false);
                 setSelectedFile(file);
                 setBoundaryDraftReady(false);
+                setActiveSubmitPhase(null);
               }}
             />
             <Card className="fdp-card--muted" style={{ gap: 4 }}>
@@ -1572,7 +1703,7 @@ export function AddFieldPanel({
         ) : null}
 
         {/* ── Progress context during long operations ── */}
-        {isSubmitting && (
+        {isSubmitting && progressCopy ? (
           <Card span={-1} className="fdp-card--muted" style={{ gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{
@@ -1580,25 +1711,11 @@ export function AddFieldPanel({
                 borderTopColor: 'var(--primary-green)', borderRadius: '50%',
                 animation: 'fdp-spinner 600ms linear infinite', flexShrink: 0,
               }} />
-              <Sub>
-                {isRetryingHydration && `Retrying hydration for ${retryingHydrationFieldLabel ?? 'that field'}…`}
-                {!isRetryingHydration && method === 'lld' && !lldDraftReady && 'Searching land description databases…'}
-                {!isRetryingHydration && method === 'lld' && lldDraftReady && 'Creating field boundary and queuing satellite analysis…'}
-                {!isRetryingHydration && method === 'csv' && !spreadsheetPreview && 'Parsing spreadsheet and validating field data…'}
-                {!isRetryingHydration && method === 'csv' && spreadsheetPreview && 'Creating fields, resolving boundaries, and queuing satellite onboarding…'}
-                {!isRetryingHydration && method === 'kml' && !boundaryDraftReady && 'Parsing boundary geometry from file…'}
-                {!isRetryingHydration && method === 'kml' && boundaryDraftReady && 'Creating field from boundary and queuing analysis…'}
-              </Sub>
+              <Sub>{progressCopy.title}</Sub>
             </div>
-            <Sub>
-              {isRetryingHydration && 'We are replaying field hydration context and queuing a fresh onboarding run.'}
-              {!isRetryingHydration && method === 'csv' && !spreadsheetPreview && 'This usually takes 5–15 seconds depending on file size.'}
-              {!isRetryingHydration && method === 'csv' && spreadsheetPreview && `Importing ${spreadsheetPreview.fieldCount} fields — this may take up to a minute.`}
-              {!isRetryingHydration && method === 'lld' && 'LLD lookups typically resolve within a few seconds.'}
-              {!isRetryingHydration && method === 'kml' && 'Boundary parsing depends on file complexity.'}
-            </Sub>
+            <Sub>{progressCopy.detail}</Sub>
           </Card>
-        )}
+        ) : null}
 
         <ActionButtons
           onClose={onClose}
