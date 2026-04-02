@@ -64,6 +64,11 @@ export type FieldViewModel = {
   fieldId: string;
   fieldName: string;
   areaHaLabel: string;
+  cropContext: {
+    cropType: string | null;
+    growthStage: string | null;
+    growthStageSource: string | null;
+  } | null;
   mapPreview: FieldBoundaryPreviewRenderModel;
   sidebarFields: SidebarFieldItem[];
   summary: FieldSummaryProps | null;
@@ -173,6 +178,8 @@ function toFieldViewModel(data: Record<string, unknown>): FieldViewModel {
     fieldId: String(data.fieldId),
     fieldName: String(data.fieldName),
     areaHaLabel: String(data.areaHaLabel),
+    cropContext:
+      (data.cropContext as FieldViewModel["cropContext"] | null | undefined) ?? null,
     mapPreview: data.mapPreview as FieldBoundaryPreviewRenderModel,
     sidebarFields: data.sidebarFields as SidebarFieldItem[],
     summary: (data.summary as FieldSummaryProps | null) ?? null,
@@ -273,12 +280,60 @@ function patchFieldViewModelLld(
 
 function patchFieldViewModelCrop(
   field: FieldViewModel,
-  crop: string,
+  crop: {
+    cropName: string;
+    growthStage?: string | null;
+  },
 ): FieldViewModel {
+  const nextGrowthStage =
+    crop.growthStage === undefined ? field.cropContext?.growthStage ?? null : crop.growthStage;
+  const nextGrowthStageSource =
+    crop.growthStage === undefined
+      ? field.cropContext?.growthStageSource ?? null
+      : crop.growthStage == null
+        ? "derived"
+        : "manual";
+  const nextCropStageLabel =
+    crop.growthStage === undefined
+      ? field.summary?.cropStage ?? field.cropPanel?.thresholdStageLabel ?? null
+      : crop.growthStage == null
+        ? field.summary?.cropStage ?? field.cropPanel?.thresholdStageLabel ?? null
+        : crop.growthStage
+            .split("-")
+            .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+            .join(" ");
+
   return {
     ...field,
-    summary: field.summary ? { ...field.summary, crop } : field.summary,
-    cropPanel: field.cropPanel ? { ...field.cropPanel, cropName: crop } : field.cropPanel,
+    cropContext: field.cropContext
+      ? {
+          ...field.cropContext,
+          cropType: crop.cropName,
+          growthStage: nextGrowthStage,
+          growthStageSource: nextGrowthStageSource,
+        }
+      : {
+          cropType: crop.cropName,
+          growthStage: nextGrowthStage,
+          growthStageSource: nextGrowthStageSource,
+        },
+    summary: field.summary
+      ? {
+          ...field.summary,
+          crop: crop.cropName,
+          cropStage: nextCropStageLabel ?? field.summary.cropStage,
+        }
+      : field.summary,
+    cropPanel: field.cropPanel
+      ? {
+          ...field.cropPanel,
+          cropName: crop.cropName,
+          thresholdStageLabel:
+            crop.growthStage == null || crop.growthStage === undefined
+              ? field.cropPanel.thresholdStageLabel
+              : `${nextCropStageLabel} stage`,
+        }
+      : field.cropPanel,
   };
 }
 
@@ -292,6 +347,7 @@ function buildEmptyPreviewFieldViewModel(
     fieldId: EMPTY_PREVIEW_FIELD_ID,
     fieldName: '',
     areaHaLabel: '',
+    cropContext: null,
     mapPreview: {
       fieldId: EMPTY_PREVIEW_FIELD_ID,
       fieldName: '',
@@ -1092,13 +1148,18 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
   const handleFieldCropUpdate = useCallback(
     async (
       fieldId: string,
-      crop: { cropName: string; variety?: string; seedingDate?: string },
+      crop: {
+        cropName: string;
+        variety?: string;
+        seedingDate?: string;
+        growthStage?: string | null;
+      },
     ) => {
       const nextCropName = crop.cropName.trim();
 
       if (!nextCropName) {
         setFieldSwitchError('Crop type cannot be empty.');
-        return;
+        return false;
       }
 
       const snapshot = {
@@ -1111,7 +1172,14 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       syncSidebarFieldsAcrossCache((fields) =>
         updateSidebarFieldCrop(fields, fieldId, nextCropName),
       );
-      patchCachedField(fieldId, (field) => patchFieldViewModelCrop(field, nextCropName));
+      patchCachedField(fieldId, (field) =>
+        patchFieldViewModelCrop(field, {
+          cropName: nextCropName,
+          ...(crop.growthStage !== undefined
+            ? { growthStage: crop.growthStage }
+            : {}),
+        }),
+      );
 
       const response = await fetch(`/api/fields/${fieldId}/crop-context`, {
         method: 'PATCH',
@@ -1123,6 +1191,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
           cropType: nextCropName,
           ...(crop.variety !== undefined ? { variety: crop.variety } : {}),
           ...(crop.seedingDate !== undefined ? { seedingDate: crop.seedingDate } : {}),
+          ...(crop.growthStage !== undefined ? { growthStage: crop.growthStage } : {}),
         }),
       });
 
@@ -1136,17 +1205,19 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         setFieldSwitchError(
           await readApiErrorMessage(response, 'Unable to update crop context right now.'),
         );
-        return;
+        return false;
       }
 
       const nextField = await fetchFieldOverview(fieldId, { force: true });
       if (!nextField) {
-        return;
+        return false;
       }
 
       if (activeFieldId === fieldId) {
         applyFieldData(nextField);
       }
+
+      return true;
     },
     [
       activeFieldId,
@@ -1948,6 +2019,8 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             lld={fieldData.summary?.lld ?? fieldData.cropPanel?.lld ?? null}
             crop={fieldData.summary?.crop ?? fieldData.cropPanel?.cropName ?? null}
             cropStage={fieldData.summary?.cropStage ?? fieldData.cropPanel?.thresholdStageLabel ?? null}
+            growthStageKey={fieldData.cropContext?.growthStage ?? null}
+            growthStageSource={fieldData.cropContext?.growthStageSource ?? null}
             growthStageLabel={fieldData.cropPanel?.thresholdStageLabel ?? null}
             accumulatedGdd={fieldData.cropPanel?.accumulatedGddLabel ?? null}
             onClose={() => switchPanel('detail')}

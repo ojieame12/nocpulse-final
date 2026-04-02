@@ -42,6 +42,15 @@ const CropContextBodySchema = z
     cropName: nullableTrimmedText(),
     variety: nullableTrimmedText(),
     seedingDate: nullableTrimmedText(),
+    growthStage: z
+      .enum(["pre-seed", "vegetative", "flowering", "ripening"], {
+        errorMap: () => ({
+          message:
+            "[crop-context] growthStage must be one of pre-seed, vegetative, flowering, or ripening.",
+        }),
+      })
+      .nullable()
+      .optional(),
     seasonYear: optionalYearInput(
       "[crop-context] seasonYear must be a valid integer year.",
     ),
@@ -155,7 +164,7 @@ export async function PATCH(
       current?.seasonYear,
     );
 
-    const cropContext = await runtime.services.fieldCropContext.upsertFieldContext({
+    let cropContext = await runtime.services.fieldCropContext.upsertFieldContext({
       workspaceId: actor.workspaceId,
       fieldId,
       seasonYear,
@@ -175,6 +184,26 @@ export async function PATCH(
       },
     });
 
+    if (body.growthStage !== undefined) {
+      const requestedAt = new Date().toISOString();
+
+      if (payload.growthStage == null) {
+        cropContext =
+          (await runtime.services.fieldCropContext.clearGrowthStageOverride({
+            workspaceId: actor.workspaceId,
+            fieldId,
+            requestedAt,
+          })) ?? cropContext;
+      } else {
+        cropContext = await runtime.services.fieldCropContext.setGrowthStageOverride({
+          workspaceId: actor.workspaceId,
+          fieldId,
+          growthStage: payload.growthStage,
+          requestedAt,
+        });
+      }
+    }
+
     await logAuditEvent({
       runtime,
       action: "field.crop_context_updated",
@@ -189,6 +218,9 @@ export async function PATCH(
         sourceKey,
         hasVariety: nextVariety !== null,
         hasSeedingDate: nextSeedingDate !== null,
+        growthStage: cropContext.growthStage,
+        growthStageSource: cropContext.growthStageSource,
+        manualGrowthStageOverride: cropContext.growthStageSource === "manual",
       },
     });
 

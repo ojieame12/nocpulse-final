@@ -1009,6 +1009,13 @@ export async function buildFieldOverviewViewModel(
     authStatusLabel,
     fieldName: field.name,
     areaHaLabel: `${field.areaHa.toFixed(1)} ha`,
+    cropContext: readModel.cropContext
+      ? {
+          cropType: readModel.cropContext.cropType ?? null,
+          growthStage: readModel.cropContext.growthStage ?? null,
+          growthStageSource: readModel.cropContext.growthStageSource ?? null,
+        }
+      : null,
     createdAtLabel: new Date(field.createdAt).toLocaleString("en-US", {
       dateStyle: "medium",
       timeStyle: "short",
