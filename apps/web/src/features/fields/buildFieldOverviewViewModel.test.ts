@@ -19,6 +19,7 @@ import {
   resolveHistoricalAnomalyFromReadModel,
 } from "./buildFieldOverviewViewModel.shared";
 import { buildCropProps } from "./buildFieldOverviewViewModel.crop";
+import { buildActivityPanelModel } from "./buildFieldOverviewViewModel.panels";
 
 function createBaseReadModel() {
   return {
@@ -1018,6 +1019,94 @@ test("buildCropProps keeps independent weather alerts visible on limited fields"
   assert.equal(crop.diseaseRisks[0]?.name, "Disease model held back");
   assert.equal(crop.alerts.length, 1);
   assert.equal(crop.alerts[0]?.title, "Critical frost risk next 24h");
+});
+
+test("buildActivityPanelModel holds back field-dependent activity on limited fields", () => {
+  const activity = buildActivityPanelModel({
+    ...createBaseReadModel(),
+    summary: {
+      ...createBaseReadModel().summary,
+      dataQuality: {
+        label: "Limited",
+      },
+    },
+    findings: [
+      {
+        id: "finding-1",
+        family: "disease_risk",
+        status: "active",
+        severity: "medium",
+        title: "Blackleg watch",
+        summary: "Humidity is supporting disease pressure.",
+        startedAt: "2026-03-28T00:00:00Z",
+        evidence: { trackedZones: [{ zoneId: "zone-1" }] },
+      },
+      {
+        id: "finding-2",
+        family: "weather_risk",
+        status: "active",
+        severity: "critical",
+        title: "Critical frost risk next 24h",
+        summary: "Forecast minimum breaches the frost threshold.",
+        startedAt: "2026-03-29T00:00:00Z",
+        evidence: { trackedZones: [{ zoneId: "zone-2" }] },
+      },
+    ],
+    zones: {
+      zones: [
+        {
+          id: "zone-1",
+          family: "disease_risk",
+          trackingKey: "disease-1",
+          status: "new",
+          latestSeverity: "medium",
+          affectedCellCount: 4,
+          detectionCount: 2,
+          lastSeenAt: "2026-03-28T00:00:00Z",
+        },
+        {
+          id: "zone-2",
+          family: "weather_risk",
+          trackingKey: "weather-1",
+          status: "new",
+          latestSeverity: "critical",
+          affectedCellCount: 6,
+          detectionCount: 1,
+          lastSeenAt: "2026-03-29T00:00:00Z",
+        },
+      ],
+      familySummaries: [
+        {
+          family: "disease_risk",
+          newZoneCount: 1,
+          persistentZoneCount: 0,
+          recoveringZoneCount: 0,
+          totalZoneCount: 1,
+        },
+        {
+          family: "weather_risk",
+          newZoneCount: 1,
+          persistentZoneCount: 0,
+          recoveringZoneCount: 0,
+          totalZoneCount: 1,
+        },
+      ],
+    },
+  });
+
+  assert.equal(activity.dataQualityLabel, "Limited");
+  assert.equal(activity.activeFindingCount, 1);
+  assert.equal(activity.activeZoneCount, 1);
+  assert.equal(activity.hiddenFindingCount, 1);
+  assert.equal(activity.hiddenZoneCount, 1);
+  assert.equal(activity.findings.length, 1);
+  assert.equal(activity.findings[0]?.title, "Critical frost risk next 24h");
+  assert.equal(activity.zones.length, 1);
+  assert.equal(activity.zones[0]?.trackingKey, "weather-1");
+  assert.deepEqual(
+    activity.familySummaries.map((summary) => summary.family),
+    ["weather_risk"],
+  );
 });
 
 test("buildActionProps prioritizes spring seeding readiness over frost watch when seed-depth temperature is still missing", () => {
