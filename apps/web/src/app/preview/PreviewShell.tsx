@@ -65,6 +65,12 @@ import {
   mergeResolvedSidebarField,
   resolveCompletedImportedFieldIds,
 } from './progressiveFieldStrip.shared';
+import {
+  buildOfflineCacheOwnerKey,
+  clearOfflineSnapshotsExceptOwner,
+  loadOfflineFieldSnapshot,
+  saveOfflineFieldSnapshot,
+} from '../../features/offline/offlineRecentFieldCache';
 
 /* ── Types ── */
 
@@ -654,6 +660,9 @@ function buildZoneDetailSelection(
 export function PreviewShell({ initial, initialPanelsPromise, viewer = null, guestSession = null }: PreviewShellProps) {
   const [theme, setTheme] = useState<AppTheme>("dark");
   const [guestNow, setGuestNow] = useState(() => Date.now());
+  const [isOffline, setIsOffline] = useState(
+    () => typeof navigator !== 'undefined' && navigator.onLine === false,
+  );
 
   /* Field data state — starts with server-loaded initial */
   const [fieldData, setFieldData] = useState<FieldViewModel>(initial);
@@ -747,9 +756,59 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     viewer,
     isGuestSession,
   );
+  const offlineCacheOwnerKey = useMemo(
+    () =>
+      buildOfflineCacheOwnerKey({
+        workspaceId,
+        viewer,
+        isGuestSession,
+      }),
+    [isGuestSession, viewer, workspaceId],
+  );
+  const offlineStatusBadgeLabel = isOffline
+    ? isPlaceholderFieldId(activeFieldId)
+      ? 'Offline'
+      : 'Offline · cached'
+    : null;
   const guestBadgeLabel = guestSession
     ? `Guest · ${formatGuestRemaining(guestSession.expiresAt, guestNow)}`
     : null;
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!offlineCacheOwnerKey) {
+      return;
+    }
+
+    void clearOfflineSnapshotsExceptOwner(offlineCacheOwnerKey).catch((error) => {
+      console.warn('[offline] unable to reconcile recent field cache', error);
+    });
+  }, [offlineCacheOwnerKey]);
+
+  useEffect(() => {
+    if (!offlineCacheOwnerKey || isPlaceholderFieldId(fieldData.fieldId)) {
+      return;
+    }
+
+    void saveOfflineFieldSnapshot(offlineCacheOwnerKey, {
+      ...fieldData,
+      sidebarFields,
+    }).catch((error) => {
+      console.warn('[offline] unable to persist field snapshot', error);
+    });
+  }, [fieldData, offlineCacheOwnerKey, sidebarFields]);
 
   useEffect(() => {
     if (!guestSession) {
@@ -927,19 +986,19 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
   );
 
   const fetchFieldOverview = useCallback(
-    (
+    async (
       fieldId: string,
       options?: {
         force?: boolean;
       },
     ) => {
       if (isPlaceholderFieldId(fieldId)) {
-        return Promise.resolve(null);
+        return null;
       }
 
       const cached = fieldCacheRef.current.get(fieldId);
       if (cached && !options?.force) {
-        return Promise.resolve(cached);
+        return cached;
       }
 
       const failedRequest = failedRequestsRef.current.get(fieldId);
@@ -948,12 +1007,41 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         !options?.force &&
         failedRequest.retryAfter > Date.now()
       ) {
-        return Promise.resolve(null);
+        const offlineSnapshot = offlineCacheOwnerKey
+          ? await loadOfflineFieldSnapshot(offlineCacheOwnerKey, fieldId).catch(() => null)
+          : null;
+        if (offlineSnapshot) {
+          fieldCacheRef.current.set(fieldId, offlineSnapshot);
+          setFieldCacheRevision((revision) => revision + 1);
+          return offlineSnapshot;
+        }
+
+        return null;
       }
 
       const inflight = inflightRequestsRef.current.get(fieldId);
       if (inflight) {
         return inflight;
+      }
+
+      const loadOfflineSnapshot = async () => {
+        if (!offlineCacheOwnerKey) {
+          return null;
+        }
+
+        const offlineSnapshot = await loadOfflineFieldSnapshot(
+          offlineCacheOwnerKey,
+          fieldId,
+        ).catch(() => null);
+        if (offlineSnapshot) {
+          fieldCacheRef.current.set(fieldId, offlineSnapshot);
+          setFieldCacheRevision((revision) => revision + 1);
+        }
+        return offlineSnapshot;
+      };
+
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return loadOfflineSnapshot();
       }
 
       const request = (async () => {
@@ -983,6 +1071,13 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             summary,
           });
           console.error(`[preview] Field fetch failed for ${fieldId}: ${summary}`);
+          const offlineSnapshot = await loadOfflineSnapshot();
+          if (offlineSnapshot) {
+            console.warn(
+              `[preview] Field fetch failed for ${fieldId}; using cached snapshot instead.`,
+            );
+            return offlineSnapshot;
+          }
           return null;
         }
 
@@ -999,9 +1094,14 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         fieldCacheRef.current.set(nextField.fieldId, nextField);
         setFieldCacheRevision((revision) => revision + 1);
         failedRequestsRef.current.delete(nextField.fieldId);
+        if (offlineCacheOwnerKey) {
+          void saveOfflineFieldSnapshot(offlineCacheOwnerKey, nextField).catch((error) => {
+            console.warn('[offline] unable to persist fetched field snapshot', error);
+          });
+        }
         return nextField;
       })()
-        .catch((error) => {
+        .catch(async (error) => {
           const summary =
             error instanceof Error ? error.message : 'Unknown fetch error';
           failedRequestsRef.current.set(fieldId, {
@@ -1009,6 +1109,13 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             summary,
           });
           console.error(`[preview] Field fetch error for ${fieldId}:`, error);
+          const offlineSnapshot = await loadOfflineSnapshot();
+          if (offlineSnapshot) {
+            console.warn(
+              `[preview] Field fetch errored for ${fieldId}; using cached snapshot instead.`,
+            );
+            return offlineSnapshot;
+          }
           return null;
         })
         .finally(() => {
@@ -1018,7 +1125,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       inflightRequestsRef.current.set(fieldId, request);
       return request;
     },
-    [workspaceId],
+    [offlineCacheOwnerKey, workspaceId],
   );
 
   const handleMarketScenarioSaved = useCallback(async () => {
@@ -2386,6 +2493,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         showAlertsBell={!isGuestSession}
         showAvatar={!isGuestSession}
         viewer={isGuestSession ? null : viewer}
+        statusBadgeLabel={offlineStatusBadgeLabel}
         guestBadgeLabel={guestBadgeLabel}
         guestCtaHref={isGuestSession ? "/request-access" : null}
       />
