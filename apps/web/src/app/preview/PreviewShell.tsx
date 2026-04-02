@@ -101,6 +101,7 @@ export type PreviewShellProps = {
 
 import React from "react";
 import { WelcomeModal } from "../../components/ui/WelcomeModal";
+import { HydrationOverlay } from "../../components/ui/HydrationOverlay";
 function StreamingPanels({
   promise,
   onResolve,
@@ -604,6 +605,11 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
   /** Pre-built stage arrays from the commit response, keyed by fieldId. */
   const [prebuiltStagesByField, setPrebuiltStagesByField] = useState<
     ReadonlyMap<string, CommitFieldHydrationSummary["stages"]>
+  >(new Map());
+
+  /** Commit-time moisture confidence/provenance data, keyed by fieldId. */
+  const [hydrationConfidenceByField, setHydrationConfidenceByField] = useState<
+    ReadonlyMap<string, CommitFieldHydrationSummary["moistureConfidence"]>
   >(new Map());
 
   /** Derived per-field progress for the field strip */
@@ -1412,7 +1418,6 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         }
         return next;
       });
-
       /* Store pre-built stage arrays so HydrationStageTracker can use
          authoritative backend data instead of substring-parsing progressMessages. */
       setPrebuiltStagesByField((prev) => {
@@ -1420,6 +1425,17 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         for (const summary of result.fieldHydrationSummaries!) {
           if (summary.stages && summary.stages.length > 0) {
             next.set(summary.fieldId, summary.stages);
+          }
+        }
+        return next;
+      });
+
+      /* Store commit-time moisture confidence for provenance display. */
+      setHydrationConfidenceByField((prev) => {
+        const next = new Map(prev);
+        for (const summary of result.fieldHydrationSummaries!) {
+          if (summary.moistureConfidence) {
+            next.set(summary.fieldId, summary.moistureConfidence);
           }
         }
         return next;
@@ -1950,6 +1966,9 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       progressMessage={fieldOnboardingProgress.get(fieldData.fieldId)?.phaseLabel ?? null}
       prebuiltStages={prebuiltStagesByField.get(fieldData.fieldId) ?? null}
       workspaceFirstInsightSummary={workspaceFirstInsightSummary}
+      hydrationConfidence={hydrationConfidenceByField.get(fieldData.fieldId) ?? null}
+      workspaceFirstInsightSummary={workspaceFirstInsightSummary}
+      hydrationConfidence={hydrationConfidenceByField.get(fieldData.fieldId) ?? null}
     />
   );
 
@@ -2223,6 +2242,18 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
               }}
             >
               {renderPanel()}
+              <HydrationOverlay
+                active={
+                  activePanel === 'detail' &&
+                  (fieldOnboardingProgress.get(fieldData.fieldId)?.status === 'queued' ||
+                    fieldOnboardingProgress.get(fieldData.fieldId)?.status === 'running') &&
+                  fieldOnboardingProgress.has(fieldData.fieldId)
+                }
+                fieldName={fieldData.fieldName}
+                onboardingStatus={fieldOnboardingProgress.get(fieldData.fieldId) ?? null}
+                progressMessage={fieldOnboardingProgress.get(fieldData.fieldId)?.phaseLabel ?? null}
+                prebuiltStages={prebuiltStagesByField.get(fieldData.fieldId) ?? null}
+              />
             </div>
           </AppShellErrorBoundary>
         </div>
