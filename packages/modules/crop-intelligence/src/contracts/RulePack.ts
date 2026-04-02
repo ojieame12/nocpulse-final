@@ -32,6 +32,19 @@ export type AtmosphericDemandRulePack = {
   severeWaterBalance72hMm: number;
 };
 
+export type SeedingThresholdRulePack = {
+  dedupeKey: string;
+  label: string;
+  soilTempMinC: number;
+  sustainedDays: number;
+  surfaceMoistureMinPct: number;
+  surfaceMoistureMaxPct: number;
+  recentPrecipWarnMm72h: number;
+  recentPrecipBlockMm72h: number;
+  freezeThawWarnCount: number;
+  freezeThawBlockCount: number;
+};
+
 export type WeatherRiskRulePack = {
   frost: FrostRiskRulePack;
   atmosphericDemand: AtmosphericDemandRulePack;
@@ -66,6 +79,7 @@ export type CropProfile = {
   label: string;
   aliases: readonly string[];
   gddBaseC: number;
+  seedingThresholds?: Partial<SeedingThresholdRulePack>;
   defaultGrowthStage: GrowthStageKey;
   stageProgression: readonly {
     stage: GrowthStageKey;
@@ -80,6 +94,7 @@ export type RulePack = {
   label: string;
   moistureStress: MoistureStressRulePack;
   weatherRisk: WeatherRiskRulePack;
+  seedingThresholds: SeedingThresholdRulePack;
   diseaseRisk: DiseaseRiskRulePack;
   cropProfiles: readonly CropProfile[];
 };

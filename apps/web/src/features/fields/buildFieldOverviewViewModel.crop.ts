@@ -132,7 +132,9 @@ export function buildCropProps(rm: any): FieldCropProps {
       latestObservation?.soilTemperature6cmC ??
       null,
     soilTemp6cmSustainedDays: weatherSignals?.soilTemp6cmSustainedDays ?? null,
-    thresholdC: weatherSignals?.provenance?.soilTempThresholdC ?? null,
+    thresholdC:
+      weatherSignals?.provenance?.soilTempThresholdC ??
+      resolvedRules.seedingThresholds.soilTempMinC,
   });
   const fieldAccessPresentation = resolveFieldAccessPresentation({
     surfaceMoisturePct: latestObservation?.soilMoisturePct ?? null,

@@ -22,6 +22,10 @@ import {
   resolveCropStagePresentation,
   resolveOpticalSeasonality,
 } from "./buildFieldOverviewViewModel.cropSignals";
+import {
+  resolveFieldAccessPresentation,
+  resolveSeedingRecommendation,
+} from "./buildFieldOverviewViewModel.spring";
 
 type ActionSignal = FieldActionProps["signals"][number];
 type RankedActionSignal = ActionSignal & {
@@ -288,8 +292,21 @@ function buildWatchlistSummary(input: {
   weatherSignals: any;
   moistureSourceLabel: string;
   weatherSourceLabel: string;
+  seedingRecommendation?: WatchlistSummary | null;
 }): WatchlistSummary | null {
   const candidates: Array<WatchlistSummary & { score: number }> = [];
+
+  if (input.seedingRecommendation) {
+    candidates.push({
+      score:
+        input.seedingRecommendation.urgency === "Ready"
+          ? 5
+          : input.seedingRecommendation.severity === "high"
+            ? 6
+            : 5,
+      ...input.seedingRecommendation,
+    });
+  }
 
   if (
     typeof input.moisture?.rootZonePct === "number" &&
@@ -472,7 +489,15 @@ export function buildActionProps(
     defaultGrowthStage: defaultCropRules.crop.growthStage,
     gddBaseC: defaultCropRules.crop.gddBaseC,
   });
+  const resolvedRules = resolveCropRuleContext({
+    rulePack: prairieDefaultRulePack,
+    cropContext: {
+      cropType: cropContext?.cropType ?? rm.summary?.cropType ?? null,
+      growthStage: cropStagePresentation.ruleStage,
+    },
+  });
   const latestOpticalRaster = rm.imagery?.latestOpticalRasterObservation ?? null;
+  const latestObservation = rm.weather?.profile?.latestObservation ?? null;
   const opticalNdviAvg = averageMeasurement(latestOpticalRaster?.cells ?? [], "ndvi");
   const opticalNdreAvg = averageMeasurement(latestOpticalRaster?.cells ?? [], "ndre");
   const opticalSeasonality = resolveOpticalSeasonality({
@@ -574,6 +599,29 @@ export function buildActionProps(
     activeZoneCount > 0 ||
     primaryFinding != null ||
     primaryAlert != null;
+  const fieldAccessPresentation = resolveFieldAccessPresentation({
+    surfaceMoisturePct: latestObservation?.soilMoisturePct ?? null,
+    recentPrecipTotal72hMm: weatherSignals?.recentPrecipTotal72hMm ?? null,
+    freezeThawCycles7d: weatherSignals?.freezeThawCycles7d ?? null,
+  });
+  const seedingRecommendation =
+    resolveSeedingRecommendation({
+      cropLabel,
+      cropStagePresentation,
+      seedingThresholds: resolvedRules.seedingThresholds,
+      frostDamageTempC: resolvedRules.weatherRisk.frost.damageTempC,
+      frostKillTempC: resolvedRules.weatherRisk.frost.killTempC,
+      soilTemp6cmCurrentC:
+        weatherSignals?.soilTemp6cmCurrentC ??
+        latestObservation?.soilTemperature6cmC ??
+        null,
+      soilTemp6cmSustainedDays: weatherSignals?.soilTemp6cmSustainedDays ?? null,
+      surfaceMoisturePct: latestObservation?.soilMoisturePct ?? null,
+      fieldAccessPresentation,
+      frostRiskMinTempC7d: weatherSignals?.frostRiskMinTempC7d ?? null,
+      frostRiskNights7d: weatherSignals?.frostRiskNights7d ?? null,
+      weatherSourceLabel,
+    }) ?? null;
 
   const watchlistSummary =
     !hasActiveIntelligence
@@ -582,6 +630,22 @@ export function buildActionProps(
           weatherSignals,
           moistureSourceLabel,
           weatherSourceLabel,
+          seedingRecommendation:
+            seedingRecommendation == null
+              ? null
+              : {
+                  title: seedingRecommendation.title,
+                  severity: seedingRecommendation.severity,
+                  urgency: seedingRecommendation.urgency,
+                  dueDate: seedingRecommendation.dueDate,
+                  recommendation: seedingRecommendation.recommendation,
+                  explanation: seedingRecommendation.explanation,
+                  whyNow: seedingRecommendation.whyNow,
+                  inspectFirst: seedingRecommendation.inspectFirst,
+                  confidence: seedingRecommendation.confidence,
+                  signals: seedingRecommendation.signals,
+                  tags: seedingRecommendation.tags,
+                },
         })
       : null;
 

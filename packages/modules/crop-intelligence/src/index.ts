@@ -43,6 +43,7 @@ export {
   type DiseaseRiskModel,
   type DiseaseRiskRulePack,
   type MoistureStressRulePack,
+  type SeedingThresholdRulePack,
   type FrostRiskRulePack,
   type AtmosphericDemandRulePack,
   type WeatherRiskRulePack,

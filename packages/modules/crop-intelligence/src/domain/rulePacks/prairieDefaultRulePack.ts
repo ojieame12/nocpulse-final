@@ -35,6 +35,18 @@ export const prairieDefaultRulePack: RulePack = {
       severeWaterBalance72hMm: -6,
     },
   },
+  seedingThresholds: {
+    dedupeKey: "prairie-default-seeding",
+    label: "Prairie default seeding thresholds",
+    soilTempMinC: 5,
+    sustainedDays: 3,
+    surfaceMoistureMinPct: 40,
+    surfaceMoistureMaxPct: 85,
+    recentPrecipWarnMm72h: 10,
+    recentPrecipBlockMm72h: 20,
+    freezeThawWarnCount: 2,
+    freezeThawBlockCount: 4,
+  },
   diseaseRisk: {
     models: [
       {
@@ -105,6 +117,9 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Generic prairie crop",
       aliases: ["default", "mixed"],
       gddBaseC: 5,
+      seedingThresholds: {
+        soilTempMinC: 5,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },
@@ -134,6 +149,9 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Canola",
       aliases: ["rapeseed"],
       gddBaseC: 5,
+      seedingThresholds: {
+        soilTempMinC: 7,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },
@@ -165,6 +183,9 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Wheat",
       aliases: ["durum", "hrs", "cps", "spring wheat"],
       gddBaseC: 5,
+      seedingThresholds: {
+        soilTempMinC: 5,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },
@@ -192,6 +213,9 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Barley",
       aliases: [],
       gddBaseC: 5,
+      seedingThresholds: {
+        soilTempMinC: 5,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },
@@ -213,6 +237,9 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Rye",
       aliases: [],
       gddBaseC: 5,
+      seedingThresholds: {
+        soilTempMinC: 5,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },
@@ -226,6 +253,9 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Oats",
       aliases: [],
       gddBaseC: 5,
+      seedingThresholds: {
+        soilTempMinC: 5,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },
@@ -239,6 +269,9 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Flax",
       aliases: ["linseed"],
       gddBaseC: 5,
+      seedingThresholds: {
+        soilTempMinC: 6,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },
@@ -260,6 +293,9 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Peas",
       aliases: ["field peas", "pea"],
       gddBaseC: 5,
+      seedingThresholds: {
+        soilTempMinC: 4,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },
@@ -273,6 +309,9 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Lentils",
       aliases: ["lentil"],
       gddBaseC: 5,
+      seedingThresholds: {
+        soilTempMinC: 4,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },
@@ -296,6 +335,9 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Faba Bean",
       aliases: ["faba bean", "fababean", "faba"],
       gddBaseC: 5,
+      seedingThresholds: {
+        soilTempMinC: 4,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },
@@ -309,6 +351,10 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Soybean",
       aliases: ["soybeans", "soy"],
       gddBaseC: 10,
+      seedingThresholds: {
+        soilTempMinC: 10,
+        sustainedDays: 5,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },
@@ -336,6 +382,10 @@ export const prairieDefaultRulePack: RulePack = {
       label: "Corn",
       aliases: ["maize"],
       gddBaseC: 10,
+      seedingThresholds: {
+        soilTempMinC: 10,
+        sustainedDays: 5,
+      },
       defaultGrowthStage: "vegetative",
       stageProgression: [
         { stage: "pre-seed", minAccumulatedGdd: 0 },

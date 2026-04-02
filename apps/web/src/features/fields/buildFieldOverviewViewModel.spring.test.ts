@@ -1,21 +1,40 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { SeedingThresholdRulePack } from "@fieldpulse/module-crop-intelligence";
 import {
   isSpringSeedingContext,
   resolveFieldAccessPresentation,
+  resolveSeedingRecommendation,
   resolveSoilTempPresentation,
 } from "./buildFieldOverviewViewModel.spring";
+
+const PRESEED_STAGE = {
+  displayStageLabel: "Pre Seed",
+  ruleStage: "pre-seed",
+  thresholdStageLabel: "Pre Seed stage",
+  accumulatedGddLabel: "—",
+  gddUnitLabel: "Season heat units unavailable (base 5°C)",
+  stageSourceLabel: "Weather-derived stage still initializing",
+  hasCredibleAccumulatedGdd: false,
+} as const;
+
+const STANDARD_SEEDING_THRESHOLDS: SeedingThresholdRulePack = {
+  dedupeKey: "test-seeding",
+  label: "Test seeding thresholds",
+  soilTempMinC: 5,
+  sustainedDays: 3,
+  surfaceMoistureMinPct: 40,
+  surfaceMoistureMaxPct: 85,
+  recentPrecipWarnMm72h: 10,
+  recentPrecipBlockMm72h: 20,
+  freezeThawWarnCount: 2,
+  freezeThawBlockCount: 4,
+};
 
 test("isSpringSeedingContext detects early or unverified crop stages", () => {
   assert.equal(
     isSpringSeedingContext({
-      displayStageLabel: "Pre Seed",
-      ruleStage: "pre-seed",
-      thresholdStageLabel: "Pre Seed stage",
-      accumulatedGddLabel: "—",
-      gddUnitLabel: "Season heat units unavailable (base 5°C)",
-      stageSourceLabel: "Weather-derived stage still initializing",
-      hasCredibleAccumulatedGdd: false,
+      ...PRESEED_STAGE,
     }),
     true,
   );
@@ -92,4 +111,85 @@ test("resolveFieldAccessPresentation classifies workable and constrained fields"
       tone: "danger",
     },
   );
+});
+
+test("resolveSeedingRecommendation returns Too early when soil has not reached the crop threshold", () => {
+  const recommendation = resolveSeedingRecommendation({
+    cropLabel: "Canola",
+    cropStagePresentation: PRESEED_STAGE,
+    seedingThresholds: {
+      ...STANDARD_SEEDING_THRESHOLDS,
+      soilTempMinC: 7,
+    },
+    frostDamageTempC: -1,
+    frostKillTempC: -3,
+    soilTemp6cmCurrentC: 4.8,
+    soilTemp6cmSustainedDays: 0,
+    surfaceMoisturePct: 58,
+    fieldAccessPresentation: resolveFieldAccessPresentation({
+      surfaceMoisturePct: 58,
+      recentPrecipTotal72hMm: 4,
+      freezeThawCycles7d: 1,
+    }),
+    frostRiskMinTempC7d: 2.5,
+    frostRiskNights7d: 0,
+    weatherSourceLabel: "open-meteo · hourly-v1",
+  });
+
+  assert.equal(recommendation?.title, "Too early to seed");
+  assert.equal(recommendation?.urgency, "Watch");
+  assert.match(recommendation?.recommendation ?? "", /Hold seeding until canola seed-depth soil temperature reaches 7°C/i);
+});
+
+test("resolveSeedingRecommendation returns Hold when frost risk remains in the 7-day window", () => {
+  const recommendation = resolveSeedingRecommendation({
+    cropLabel: "Wheat",
+    cropStagePresentation: PRESEED_STAGE,
+    seedingThresholds: STANDARD_SEEDING_THRESHOLDS,
+    frostDamageTempC: -2,
+    frostKillTempC: -4,
+    soilTemp6cmCurrentC: 6.4,
+    soilTemp6cmSustainedDays: 3,
+    surfaceMoisturePct: 61,
+    fieldAccessPresentation: resolveFieldAccessPresentation({
+      surfaceMoisturePct: 61,
+      recentPrecipTotal72hMm: 4,
+      freezeThawCycles7d: 1,
+    }),
+    frostRiskMinTempC7d: -2.5,
+    frostRiskNights7d: 1,
+    weatherSourceLabel: "open-meteo · hourly-v1",
+  });
+
+  assert.equal(recommendation?.title, "Hold seeding for frost risk");
+  assert.equal(recommendation?.severity, "medium");
+  assert.match(recommendation?.whyNow ?? "", /lowest forecast low is -2\.5°C/i);
+});
+
+test("resolveSeedingRecommendation returns Seed now when soil, frost, and access align", () => {
+  const recommendation = resolveSeedingRecommendation({
+    cropLabel: "Peas",
+    cropStagePresentation: PRESEED_STAGE,
+    seedingThresholds: {
+      ...STANDARD_SEEDING_THRESHOLDS,
+      soilTempMinC: 4,
+    },
+    frostDamageTempC: -2,
+    frostKillTempC: -4,
+    soilTemp6cmCurrentC: 6.2,
+    soilTemp6cmSustainedDays: 3,
+    surfaceMoisturePct: 62,
+    fieldAccessPresentation: resolveFieldAccessPresentation({
+      surfaceMoisturePct: 62,
+      recentPrecipTotal72hMm: 3,
+      freezeThawCycles7d: 1,
+    }),
+    frostRiskMinTempC7d: 2.8,
+    frostRiskNights7d: 0,
+    weatherSourceLabel: "open-meteo · hourly-v1",
+  });
+
+  assert.equal(recommendation?.title, "Seeding window open");
+  assert.equal(recommendation?.urgency, "Ready");
+  assert.match(recommendation?.recommendation ?? "", /Seed now if field checks match this read/i);
 });

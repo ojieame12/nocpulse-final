@@ -197,7 +197,9 @@ export function buildReportProps(
       obs?.soilTemperature6cmC ??
       null,
     soilTemp6cmSustainedDays: weatherSignals?.soilTemp6cmSustainedDays ?? null,
-    thresholdC: weatherSignals?.provenance?.soilTempThresholdC ?? null,
+    thresholdC:
+      weatherSignals?.provenance?.soilTempThresholdC ??
+      resolvedRules.seedingThresholds.soilTempMinC,
   });
   const peakVpd = weatherSignals?.peakForecastVpdKpa24h ?? null;
   const waterBalance72h = weatherSignals?.netWaterBalance72hMm ?? null;
