@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Satellite, CloudSun, MapPin, Bell, BellOff, Ruler, Globe, User, Building2 } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { X, Satellite, CloudSun, MapPin, Bell, BellOff, Ruler, Globe, User, Building2, Archive, RotateCcw } from 'lucide-react';
 import { Card, Lbl, LblM, Big, Sub, Mono } from './fieldDetailCardPrimitives';
 import {
   normalizeWorkspaceSettings,
   type WorkspaceSettingsState,
 } from '../../features/settings/workspaceSettings';
+import { canManageWorkspace } from '../../features/settings/workspaceAccess';
 import { WorkspaceAccessCard } from './WorkspaceAccessCard';
 import { FieldShareCard } from './FieldShareCard';
 
@@ -16,9 +17,20 @@ export interface SettingsViewer {
   displayName: string;
   email: string | null;
   initials: string;
+  workspaceRole?: 'owner' | 'manager' | 'member' | 'viewer';
   workspaceRoleLabel: string;
   workspaceName: string | null;
 }
+
+type ArchivedFieldListItem = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  areaHa: number;
+  legalLandDescription: string | null;
+  archivedAt: string;
+  archivedBy: string | null;
+};
 
 interface SettingsPanelProps {
   onClose?: () => void;
@@ -26,6 +38,13 @@ interface SettingsPanelProps {
   viewer?: SettingsViewer | null;
   fieldId?: string | null;
   fieldName?: string | null;
+  onArchivedFieldRestored?: (field: {
+    id: string;
+    workspaceId: string;
+    name: string;
+    areaHa: number;
+    legalLandDescription: string | null;
+  }) => void;
 }
 
 function readPersistedSettings(storageKey: string): WorkspaceSettingsState | null {
@@ -153,6 +172,7 @@ export function SettingsPanel({
   viewer = null,
   fieldId = null,
   fieldName = null,
+  onArchivedFieldRestored,
 }: SettingsPanelProps) {
   const profileName = viewer?.displayName ?? 'John Draper';
   const profileInitials = viewer?.initials ?? 'JD';
@@ -166,6 +186,10 @@ export function SettingsPanel({
   const [units, setUnits] = useState<'metric' | 'imperial'>('metric');
   const [tempUnit, setTempUnit] = useState<'celsius' | 'fahrenheit'>('celsius');
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [archivedFields, setArchivedFields] = useState<ArchivedFieldListItem[]>([]);
+  const [archivedFieldsLoaded, setArchivedFieldsLoaded] = useState(false);
+  const [archivedFieldsError, setArchivedFieldsError] = useState<string | null>(null);
+  const [restorePendingFieldId, setRestorePendingFieldId] = useState<string | null>(null);
   const hasCompletedInitialLoad = useRef(false);
   const storageKey = useMemo(
     () =>
@@ -174,6 +198,10 @@ export function SettingsPanel({
         : 'fieldpulse:web:settings',
     [workspaceId],
   );
+  const canManageArchivedFields =
+    !!workspaceId &&
+    !!viewer?.workspaceRole &&
+    canManageWorkspace(viewer.workspaceRole);
 
   useEffect(() => {
     let cancelled = false;
@@ -228,6 +256,61 @@ export function SettingsPanel({
   }, [storageKey, workspaceId]);
 
   useEffect(() => {
+    let cancelled = false;
+    const activeWorkspaceId = workspaceId;
+
+    if (!canManageArchivedFields || !activeWorkspaceId) {
+      setArchivedFields([]);
+      setArchivedFieldsLoaded(false);
+      setArchivedFieldsError(null);
+      return;
+    }
+
+    const workspaceIdForRequest = activeWorkspaceId;
+
+    async function loadArchivedFields() {
+      try {
+        const result = await readApiResult<{ fields: ArchivedFieldListItem[] }>(
+          await fetch(
+            `/api/fields?status=archived&workspaceId=${encodeURIComponent(workspaceIdForRequest)}`,
+            {
+              cache: 'no-store',
+              headers: {
+                'x-fieldpulse-workspace-id': workspaceIdForRequest,
+              },
+            },
+          ),
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setArchivedFields(result.fields);
+        setArchivedFieldsError(null);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setArchivedFieldsError(
+          error instanceof Error ? error.message : 'Unable to load archived fields.',
+        );
+      } finally {
+        if (!cancelled) {
+          setArchivedFieldsLoaded(true);
+        }
+      }
+    }
+
+    void loadArchivedFields();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageArchivedFields, workspaceId]);
+
+  useEffect(() => {
     if (!settingsLoaded || !hasCompletedInitialLoad.current || typeof window === 'undefined') {
       return;
     }
@@ -271,6 +354,43 @@ export function SettingsPanel({
     storageKey,
     workspaceId,
   ]);
+
+  async function handleRestoreField(field: ArchivedFieldListItem) {
+    if (!canManageArchivedFields || restorePendingFieldId) {
+      return;
+    }
+
+    setRestorePendingFieldId(field.id);
+
+    try {
+      const result = await readApiResult<{
+        field: {
+          id: string;
+          workspaceId: string;
+          name: string;
+          areaHa: number;
+          legalLandDescription: string | null;
+        };
+      }>(
+        await fetch(`/api/fields/${field.id}/restore`, {
+          method: 'POST',
+          headers: {
+            'x-fieldpulse-workspace-id': field.workspaceId,
+          },
+        }),
+      );
+
+      setArchivedFields((current) => current.filter((entry) => entry.id !== field.id));
+      setArchivedFieldsError(null);
+      onArchivedFieldRestored?.(result.field);
+    } catch (error) {
+      setArchivedFieldsError(
+        error instanceof Error ? error.message : 'Unable to restore this field.',
+      );
+    } finally {
+      setRestorePendingFieldId(null);
+    }
+  }
 
   return (
     <div className="fdp" style={{ position: 'absolute', top: 'var(--space-lg)', right: 'var(--space-lg)', bottom: 'var(--space-xl)' }}>
@@ -328,6 +448,69 @@ export function SettingsPanel({
         />
 
         <WorkspaceAccessCard workspaceId={workspaceId} />
+
+        {canManageArchivedFields ? (
+          <Card span={-1} style={{ gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Archive size={14} style={{ color: 'var(--text-muted)' }} />
+              <Lbl>ARCHIVED FIELDS</Lbl>
+            </div>
+            {!archivedFieldsLoaded ? (
+              <Sub>Loading archived field history…</Sub>
+            ) : archivedFieldsError ? (
+              <Sub>{archivedFieldsError}</Sub>
+            ) : archivedFields.length === 0 ? (
+              <Sub>No archived fields in this workspace.</Sub>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {archivedFields.map((field) => (
+                  <div
+                    key={field.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      padding: '8px 0',
+                      borderBottom: '1px solid var(--border-light)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                      <span className="fdp-big fdp-big--14">{field.name}</span>
+                      <Sub>
+                        {field.legalLandDescription?.trim()
+                          ? `${field.legalLandDescription} · ${field.areaHa.toFixed(1)} ha`
+                          : `${field.areaHa.toFixed(1)} ha`}
+                      </Sub>
+                      <Mono>{new Date(field.archivedAt).toLocaleDateString()}</Mono>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleRestoreField(field)}
+                      disabled={restorePendingFieldId === field.id}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '7px 10px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border-light)',
+                        background: 'var(--surface-white)',
+                        color: 'var(--text-primary)',
+                        cursor: restorePendingFieldId === field.id ? 'wait' : 'pointer',
+                        opacity: restorePendingFieldId === field.id ? 0.7 : 1,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <RotateCcw size={12} />
+                      {restorePendingFieldId === field.id ? 'Restoring…' : 'Restore'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        ) : null}
 
         {/* ── Notifications ── */}
         <Card span={-1} style={{ gap: 4 }}>

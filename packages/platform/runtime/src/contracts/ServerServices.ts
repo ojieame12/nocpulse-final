@@ -47,6 +47,7 @@ import type {
   FieldOnboardingPlan,
 } from "@fieldpulse/module-field-onboarding";
 import type {
+  ArchivedFieldSummary,
   CreateFieldInput,
   FieldDetail,
   FieldOverview,
@@ -161,6 +162,8 @@ export type DeleteFieldInput = {
 export type ArchiveFieldInput = DeleteFieldInput & {
   actorUserId: UserId;
 };
+
+export type RestoreFieldInput = DeleteFieldInput;
 
 export type LoadFieldDetailByWorkspaceInput = {
   workspaceId: WorkspaceId;
@@ -682,11 +685,15 @@ export type ServerServices = {
     }): Promise<AuthenticatedActor | null>;
   };
   fields: {
+    listArchivedFields(
+      input: { workspaceId: WorkspaceId },
+    ): Promise<readonly ArchivedFieldSummary[]>;
     renameField(input: RenameFieldInput): Promise<FieldDetail>;
     setLegalLandDescription(
       input: UpdateFieldLegalLandDescriptionInput,
     ): Promise<FieldDetail>;
     archiveField(input: ArchiveFieldInput): Promise<void>;
+    restoreField(input: RestoreFieldInput): Promise<FieldDetail>;
     deleteField(input: DeleteFieldInput): Promise<void>;
   };
   fieldIntake: {

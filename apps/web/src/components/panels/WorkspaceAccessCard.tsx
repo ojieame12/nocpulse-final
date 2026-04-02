@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import React, { useEffect, useState, type FormEvent } from "react";
 import { Save, ShieldPlus, UserMinus, Users } from "lucide-react";
 import {
   describeWorkspaceInviteRole,

@@ -654,6 +654,9 @@ export function createServerServices(
       },
     },
     fields: {
+      async listArchivedFields(input) {
+        return repositories.fields.listArchivedByWorkspace(input.workspaceId);
+      },
       async renameField(input) {
         await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
 
@@ -680,6 +683,9 @@ export function createServerServices(
           input.fieldId,
           input.actorUserId,
         );
+      },
+      async restoreField(input) {
+        return repositories.fields.restoreField(input.workspaceId, input.fieldId);
       },
       async deleteField(input) {
         await requireFieldDetail(repositories, input.workspaceId, input.fieldId);

@@ -269,6 +269,12 @@ function removeSidebarField(fields: SidebarFieldItem[], fieldId: string) {
   return fields.filter((field) => field.id !== fieldId);
 }
 
+function insertSidebarField(fields: SidebarFieldItem[], field: SidebarFieldItem) {
+  const next = [...removeSidebarField(fields, field.id), field];
+  next.sort((left, right) => left.name.localeCompare(right.name));
+  return next;
+}
+
 function patchFieldViewModelName(field: FieldViewModel, name: string): FieldViewModel {
   return {
     ...field,
@@ -1382,6 +1388,26 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     [removeFieldFromWorkspace, workspaceId],
   );
 
+  const handleArchivedFieldRestored = useCallback(
+    (field: {
+      id: string;
+      workspaceId: string;
+      name: string;
+      areaHa: number;
+      legalLandDescription: string | null;
+    }) => {
+      syncSidebarFieldsAcrossCache((fields) =>
+        insertSidebarField(fields, {
+          id: field.id,
+          name: field.name,
+          area: `${field.areaHa.toFixed(1)} ha`,
+          legalLandDescription: field.legalLandDescription,
+        }),
+      );
+    },
+    [syncSidebarFieldsAcrossCache],
+  );
+
   const handleFieldsChanged = useCallback(async (result: {
     preferredFieldId?: string | null;
     fieldIds: string[];
@@ -2226,6 +2252,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             viewer={viewer}
             fieldId={fieldData.fieldId}
             fieldName={fieldData.fieldName}
+            onArchivedFieldRestored={handleArchivedFieldRestored}
             onClose={() => switchPanel('detail')}
           />
         );

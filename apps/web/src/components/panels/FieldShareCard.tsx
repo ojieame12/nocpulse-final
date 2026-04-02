@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Copy, Link2, ShieldX } from "lucide-react";
 import { Card, Lbl, Mono, Sub } from "./fieldDetailCardPrimitives";
 
