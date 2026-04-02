@@ -32,6 +32,7 @@ export async function GET(
       areaLabel: viewModel.areaHaLabel,
       summary: viewModel.summary,
       report: panels.reportPanel,
+      action: panels.actionPanel,
     });
 
     return new Response(Buffer.from(prepared.bytes), {

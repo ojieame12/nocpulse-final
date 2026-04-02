@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { prepareFieldDetailReportArtifact } from "./prepareFieldDetailReportArtifact";
+import type { FieldActionProps } from "../../components/panels/ActionTab";
 import type { FieldReportProps } from "../../components/panels/ReportTab";
 import type { FieldSummaryProps } from "../../components/panels/SummaryTab";
 
@@ -71,9 +72,43 @@ function makeMinimalSummary(overrides?: Partial<FieldSummaryProps>): FieldSummar
   };
 }
 
+function makeMinimalAction(overrides?: Partial<FieldActionProps>): FieldActionProps {
+  return {
+    name: "Test Field",
+    lld: "NE-01-001-01-W4",
+    recommendation: "Scout low-moisture pockets before the next spray pass",
+    dueDate: "Today",
+    explanation: "Modeled moisture is slipping below the preferred range in the driest cells.",
+    urgency: "Priority this week",
+    confidence: "Medium",
+    signalCount: 3,
+    signals: [
+      { label: "Moisture stress watch", color: "yellow" },
+      { label: "Drying weather", color: "yellow" },
+    ],
+    questions: [
+      {
+        question: "What should I check first?",
+        answer: "Walk the driest quarter first and verify rooting depth before changing irrigation or spray timing.",
+      },
+    ],
+    intelligenceState: "active",
+    intelligenceSource: "findings",
+    intelligenceSourceLabel: "Intelligence findings",
+    intelligenceFreshnessLabel: "Updated 6h ago",
+    activeFindingCount: 2,
+    activeZoneCount: 1,
+    activeAlertCount: 1,
+    topRiskTitle: "Moisture stress watch",
+    topRiskSeverity: "medium",
+    ...overrides,
+  };
+}
+
 function generatePdf(
   reportOverrides?: Partial<FieldReportProps> | null,
   summaryOverrides?: Partial<FieldSummaryProps> | null,
+  actionOverrides?: Partial<FieldActionProps> | null,
 ) {
   return prepareFieldDetailReportArtifact({
     fieldId: "field-test",
@@ -81,6 +116,10 @@ function generatePdf(
     areaLabel: "100 ha",
     report: reportOverrides === null ? null : makeMinimalReport(reportOverrides),
     summary: summaryOverrides === null ? null : makeMinimalSummary(summaryOverrides),
+    action:
+      actionOverrides === undefined || actionOverrides === null
+        ? null
+        : makeMinimalAction(actionOverrides),
     generatedAt: "2026-04-01T12:00:00.000Z",
   });
 }
@@ -260,6 +299,7 @@ describe("full report integration", () => {
     areaLabel: "64.7 ha",
     report,
     summary,
+    action: null,
     generatedAt: "2026-03-30T07:30:00.000Z",
   });
 
@@ -344,6 +384,81 @@ describe("null and empty data handling", () => {
   it("handles empty findings array", () => {
     const prepared = generatePdf({ findings: [] });
     assert.ok(prepared.metadata.byteSize > 0);
+  });
+});
+
+describe("truth and action sections", () => {
+  it("renders data quality and confidence context from summary metadata", () => {
+    const prepared = generatePdf(
+      undefined,
+      {
+        updatedLabel: "UPDATED APR 2, 2026",
+        sourceTagExtended: "Satellite-derived · SAR 18h ago",
+        statusLabel: "Watch",
+        availableWaterMm: "41 mm",
+        depletionPct: 38,
+        historicalAnomaly: {
+          percentile: 18,
+          description: "Drier than normal versus the historical record",
+          anomalyClass: "unusually-dry",
+        },
+        confidenceBreakdown: {
+          freshness: "Recent",
+          agreement: "Weather and SAR agree",
+          resolution: "20 m cells",
+          scaleFit: "Field scale",
+          sourceAge: "Recent",
+          coverage: "20 m cells",
+        },
+        dataSources: {
+          satellite: "Sentinel-1 SAR",
+          weather: "Open-Meteo",
+          soil: "Modeled soil profile",
+        },
+        dataQuality: {
+          label: "Ready",
+          tone: "positive",
+          summary: "This field has strong source-backed moisture coverage.",
+          reasons: ["Recent SAR pass.", "Weather and soil inputs are aligned."],
+        },
+      },
+      null,
+    );
+    const pdfText = Buffer.from(prepared.bytes).toString("utf8");
+    assert.match(pdfText, /DATA QUALITY & CONFIDENCE/i);
+    assert.match(pdfText, /Ready Data/i);
+    assert.match(pdfText, /Satellite-derived/i);
+    assert.match(pdfText, /41 mm/i);
+  });
+
+  it("renders a recommended action section when action context is provided", () => {
+    const prepared = generatePdf(
+      undefined,
+      undefined,
+      {
+        recommendation: "Inspect low-moisture zones before tomorrow morning",
+        dueDate: "Tomorrow morning",
+        urgency: "Urgent today",
+        confidence: "High confidence",
+        signalCount: 4,
+        activeAlertCount: 2,
+        activeFindingCount: 3,
+        activeZoneCount: 2,
+        topRiskTitle: "Moisture stress watch",
+        topRiskSeverity: "high",
+        questions: [
+          {
+            question: "What should I do first?",
+            answer: "Check the driest cells near the south edge and confirm whether the stress is real before changing irrigation timing.",
+          },
+        ],
+      },
+    );
+    const pdfText = Buffer.from(prepared.bytes).toString("utf8");
+    assert.match(pdfText, /RECOMMENDED ACTION/i);
+    assert.match(pdfText, /Inspect low-moisture zones before tomorrow morning/i);
+    assert.match(pdfText, /Urgent today/i);
+    assert.match(pdfText, /Moisture stress watch/i);
   });
 });
 
@@ -640,6 +755,7 @@ describe("output metadata", () => {
       areaLabel: "160 ac",
       report: makeMinimalReport(),
       summary: makeMinimalSummary(),
+      action: null,
       generatedAt: "2026-04-01T12:00:00.000Z",
     });
     assert.equal(prepared.contentType, "application/pdf");
@@ -653,6 +769,7 @@ describe("output metadata", () => {
       areaLabel: "50 ha",
       report: makeMinimalReport(),
       summary: makeMinimalSummary(),
+      action: null,
       generatedAt: "2026-04-01T00:00:00.000Z",
     });
     assert.match(prepared.metadata.artifactKey, /detail-reports\//);
