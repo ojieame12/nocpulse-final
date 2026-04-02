@@ -2,7 +2,7 @@ import {
   prairieDefaultRulePack,
   resolveCropRuleContext,
 } from "@fieldpulse/module-crop-intelligence";
-import type { FieldCropProps } from "./tabs/CropTab";
+import type { CropAlertCard, FieldCropProps } from "./tabs/CropTab";
 import {
   averageMeasurement,
 } from "./buildFieldOverviewViewModel.raster";
@@ -12,6 +12,9 @@ import {
   resolveOpticalSeasonality,
   titleCaseStage,
 } from "./buildFieldOverviewViewModel.cropSignals";
+import {
+  filterFieldQualityDependentAlertRecords,
+} from "./buildFieldOverviewViewModel.shared";
 import {
   isSpringSeedingContext,
   resolveFieldAccessPresentation,
@@ -151,6 +154,15 @@ export function buildCropProps(rm: any): FieldCropProps {
   const peakVpd = weatherSignals?.peakForecastVpdKpa24h ?? null;
   const waterBalance24h = weatherSignals?.netWaterBalance24hMm ?? null;
   const waterBalance72h = weatherSignals?.netWaterBalance72hMm ?? null;
+  const dataQualityLabel = rm.summary?.dataQuality?.label ?? null;
+  const presentedFindings = filterFieldQualityDependentAlertRecords(
+    rm.findings ?? [],
+    dataQualityLabel,
+  );
+  const presentedAlerts = filterFieldQualityDependentAlertRecords(
+    rm.alerts ?? [],
+    dataQualityLabel,
+  );
 
   const thresholdRows: FieldCropProps["thresholds"] = [
     {
@@ -362,7 +374,7 @@ export function buildCropProps(rm: any): FieldCropProps {
           : metricTone("positive");
   const gddTone = metricTone("positive");
 
-  const diseaseRisks = (rm.findings ?? [])
+  const diseaseRisks: FieldCropProps["diseaseRisks"][number][] = presentedFindings
     .filter((finding: any) => finding.family === "disease_risk")
     .slice(0, 3)
     .map((finding: any) => {
@@ -389,17 +401,30 @@ export function buildCropProps(rm: any): FieldCropProps {
     });
 
   if (diseaseRisks.length === 0) {
-    const tone = metricTone("positive");
-    diseaseRisks.push({
-      name: "No active disease findings",
-      desc: canopySignalPresentation.diseaseClearDescription,
-      pct: "CLEAR",
-      color: tone.valueColor,
-      bg: tone.bg,
-    });
+    if (dataQualityLabel != null && dataQualityLabel !== "Ready") {
+      const tone = metricTone("warning");
+      diseaseRisks.push({
+        name: "Disease model held back",
+        desc: `Disease risk interpretation is being suppressed until field context is Ready. Current field quality is ${dataQualityLabel.toLowerCase()}.`,
+        pct: dataQualityLabel.toUpperCase(),
+        color: tone.valueColor,
+        bg: tone.bg,
+        recommendedAction: undefined,
+      });
+    } else {
+      const tone = metricTone("positive");
+      diseaseRisks.push({
+        name: "No active disease findings",
+        desc: canopySignalPresentation.diseaseClearDescription,
+        pct: "CLEAR",
+        color: tone.valueColor,
+        bg: tone.bg,
+        recommendedAction: undefined,
+      });
+    }
   }
 
-  const cropAlerts = (rm.alerts ?? [])
+  const cropAlerts: CropAlertCard[] = presentedAlerts
     .filter((alert: any) =>
       ["moisture_stress", "weather_risk", "disease_risk", "hail_risk"].includes(alert.family),
     )
@@ -421,7 +446,7 @@ export function buildCropProps(rm: any): FieldCropProps {
               : alert.family === "moisture_stress"
                 ? "moisture"
                 : alert.family === "hail_risk"
-                  ? "hail"
+                  ? "temperature"
                   : "ok",
         iconColor: tone.valueColor,
         bg: tone.bg,
@@ -431,14 +456,25 @@ export function buildCropProps(rm: any): FieldCropProps {
     });
 
   if (cropAlerts.length === 0) {
-    const tone = metricTone("positive");
-    cropAlerts.push({
-      iconKey: "ok",
-      iconColor: tone.valueColor,
-      bg: tone.bg,
-      title: "No active crop alerts",
-      desc: "Moisture, weather, hail, and disease alert families are currently clear for this field.",
-    });
+    if (dataQualityLabel != null && dataQualityLabel !== "Ready") {
+      const tone = metricTone("warning");
+      cropAlerts.push({
+        iconKey: "ok",
+        iconColor: tone.valueColor,
+        bg: tone.bg,
+        title: "Field-dependent crop alerts held back",
+        desc: `Only independent weather and hail alerts will surface until field context is Ready. Current field quality is ${dataQualityLabel.toLowerCase()}.`,
+      });
+    } else {
+      const tone = metricTone("positive");
+      cropAlerts.push({
+        iconKey: "ok",
+        iconColor: tone.valueColor,
+        bg: tone.bg,
+        title: "No active crop alerts",
+        desc: "Moisture, weather, hail, and disease alert families are currently clear for this field.",
+      });
+    }
   }
 
   const provenanceChips = [

@@ -18,6 +18,7 @@ import {
   filterFieldQualityDependentAlertRecords,
   resolveHistoricalAnomalyFromReadModel,
 } from "./buildFieldOverviewViewModel.shared";
+import { buildCropProps } from "./buildFieldOverviewViewModel.crop";
 
 function createBaseReadModel() {
   return {
@@ -892,6 +893,84 @@ test("buildActionProps suppresses heuristic watchlists when field data quality i
   assert.match(action.explanation, /heuristic watchlists stay suppressed/i);
   assert.match(action.questions[1]?.answer ?? "", /watchlist heuristics are being held back/i);
   assert.equal(action.signalCount, 0);
+});
+
+test("buildCropProps suppresses field-dependent disease and crop all-clear copy on limited fields", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    summary: {
+      ...createBaseReadModel().summary,
+      dataQuality: {
+        label: "Limited",
+      },
+    },
+    findings: [],
+    alerts: [],
+    imagery: {},
+    weather: {
+      profile: {
+        latestObservation: null,
+      },
+      signals: null,
+    },
+  };
+
+  const crop = buildCropProps(readModel);
+
+  assert.equal(crop.diseaseRisks[0]?.name, "Disease model held back");
+  assert.match(crop.diseaseRisks[0]?.desc ?? "", /suppressed until field context is Ready/i);
+  assert.equal(crop.alerts[0]?.title, "Field-dependent crop alerts held back");
+  assert.match(crop.alerts[0]?.desc ?? "", /Only independent weather and hail alerts will surface/i);
+});
+
+test("buildCropProps keeps independent weather alerts visible on limited fields", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    summary: {
+      ...createBaseReadModel().summary,
+      dataQuality: {
+        label: "Limited",
+      },
+    },
+    findings: [
+      {
+        id: "finding-1",
+        family: "disease_risk",
+        severity: "medium",
+        title: "Blackleg watch",
+        summary: "Humidity is supporting disease pressure.",
+      },
+    ],
+    alerts: [
+      {
+        id: "alert-1",
+        family: "moisture_stress",
+        severity: "medium",
+        title: "Moisture stress building",
+        summary: "Drying is starting to spread.",
+      },
+      {
+        id: "alert-2",
+        family: "weather_risk",
+        severity: "critical",
+        title: "Critical frost risk next 24h",
+        summary: "Forecast minimum breaches the frost threshold.",
+      },
+    ],
+    imagery: {},
+    weather: {
+      profile: {
+        latestObservation: null,
+      },
+      signals: null,
+    },
+  };
+
+  const crop = buildCropProps(readModel);
+
+  assert.equal(crop.diseaseRisks[0]?.name, "Disease model held back");
+  assert.equal(crop.alerts.length, 1);
+  assert.equal(crop.alerts[0]?.title, "Critical frost risk next 24h");
 });
 
 test("buildActionProps prioritizes spring seeding readiness over frost watch when seed-depth temperature is still missing", () => {
