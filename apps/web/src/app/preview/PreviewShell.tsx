@@ -91,6 +91,7 @@ export type PreviewShellProps = {
 };
 
 import React from "react";
+import { WelcomeModal } from "../../components/ui/WelcomeModal";
 function StreamingPanels({
   promise,
   onResolve,
@@ -580,6 +581,11 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
   const failedRequestsRef = useRef(
     new Map<string, { retryAfter: number; summary: string }>(),
   );
+
+  /* Welcome modal for fresh workspaces */
+  const isEmptyWorkspace = isPlaceholderFieldId(activeFieldId) && sidebarFields.length === 0;
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+  const showWelcome = isEmptyWorkspace && !welcomeDismissed;
 
   /* Onboarding dispatch statuses — owned here so they survive panel switches */
   const [onboardingStatuses, setOnboardingStatuses] = useState<Map<string, PreviewJobDispatchSnapshot>>(new Map());
@@ -1471,13 +1477,20 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
           return;
         }
 
-        /* All dispatches finished — refresh the active field and clean up. */
+        /* All dispatches finished — refresh the active field and clean up.
+           Re-run the chooser so that hydration summaries collected during
+           polling are considered and thin/broken fields stay excluded even
+           when only a single field was imported. */
         const refreshFieldId = isPlaceholderFieldId(activeFieldId)
           ? (
-              pendingOnboardingWatch.preferredFieldId ??
-              (pendingOnboardingWatch.fieldIds.length === 1
-                ? (pendingOnboardingWatch.fieldIds[0] ?? null)
-                : null)
+              chooseFirstInsightField({
+                workspaceId: pendingOnboardingWatch.workspaceId ?? workspaceId,
+                preferredFieldId: pendingOnboardingWatch.preferredFieldId ?? null,
+                fieldEntries:
+                  Array.from(pendingOnboardingWatch.dispatchFieldMap.values()).map(
+                    (info) => ({ fieldId: info.fieldId, fieldName: info.fieldLabel }),
+                  ),
+              })
             )
           : activeFieldId;
 
@@ -1989,6 +2002,15 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
   return (
     <ThemeContext.Provider value={theme}>
     <div className="app-shell" data-theme={theme}>
+      {showWelcome && (
+        <WelcomeModal
+          onAddField={() => {
+            setWelcomeDismissed(true);
+            switchPanel('add-field');
+          }}
+          onDismiss={() => setWelcomeDismissed(true)}
+        />
+      )}
       <TopBar
         activeNav={activeNav}
         onNavChange={handleNavChange}
