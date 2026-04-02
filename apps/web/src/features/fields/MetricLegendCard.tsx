@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useAppTheme } from "../../components/layout/WorkspaceShell";
 import type {
   FieldAgronomicSurfaceMetricKey,
@@ -79,6 +79,8 @@ function rampToGradient(ramp: ColorRamp): string {
 
 export type MetricLegendCardProps = {
   metricKey: FieldAgronomicSurfaceMetricKey;
+  /** Requested metric selection for the switcher pills. Defaults to the rendered metric. */
+  selectedMetricKey?: FieldAgronomicSurfaceMetricKey;
   metricAveragePct: number | null;
   hoveredMetricPct?: number | null;
   confidence?: "low" | "medium" | "high";
@@ -106,6 +108,7 @@ export type MetricLegendCardProps = {
 
 export function MetricLegendCard({
   metricKey,
+  selectedMetricKey,
   metricAveragePct,
   hoveredMetricPct = null,
   confidence,
@@ -133,6 +136,7 @@ export function MetricLegendCard({
   const avgMarkerLeft = markerOffset(metricAveragePct);
   const hoverMarkerLeft = markerOffset(hoveredMetricPct);
 
+  const activeSwitcherMetricKey = selectedMetricKey ?? metricKey;
   const switcherMetrics =
     allMetrics && allMetrics.length > 0
       ? allMetrics
@@ -177,7 +181,7 @@ export function MetricLegendCard({
           }}
         >
           {switcherMetrics.map((metric) => {
-            const isActive = metric === metricKey;
+            const isActive = metric === activeSwitcherMetricKey;
             const isAvailable = availableMetricSet.has(metric);
             const availabilityBadge = isAvailable
               ? resolveMetricAvailabilityBadge(
@@ -195,6 +199,7 @@ export function MetricLegendCard({
                   onMetricChange?.(metric);
                 }}
                 disabled={!isAvailable}
+                aria-pressed={isActive}
                 style={{
                   flex: 1,
                   display: "flex",
