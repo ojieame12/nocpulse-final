@@ -68,6 +68,7 @@ import {
   AddFieldPanel,
   type CommitFieldHydrationSummary,
 } from "../../components/panels/AddFieldPanel";
+import { HydrationOverlay } from "../../components/ui/HydrationOverlay";
 
 export interface FieldPageShellProps {
   workspaceId?: string | null;
@@ -1782,6 +1783,18 @@ export function FieldPageShell({
     <>
       {panel}
       {panelReopenPill}
+      <HydrationOverlay
+        active={
+          panelView === 'detail' &&
+          fieldOnboardingProgress.has(activeFieldId) &&
+          (fieldOnboardingProgress.get(activeFieldId)?.status === 'queued' ||
+            fieldOnboardingProgress.get(activeFieldId)?.status === 'running')
+        }
+        fieldName={activeFieldName}
+        onboardingStatus={fieldOnboardingProgress.get(activeFieldId) ?? null}
+        progressMessage={fieldOnboardingProgress.get(activeFieldId)?.phaseLabel ?? null}
+        prebuiltStages={prebuiltStagesByField.get(activeFieldId) ?? null}
+      />
     </>
   ) : null;
 

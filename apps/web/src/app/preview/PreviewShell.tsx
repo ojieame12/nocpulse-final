@@ -51,6 +51,10 @@ import {
   type FirstInsightFieldEntry,
 } from '../../features/fields/firstInsightChooser';
 import { resolvePreviewPostOnboardingFieldId } from './resolvePreviewPostOnboardingFieldId';
+import {
+  buildWorkspaceFirstInsightSummary,
+  type WorkspaceFirstInsightFieldSnapshot,
+} from '../../features/fields/workspaceFirstInsightSummary';
 import type { FieldCropProps as LiveCropPanelProps } from '../../features/fields/tabs/CropTab';
 
 /* ── Types ── */
@@ -92,6 +96,8 @@ export type PreviewShellProps = {
 };
 
 import React from "react";
+import { WelcomeModal } from "../../components/ui/WelcomeModal";
+import { HydrationOverlay } from "../../components/ui/HydrationOverlay";
 function StreamingPanels({
   promise,
   onResolve,
@@ -573,6 +579,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
   );
   const [pendingOnboardingWatch, setPendingOnboardingWatch] =
     useState<PendingOnboardingWatch | null>(null);
+  const [fieldCacheRevision, setFieldCacheRevision] = useState(0);
   const fieldRequestSequenceRef = useRef(0);
   const fieldCacheRef = useRef(new Map<string, FieldViewModel>([
     [initial.fieldId, initial],
@@ -742,6 +749,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
 
   const applyFieldData = useCallback((nextField: FieldViewModel) => {
     fieldCacheRef.current.set(nextField.fieldId, nextField);
+    setFieldCacheRevision((revision) => revision + 1);
     setFieldData(nextField);
     setSidebarFields(nextField.sidebarFields);
     setWorkspaceId(nextField.workspaceId);
@@ -766,6 +774,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       }
 
       fieldCacheRef.current = nextCache;
+      setFieldCacheRevision((revision) => revision + 1);
     },
     [],
   );
@@ -779,6 +788,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
 
       if (cached) {
         fieldCacheRef.current.set(fieldId, update(cached));
+        setFieldCacheRevision((revision) => revision + 1);
       }
 
       setFieldData((prev) => (prev.fieldId === fieldId ? update(prev) : prev));
@@ -887,6 +897,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
 
         const nextField = toFieldViewModel(data);
         fieldCacheRef.current.set(nextField.fieldId, nextField);
+        setFieldCacheRevision((revision) => revision + 1);
         failedRequestsRef.current.delete(nextField.fieldId);
         return nextField;
       })()
@@ -1175,6 +1186,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       fieldCacheRef.current.delete(fieldId);
       inflightRequestsRef.current.delete(fieldId);
       failedRequestsRef.current.delete(fieldId);
+      setFieldCacheRevision((revision) => revision + 1);
       setRevealedFieldId(null);
       setActivePanel('detail');
       setPanelAnim('entering');
@@ -1194,6 +1206,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
           [],
         );
         fieldCacheRef.current.set(EMPTY_PREVIEW_FIELD_ID, emptyField);
+        setFieldCacheRevision((revision) => revision + 1);
         setActiveFieldId(EMPTY_PREVIEW_FIELD_ID);
         applyFieldData(emptyField);
         setIsLoadingField(false);
@@ -1770,7 +1783,38 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     }
 
     return { fields, zones, findings };
-  }, [sidebarFields, fieldData]); // re-derive when fields or active field data changes
+  }, [fieldCacheRevision, sidebarFields, fieldData]); // re-derive when cache or active field data changes
+
+  const workspaceFirstInsightSummary = useMemo(() => {
+    const fieldSnapshots: WorkspaceFirstInsightFieldSnapshot[] = sidebarFields
+      .map((field) => {
+        const cachedField = fieldCacheRef.current.get(field.id);
+        if (!cachedField) {
+          return null;
+        }
+
+        return {
+          fieldId: field.id,
+          fieldName: cachedField.fieldName ?? field.name,
+          summary: cachedField.summary,
+        } satisfies WorkspaceFirstInsightFieldSnapshot;
+      })
+      .filter((field): field is WorkspaceFirstInsightFieldSnapshot => field != null);
+
+    if (fieldSnapshots.length === 0 && !isPlaceholderFieldId(fieldData.fieldId)) {
+      fieldSnapshots.push({
+        fieldId: fieldData.fieldId,
+        fieldName: fieldData.fieldName,
+        summary: fieldData.summary,
+      });
+    }
+
+    return buildWorkspaceFirstInsightSummary({
+      workspaceId,
+      activeFieldId,
+      fields: fieldSnapshots,
+    });
+  }, [activeFieldId, fieldCacheRevision, fieldData, sidebarFields, workspaceId]);
 
   /* ── Global ⌘K shortcut ── */
   useEffect(() => {
@@ -1866,6 +1910,8 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       onboardingStatus={fieldOnboardingProgress.get(fieldData.fieldId) ?? null}
       progressMessage={fieldOnboardingProgress.get(fieldData.fieldId)?.phaseLabel ?? null}
       prebuiltStages={prebuiltStagesByField.get(fieldData.fieldId) ?? null}
+      hydrationConfidence={hydrationConfidenceByField.get(fieldData.fieldId) ?? null}
+      workspaceFirstInsightSummary={workspaceFirstInsightSummary}
       hydrationConfidence={hydrationConfidenceByField.get(fieldData.fieldId) ?? null}
     />
   );
@@ -2131,6 +2177,18 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
               }}
             >
               {renderPanel()}
+              <HydrationOverlay
+                active={
+                  activePanel === 'detail' &&
+                  (fieldOnboardingProgress.get(fieldData.fieldId)?.status === 'queued' ||
+                    fieldOnboardingProgress.get(fieldData.fieldId)?.status === 'running') &&
+                  fieldOnboardingProgress.has(fieldData.fieldId)
+                }
+                fieldName={fieldData.fieldName}
+                onboardingStatus={fieldOnboardingProgress.get(fieldData.fieldId) ?? null}
+                progressMessage={fieldOnboardingProgress.get(fieldData.fieldId)?.phaseLabel ?? null}
+                prebuiltStages={prebuiltStagesByField.get(fieldData.fieldId) ?? null}
+              />
             </div>
           </AppShellErrorBoundary>
         </div>
