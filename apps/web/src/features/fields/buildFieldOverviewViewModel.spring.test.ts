@@ -113,6 +113,50 @@ test("resolveFieldAccessPresentation classifies workable and constrained fields"
   );
 });
 
+test("resolveFieldAccessPresentation respects custom precip and thaw thresholds", () => {
+  assert.deepEqual(
+    resolveFieldAccessPresentation({
+      surfaceMoisturePct: 68,
+      recentPrecipTotal72hMm: 8,
+      freezeThawCycles7d: 1,
+      thresholds: {
+        surfaceMoistureMaxPct: 82,
+        recentPrecipWarnMm72h: 6,
+        recentPrecipBlockMm72h: 12,
+        freezeThawWarnCount: 2,
+        freezeThawBlockCount: 4,
+      },
+    }),
+    {
+      label: "FIELD ACCESS",
+      value: "Marginal",
+      sub: "Surface 68% · P72h 8mm · 1 thaw cycle",
+      tone: "warning",
+    },
+  );
+
+  assert.deepEqual(
+    resolveFieldAccessPresentation({
+      surfaceMoisturePct: 71,
+      recentPrecipTotal72hMm: 13,
+      freezeThawCycles7d: 2,
+      thresholds: {
+        surfaceMoistureMaxPct: 84,
+        recentPrecipWarnMm72h: 6,
+        recentPrecipBlockMm72h: 12,
+        freezeThawWarnCount: 2,
+        freezeThawBlockCount: 4,
+      },
+    }),
+    {
+      label: "FIELD ACCESS",
+      value: "Wait",
+      sub: "Surface 71% · P72h 13mm · 2 thaw cycles",
+      tone: "danger",
+    },
+  );
+});
+
 test("resolveSeedingRecommendation returns Too early when soil has not reached the crop threshold", () => {
   const recommendation = resolveSeedingRecommendation({
     cropLabel: "Canola",
@@ -130,6 +174,13 @@ test("resolveSeedingRecommendation returns Too early when soil has not reached t
       surfaceMoisturePct: 58,
       recentPrecipTotal72hMm: 4,
       freezeThawCycles7d: 1,
+      thresholds: {
+        surfaceMoistureMaxPct: 85,
+        recentPrecipWarnMm72h: 10,
+        recentPrecipBlockMm72h: 20,
+        freezeThawWarnCount: 2,
+        freezeThawBlockCount: 4,
+      },
     }),
     frostRiskMinTempC7d: 2.5,
     frostRiskNights7d: 0,
@@ -155,6 +206,13 @@ test("resolveSeedingRecommendation returns Hold when frost risk remains in the 7
       surfaceMoisturePct: 61,
       recentPrecipTotal72hMm: 4,
       freezeThawCycles7d: 1,
+      thresholds: {
+        surfaceMoistureMaxPct: 85,
+        recentPrecipWarnMm72h: 10,
+        recentPrecipBlockMm72h: 20,
+        freezeThawWarnCount: 2,
+        freezeThawBlockCount: 4,
+      },
     }),
     frostRiskMinTempC7d: -2.5,
     frostRiskNights7d: 1,
@@ -183,6 +241,13 @@ test("resolveSeedingRecommendation returns Seed now when soil, frost, and access
       surfaceMoisturePct: 62,
       recentPrecipTotal72hMm: 3,
       freezeThawCycles7d: 1,
+      thresholds: {
+        surfaceMoistureMaxPct: 85,
+        recentPrecipWarnMm72h: 10,
+        recentPrecipBlockMm72h: 20,
+        freezeThawWarnCount: 2,
+        freezeThawBlockCount: 4,
+      },
     }),
     frostRiskMinTempC7d: 2.8,
     frostRiskNights7d: 0,

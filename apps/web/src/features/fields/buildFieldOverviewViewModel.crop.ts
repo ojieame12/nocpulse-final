@@ -140,6 +140,7 @@ export function buildCropProps(rm: any): FieldCropProps {
     surfaceMoisturePct: latestObservation?.soilMoisturePct ?? null,
     recentPrecipTotal72hMm: weatherSignals?.recentPrecipTotal72hMm ?? null,
     freezeThawCycles7d: weatherSignals?.freezeThawCycles7d ?? null,
+    thresholds: resolvedRules.seedingThresholds,
   });
   const springSeedingContext = isSpringSeedingContext(cropStagePresentation);
   const peakVpd = weatherSignals?.peakForecastVpdKpa24h ?? null;

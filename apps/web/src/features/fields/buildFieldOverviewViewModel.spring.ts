@@ -143,6 +143,14 @@ export function resolveFieldAccessPresentation(input: {
   surfaceMoisturePct: number | null;
   recentPrecipTotal72hMm: number | null;
   freezeThawCycles7d: number | null;
+  thresholds?: Pick<
+    SeedingThresholdRulePack,
+    | "surfaceMoistureMaxPct"
+    | "recentPrecipWarnMm72h"
+    | "recentPrecipBlockMm72h"
+    | "freezeThawWarnCount"
+    | "freezeThawBlockCount"
+  > | null;
 }): FieldAccessPresentation | null {
   const surfaceMoisturePct =
     typeof input.surfaceMoisturePct === "number" &&
@@ -168,6 +176,33 @@ export function resolveFieldAccessPresentation(input: {
     return null;
   }
 
+  const thresholds = input.thresholds;
+  const surfaceMoistureMaxPct =
+    typeof thresholds?.surfaceMoistureMaxPct === "number" &&
+    Number.isFinite(thresholds.surfaceMoistureMaxPct)
+      ? thresholds.surfaceMoistureMaxPct
+      : 85;
+  const recentPrecipWarnMm72h =
+    typeof thresholds?.recentPrecipWarnMm72h === "number" &&
+    Number.isFinite(thresholds.recentPrecipWarnMm72h)
+      ? thresholds.recentPrecipWarnMm72h
+      : 10;
+  const recentPrecipBlockMm72h =
+    typeof thresholds?.recentPrecipBlockMm72h === "number" &&
+    Number.isFinite(thresholds.recentPrecipBlockMm72h)
+      ? thresholds.recentPrecipBlockMm72h
+      : 20;
+  const freezeThawWarnCount =
+    typeof thresholds?.freezeThawWarnCount === "number" &&
+    Number.isFinite(thresholds.freezeThawWarnCount)
+      ? thresholds.freezeThawWarnCount
+      : 2;
+  const freezeThawBlockCount =
+    typeof thresholds?.freezeThawBlockCount === "number" &&
+    Number.isFinite(thresholds.freezeThawBlockCount)
+      ? thresholds.freezeThawBlockCount
+      : 4;
+
   const detail = [
     surfaceMoisturePct != null ? `Surface ${surfaceMoisturePct.toFixed(0)}%` : null,
     recentPrecipTotal72hMm != null
@@ -181,9 +216,9 @@ export function resolveFieldAccessPresentation(input: {
     .join(" · ");
 
   const notWorkable =
-    (surfaceMoisturePct != null && surfaceMoisturePct > 85) ||
-    ((recentPrecipTotal72hMm != null && recentPrecipTotal72hMm > 20) &&
-      (freezeThawCycles7d != null && freezeThawCycles7d > 4));
+    (surfaceMoisturePct != null && surfaceMoisturePct > surfaceMoistureMaxPct) ||
+    (recentPrecipTotal72hMm != null && recentPrecipTotal72hMm >= recentPrecipBlockMm72h) ||
+    (freezeThawCycles7d != null && freezeThawCycles7d >= freezeThawBlockCount);
   if (notWorkable) {
     return {
       label: "FIELD ACCESS",
@@ -194,9 +229,9 @@ export function resolveFieldAccessPresentation(input: {
   }
 
   const marginal =
-    (surfaceMoisturePct != null && surfaceMoisturePct >= 70) ||
-    (recentPrecipTotal72hMm != null && recentPrecipTotal72hMm >= 10) ||
-    (freezeThawCycles7d != null && freezeThawCycles7d >= 2);
+    (surfaceMoisturePct != null && surfaceMoisturePct >= surfaceMoistureMaxPct - 15) ||
+    (recentPrecipTotal72hMm != null && recentPrecipTotal72hMm >= recentPrecipWarnMm72h) ||
+    (freezeThawCycles7d != null && freezeThawCycles7d >= freezeThawWarnCount);
   if (marginal) {
     return {
       label: "FIELD ACCESS",

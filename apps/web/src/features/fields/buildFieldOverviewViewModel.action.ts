@@ -613,6 +613,7 @@ export function buildActionProps(
     surfaceMoisturePct: latestObservation?.soilMoisturePct ?? null,
     recentPrecipTotal72hMm: weatherSignals?.recentPrecipTotal72hMm ?? null,
     freezeThawCycles7d: weatherSignals?.freezeThawCycles7d ?? null,
+    thresholds: resolvedRules.seedingThresholds,
   });
   const seedingRecommendation =
     resolveSeedingRecommendation({
