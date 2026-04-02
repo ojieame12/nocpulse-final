@@ -31,12 +31,11 @@ export function resolvePreviewFieldId(
     return requestedFieldId!;
   }
 
-  const allowlistedFieldId = resolveAllowlistedPreviewFieldId(fields, workspaceId);
-  if (allowlistedFieldId) {
-    return allowlistedFieldId;
-  }
-
-  return primaryFieldId;
+  return (
+    resolveAllowlistedPreviewFieldId(fields, workspaceId)
+    ?? resolveRankedPreviewFieldId(fields, primaryFieldId)
+    ?? primaryFieldId
+  );
 }
 
 function resolveAllowlistedPreviewFieldId(
@@ -87,6 +86,41 @@ function resolveAllowlistedPreviewFieldId(
   });
 
   return pool[0]?.id ?? null;
+}
+
+function resolveRankedPreviewFieldId(
+  fields: readonly PreviewFieldSelection[],
+  primaryFieldId: string,
+) {
+  if (fields.length === 0) {
+    return null;
+  }
+
+  const rankedFields = [...fields].sort((left, right) => {
+    const confidenceDelta =
+      resolveMoistureConfidencePriority(right.latestMoisture?.confidence) -
+      resolveMoistureConfidencePriority(left.latestMoisture?.confidence);
+    if (confidenceDelta !== 0) {
+      return confidenceDelta;
+    }
+
+    const leftHasSource = typeof left.latestMoisture?.sourceKey === "string" && left.latestMoisture.sourceKey.length > 0;
+    const rightHasSource = typeof right.latestMoisture?.sourceKey === "string" && right.latestMoisture.sourceKey.length > 0;
+    if (leftHasSource !== rightHasSource) {
+      return rightHasSource ? 1 : -1;
+    }
+
+    if (left.id === primaryFieldId && right.id !== primaryFieldId) {
+      return -1;
+    }
+    if (right.id === primaryFieldId && left.id !== primaryFieldId) {
+      return 1;
+    }
+
+    return (left.name ?? left.id).localeCompare(right.name ?? right.id);
+  });
+
+  return rankedFields[0]?.id ?? null;
 }
 
 function normalizeFieldName(value: string | null | undefined) {

@@ -144,3 +144,58 @@ test("buildWorkspaceFirstInsightSummary respects the Hope Creek allowlist when t
   assert.ok(result);
   assert.equal(result.focusFieldName, "Rath");
 });
+
+test("buildWorkspaceFirstInsightSummary scopes comparisons to allowlisted ready fields", () => {
+  const result = buildWorkspaceFirstInsightSummary({
+    workspaceId: "8f2afceb-aefe-4e90-a24e-7ab07c4423fe",
+    activeFieldId: "field-a",
+    fields: [
+      {
+        fieldId: "field-a",
+        fieldName: "Rath",
+        summary: makeSummary({ rootMoisture: "41%", moisture: 0.41, trend: "+2%" }),
+      },
+      {
+        fieldId: "field-b",
+        fieldName: "Towes",
+        summary: makeSummary({ rootMoisture: "35%", moisture: 0.35, trend: "-4%" }),
+      },
+      {
+        fieldId: "field-c",
+        fieldName: "Zeta North",
+        summary: makeSummary({ rootMoisture: "58%", moisture: 0.58, trend: "+9%" }),
+      },
+    ],
+  });
+
+  assert.ok(result);
+  assert.deepEqual(
+    result.comparisons.map((entry) => [entry.label, entry.fieldName, entry.value]),
+    [
+      ["Wettest ready field", "Rath", "41%"],
+      ["Driest ready field", "Towes", "35%"],
+      ["Most changed this week", "Towes", "-4%"],
+    ],
+  );
+});
+
+test("buildWorkspaceFirstInsightSummary returns null when an allowlisted workspace lacks two eligible allowlisted fields", () => {
+  const result = buildWorkspaceFirstInsightSummary({
+    workspaceId: "8f2afceb-aefe-4e90-a24e-7ab07c4423fe",
+    activeFieldId: "field-a",
+    fields: [
+      {
+        fieldId: "field-a",
+        fieldName: "Rath",
+        summary: makeSummary(),
+      },
+      {
+        fieldId: "field-z",
+        fieldName: "Zeta North",
+        summary: makeSummary(),
+      },
+    ],
+  });
+
+  assert.equal(result, null);
+});
