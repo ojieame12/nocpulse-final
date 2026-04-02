@@ -1,6 +1,7 @@
 import type { EntityId, WorkspaceId } from "@fieldpulse/platform-db";
 import type { FieldMoistureSnapshot } from "../contracts/FieldMoistureSnapshot";
 import type { MoistureInputProvenance } from "../contracts/FieldMoistureSnapshot";
+import type { MoistureConfidence } from "../contracts/MoistureEstimate";
 import type { RebuildFieldMoistureEstimateInput } from "../contracts/RebuildFieldMoistureEstimateInput";
 import type { RebuildFieldMoistureEstimateResult } from "../contracts/RebuildFieldMoistureEstimateResult";
 import { resolveRootZoneMoisture } from "@fieldpulse/module-weather";
@@ -252,6 +253,17 @@ export function computeAgreement(
   return { deltaPct, flag: "divergent", bonus: -0.05 };
 }
 
+export function shouldCapHighConfidence(input: {
+  rasterAgeHours: number | null;
+  agreementFlag: AgreementResult["flag"] | null | undefined;
+}): boolean {
+  const hasStaleRaster =
+    input.rasterAgeHours !== null && input.rasterAgeHours > 48;
+  const weakAgreement =
+    input.agreementFlag === "neutral" || input.agreementFlag === "divergent";
+  return hasStaleRaster && weakAgreement;
+}
+
 // ---------------------------------------------------------------------------
 // Convert a raster moisture signal (0-1 NDMI/SAR range) to approximate
 // volumetric soil moisture % so it can be compared with weather soil moisture.
@@ -468,12 +480,20 @@ function deriveSourceBackedEstimate(
   // Clamp final confidence score to 0..0.97
   confidenceScore = clamp(confidenceScore, 0, 0.97);
 
-  const confidence =
+  let confidence: MoistureConfidence =
     confidenceScore >= 0.75
       ? "high"
       : confidenceScore >= 0.45
         ? "medium"
         : "low";
+
+  const cappedHighConfidence = shouldCapHighConfidence({
+    rasterAgeHours,
+    agreementFlag: agreement?.flag,
+  });
+  if (confidence === "high" && cappedHighConfidence) {
+    confidence = "medium";
+  }
 
   const rasterMode =
     rasterObservation == null
@@ -515,6 +535,10 @@ function deriveSourceBackedEstimate(
 
   if (scaleFitPenalty < 0) {
     confidenceReasonParts.push("scale-fit-penalty");
+  }
+
+  if (cappedHighConfidence) {
+    confidenceReasonParts.push("confidence-capped-stale-neutral");
   }
 
   // -----------------------------------------------------------------------
