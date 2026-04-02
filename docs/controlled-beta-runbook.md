@@ -25,6 +25,14 @@ corepack pnpm -C /Users/ojieame/FieldPulse-v3 ops:beta-roster -- --days 30 --jso
 
 Use the returned `workspaceId`, `workspaceSlug`, and `status` to decide which workspace to inspect next.
 
+For a workspace in `needs-curation`, run:
+
+```bash
+corepack pnpm -C /Users/ojieame/FieldPulse-v3 ops:launch-visible-followup -- --workspace-id <workspace-id> --json
+```
+
+This gives the exact scoped fields, top blockers, and field-by-field next actions to tighten the launch-visible set before outreach.
+
 Workspace-specific:
 
 ```bash
