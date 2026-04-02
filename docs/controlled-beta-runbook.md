@@ -31,6 +31,7 @@ corepack pnpm -C /Users/ojieame/FieldPulse-v3/apps/worker run report:beta-readin
 What it checks:
 - queue health
 - action-brief cadence activity
+- action-brief review and dismissal behavior
 - source integrity from the latest field context
 - field quality
 - first-insight evidence
@@ -46,6 +47,7 @@ Interpretation:
 ```bash
 corepack pnpm -C /Users/ojieame/FieldPulse-v3/apps/worker run health -- --json
 corepack pnpm -C /Users/ojieame/FieldPulse-v3/apps/worker run summary -- --limit 50
+corepack pnpm -C /Users/ojieame/FieldPulse-v3 ops:action-brief-review -- --days 30 --json
 ```
 
 Escalate if:
