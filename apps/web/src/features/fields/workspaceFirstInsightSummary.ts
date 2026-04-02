@@ -47,22 +47,8 @@ function parseTrendPercent(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function isConfidenceStrong(summary: FieldSummaryProps) {
-  return (
-    summary.moistureConfidenceLevel === "high"
-    || summary.moistureConfidenceLevel === "medium"
-  );
-}
-
 function isEligibleForWorkspaceInsight(summary: FieldSummaryProps | null) {
-  if (!summary?.dataQuality) {
-    return false;
-  }
-
-  return (
-    summary.dataQuality.label === "Ready"
-    || (summary.dataQuality.label === "Limited" && isConfidenceStrong(summary))
-  );
+  return summary?.dataQuality?.label === "Ready";
 }
 
 function compareByFocusPriority(
