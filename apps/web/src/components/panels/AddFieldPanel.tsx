@@ -12,9 +12,12 @@ import {
 } from './addFieldPanelErrors';
 import {
   applySuggestedFieldName,
+  buildSavedSpreadsheetBatchResume,
+  parseSavedSpreadsheetBatchResume,
   resolveAddFieldPrimaryLabel,
   resolveAddFieldProgressCopy,
   type AddFieldSubmitPhase,
+  type SavedSpreadsheetBatchResume,
 } from './addFieldPanelFlow.shared';
 import {
   chooseFirstInsightField,
@@ -218,15 +221,36 @@ type HydrationRetryPayload = {
 const JOB_STATUS_POLL_MS = 3_000;
 const EMPTY_PREVIEW_ID = "__empty__";
 const INTAKE_REQUEST_TIMEOUT_MS = 20_000;
+const SAVED_SPREADSHEET_BATCH_STORAGE_KEY = 'fieldpulse:add-field:saved-spreadsheet-batch';
 
 function normalizeWorkspaceId(workspaceId?: string | null) {
   return workspaceId && workspaceId !== EMPTY_PREVIEW_ID ? workspaceId : null;
+}
+
+function buildSavedSpreadsheetBatchStorageKey(workspaceId: string | null) {
+  return `${SAVED_SPREADSHEET_BATCH_STORAGE_KEY}:${workspaceId ?? EMPTY_PREVIEW_ID}`;
 }
 
 function formatArea(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value)
     ? `${value.toFixed(1)} ha`
     : 'N/A';
+}
+
+function buildSavedSpreadsheetPreviewCard(
+  resume: SavedSpreadsheetBatchResume,
+): PreviewCard {
+  return {
+    title: 'Saved Import Ready',
+    description: `${resume.fieldCount} field${resume.fieldCount === 1 ? '' : 's'} ready to import`,
+    rows: [
+      { label: 'File', value: resume.fileName },
+      { label: 'Sheet', value: resume.sheetName },
+      { label: 'Rows', value: String(resume.rowCount) },
+      { label: 'Fields', value: String(resume.fieldCount) },
+      { label: 'Issues', value: String(resume.issueCount) },
+    ],
+  };
 }
 
 function countQueuedJobs(
@@ -786,6 +810,7 @@ export function AddFieldPanel({
   const [previewCard, setPreviewCard] = useState<PreviewCard | null>(null);
   const [spreadsheetPreview, setSpreadsheetPreview] = useState<SpreadsheetPreviewPayload | null>(null);
   const [savedSpreadsheetBatchId, setSavedSpreadsheetBatchId] = useState<string | null>(null);
+  const [savedSpreadsheetBatchResume, setSavedSpreadsheetBatchResume] = useState<SavedSpreadsheetBatchResume | null>(null);
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>([]);
   const [retryingHydrationFieldId, setRetryingHydrationFieldId] = useState<string | null>(null);
   const [retryingHydrationFieldLabel, setRetryingHydrationFieldLabel] = useState<string | null>(null);
@@ -810,6 +835,32 @@ export function AddFieldPanel({
     cancelActiveIntakeRequest();
   }, [cancelActiveIntakeRequest]);
 
+  const clearSavedSpreadsheetImportResume = useCallback(() => {
+    setSavedSpreadsheetBatchId(null);
+    setSavedSpreadsheetBatchResume(null);
+
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(
+        buildSavedSpreadsheetBatchStorageKey(effectiveWorkspaceId),
+      );
+    }
+  }, [effectiveWorkspaceId]);
+
+  const persistSavedSpreadsheetImportResume = useCallback(
+    (resume: SavedSpreadsheetBatchResume) => {
+      setSavedSpreadsheetBatchId(resume.batchId);
+      setSavedSpreadsheetBatchResume(resume);
+
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem(
+          buildSavedSpreadsheetBatchStorageKey(effectiveWorkspaceId),
+          JSON.stringify(resume),
+        );
+      }
+    },
+    [effectiveWorkspaceId],
+  );
+
   const clearFeedback = () => {
     setStatusTone('neutral');
     setStatusText(null);
@@ -824,6 +875,34 @@ export function AddFieldPanel({
     setBoundaryDraftReady(false);
     setActiveSubmitPhase(null);
   };
+
+  useEffect(() => {
+    if (method !== 'csv' || spreadsheetPreview || savedSpreadsheetBatchResume) {
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const restoredResume = parseSavedSpreadsheetBatchResume(
+      window.sessionStorage.getItem(
+        buildSavedSpreadsheetBatchStorageKey(effectiveWorkspaceId),
+      ),
+    );
+
+    if (!restoredResume) {
+      return;
+    }
+
+    setSavedSpreadsheetBatchId(restoredResume.batchId);
+    setSavedSpreadsheetBatchResume(restoredResume);
+    setPreviewCard(buildSavedSpreadsheetPreviewCard(restoredResume));
+    setStatusTone(restoredResume.issueCount > 0 ? 'neutral' : 'positive');
+    setStatusText(
+      `Saved import batch restored. Resume importing ${restoredResume.fieldCount} field${restoredResume.fieldCount === 1 ? '' : 's'} without re-uploading the file.`,
+    );
+  }, [effectiveWorkspaceId, method, savedSpreadsheetBatchResume, spreadsheetPreview]);
 
   const performIntakeRequest = useCallback(
     async <T,>(path: string, init: RequestInit) => {
@@ -904,7 +983,8 @@ export function AddFieldPanel({
       method,
       lldDraftReady,
       boundaryDraftReady,
-      spreadsheetPreviewFieldCount: spreadsheetPreview?.fieldCount ?? null,
+      spreadsheetPreviewFieldCount:
+        spreadsheetPreview?.fieldCount ?? savedSpreadsheetBatchResume?.fieldCount ?? null,
       activeSubmitPhase,
     });
   }, [
@@ -914,6 +994,7 @@ export function AddFieldPanel({
     isSubmitting,
     lldDraftReady,
     method,
+    savedSpreadsheetBatchResume,
     spreadsheetPreview,
   ]);
 
@@ -922,9 +1003,10 @@ export function AddFieldPanel({
       resolveAddFieldProgressCopy({
         activeSubmitPhase,
         retryingHydrationFieldLabel,
-        spreadsheetPreviewFieldCount: spreadsheetPreview?.fieldCount ?? null,
+        spreadsheetPreviewFieldCount:
+          spreadsheetPreview?.fieldCount ?? savedSpreadsheetBatchResume?.fieldCount ?? null,
       }),
-    [activeSubmitPhase, retryingHydrationFieldLabel, spreadsheetPreview],
+    [activeSubmitPhase, retryingHydrationFieldLabel, savedSpreadsheetBatchResume, spreadsheetPreview],
   );
 
   const primaryDisabled = useMemo(() => {
@@ -934,10 +1016,11 @@ export function AddFieldPanel({
       case 'lld':
         return !lldCode.trim();
       case 'csv':
+        return !selectedFile && !spreadsheetPreview && !savedSpreadsheetBatchResume;
       case 'kml':
         return !selectedFile;
     }
-  }, [isSubmitting, lldCode, method, selectedFile]);
+  }, [isSubmitting, lldCode, method, savedSpreadsheetBatchResume, selectedFile, spreadsheetPreview]);
 
   const handleMethodSelect = (nextMethod: MethodKey) => {
     cancelActiveIntakeRequest();
@@ -945,6 +1028,15 @@ export function AddFieldPanel({
     setMethod(nextMethod);
     setSelectedFile(null);
     clearFeedback();
+
+    if (nextMethod === 'csv' && savedSpreadsheetBatchResume) {
+      setSavedSpreadsheetBatchId(savedSpreadsheetBatchResume.batchId);
+      setPreviewCard(buildSavedSpreadsheetPreviewCard(savedSpreadsheetBatchResume));
+      setStatusTone(savedSpreadsheetBatchResume.issueCount > 0 ? 'neutral' : 'positive');
+      setStatusText(
+        `Saved import batch restored. Resume importing ${savedSpreadsheetBatchResume.fieldCount} field${savedSpreadsheetBatchResume.fieldCount === 1 ? '' : 's'} without re-uploading the file.`,
+      );
+    }
   };
 
   const handleLookupLld = async () => {
@@ -1209,7 +1301,7 @@ export function AddFieldPanel({
       body: formData,
     });
     setSpreadsheetPreview(result);
-    setSavedSpreadsheetBatchId(null);
+    clearSavedSpreadsheetImportResume();
     setLldDraftReady(false);
     setBoundaryDraftReady(false);
     setPreviewCard({
@@ -1237,8 +1329,9 @@ export function AddFieldPanel({
   };
 
   const handleCommitSpreadsheet = async () => {
-    if (!spreadsheetPreview) return;
-    let batchId = savedSpreadsheetBatchId;
+    if (!spreadsheetPreview && !savedSpreadsheetBatchResume) return;
+    const previewForCommit = spreadsheetPreview;
+    let batchId = savedSpreadsheetBatchId ?? savedSpreadsheetBatchResume?.batchId ?? null;
 
     if (!batchId) {
       setActiveSubmitPhase('csv-save');
@@ -1251,12 +1344,22 @@ export function AddFieldPanel({
           },
           body: JSON.stringify({
             workspaceId: effectiveWorkspaceId ?? undefined,
-            preview: spreadsheetPreview,
+            preview: previewForCommit!,
           }),
         },
       );
       batchId = saved.batch.id;
-      setSavedSpreadsheetBatchId(batchId);
+      persistSavedSpreadsheetImportResume(
+        buildSavedSpreadsheetBatchResume({
+          workspaceId: effectiveWorkspaceId,
+          batchId,
+          fileName: previewForCommit!.fileName,
+          sheetName: previewForCommit!.sheetName,
+          rowCount: previewForCommit!.rowCount,
+          fieldCount: previewForCommit!.fieldCount,
+          issueCount: previewForCommit!.issueCount,
+        }),
+      );
     }
 
     setActiveSubmitPhase('csv-commit');
@@ -1293,7 +1396,7 @@ export function AddFieldPanel({
       ],
     });
     setSpreadsheetPreview(null);
-    setSavedSpreadsheetBatchId(null);
+    clearSavedSpreadsheetImportResume();
     setStatusTone('positive');
     setStatusText(
       `Imported ${committed.candidates.length} field${committed.candidates.length === 1 ? '' : 's'} and queued ${queuedJobCount} follow-up job${queuedJobCount === 1 ? '' : 's'}. Fields will appear in the strip as each one finishes onboarding.`,
@@ -1618,7 +1721,7 @@ export function AddFieldPanel({
                 setIsSubmitting(false);
                 setSelectedFile(file);
                 setSpreadsheetPreview(null);
-                setSavedSpreadsheetBatchId(null);
+                clearSavedSpreadsheetImportResume();
                 setActiveSubmitPhase(null);
               }}
             />

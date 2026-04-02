@@ -15,6 +15,13 @@ export type CreateSpreadsheetImportBatchInput = {
 };
 
 export type FieldImportBatchRepository = {
+  findReusableSpreadsheetImportBatch?(
+    input: CreateSpreadsheetImportBatchInput,
+    actorUserId: UserId,
+  ): Promise<{
+    batch: FieldImportBatch;
+    candidates: readonly FieldImportCandidate[];
+  } | null>;
   createSpreadsheetImportBatch(
     input: CreateSpreadsheetImportBatchInput,
     actorUserId: UserId,

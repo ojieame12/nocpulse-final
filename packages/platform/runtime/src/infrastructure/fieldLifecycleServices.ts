@@ -561,6 +561,18 @@ export async function saveSpreadsheetImportPreview(
   repositories: ServerRepositories,
   input: SaveSpreadsheetImportPreviewInput,
 ): Promise<SaveSpreadsheetImportPreviewResult> {
+  const reusableBatch = await repositories.fieldImportBatches.findReusableSpreadsheetImportBatch?.(
+    {
+      workspaceId: input.workspaceId,
+      preview: input.preview,
+    },
+    input.actorUserId,
+  );
+
+  if (reusableBatch) {
+    return reusableBatch;
+  }
+
   return createSpreadsheetImportBatch({
     repository: repositories.fieldImportBatches,
     actorUserId: input.actorUserId,

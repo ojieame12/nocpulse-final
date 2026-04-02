@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   applySuggestedFieldName,
+  buildSavedSpreadsheetBatchResume,
+  parseSavedSpreadsheetBatchResume,
   resolveAddFieldPrimaryLabel,
   resolveAddFieldProgressCopy,
 } from "../addFieldPanelFlow.shared";
@@ -61,4 +63,23 @@ test("resolveAddFieldProgressCopy explains saved batch resume during csv import"
   });
   assert.ok(commitCopy);
   assert.match(commitCopy.detail, /Importing 8 fields/i);
+});
+
+test("saved spreadsheet batch resume round-trips through storage", () => {
+  const resume = buildSavedSpreadsheetBatchResume({
+    workspaceId: "workspace-1",
+    batchId: "batch-1",
+    fileName: "import.xlsx",
+    sheetName: "Sheet1",
+    rowCount: 32,
+    fieldCount: 8,
+    issueCount: 1,
+    savedAt: "2026-04-02T17:00:00.000Z",
+  });
+
+  assert.deepEqual(
+    parseSavedSpreadsheetBatchResume(JSON.stringify(resume)),
+    resume,
+  );
+  assert.equal(parseSavedSpreadsheetBatchResume("{"), null);
 });
