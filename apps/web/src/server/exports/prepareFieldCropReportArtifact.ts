@@ -23,6 +23,7 @@ const GREEN: RGB = [0.08, 0.24, 0.17];
 const RED: RGB = [0.93, 0.27, 0.27];
 const AMBER: RGB = [0.96, 0.62, 0.04];
 const TEAL: RGB = [0.09, 0.64, 0.29];
+const SLATE: RGB = [0.42, 0.44, 0.47];
 
 function hexToRgb(hex: string): RGB | undefined {
   const c = hex.replace("#", "");
@@ -36,6 +37,35 @@ function hexToRgb(hex: string): RGB | undefined {
 
 function thresholdSeverity(status: string): "critical" | "warning" | "info" {
   return status === "danger" ? "critical" : status === "warn" ? "warning" : "info";
+}
+
+function joinParts(parts: Array<string | null | undefined>, separator = " · "): string | undefined {
+  const compact = parts.map((part) => part?.trim()).filter((part): part is string => Boolean(part));
+  return compact.length > 0 ? compact.join(separator) : undefined;
+}
+
+function dataQualityColor(summary: FieldSummaryProps | null | undefined): RGB {
+  switch (summary?.dataQuality?.tone) {
+    case "positive":
+      return TEAL;
+    case "warning":
+      return AMBER;
+    case "danger":
+      return RED;
+    default:
+      return SLATE;
+  }
+}
+
+function deriveTruthSource(summary: FieldSummaryProps): string | undefined {
+  if (summary.sourceTagExtended?.trim()) return summary.sourceTagExtended.trim();
+  if (summary.moistureDerivationMode === "source-backed") {
+    return joinParts(["Satellite-derived", summary.confidenceSub !== "No source" ? summary.confidenceSub : undefined]);
+  }
+  if (summary.moistureDerivationMode && summary.moistureDerivationMode !== "unknown") {
+    return joinParts(["Modeled estimate", summary.confidenceSub !== "No source" ? summary.confidenceSub : undefined]);
+  }
+  return undefined;
 }
 
 /** Derive a plain-language action for a disease risk card. */
@@ -161,6 +191,71 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
     });
   }
 
+  /* ━━ TRUTH & FRESHNESS ━━ */
+
+  if (s && (s.dataQuality || s.confidenceBreakdown || s.sourceTagExtended || s.historicalAnomaly || s.dataSources)) {
+    const sourceSummary = deriveTruthSource(s);
+    const heldBack = s.dataQuality?.label && s.dataQuality.label !== "Ready";
+
+    blocks.push({
+      kind: "section-header",
+      label: "Truth & Freshness",
+      meta: s.updatedLabel,
+      accentColor: dataQualityColor(s),
+    });
+
+    if (s.dataQuality) {
+      blocks.push({
+        kind: "status-badge",
+        label: `${s.dataQuality.label} Context`,
+        color: dataQualityColor(s),
+        marginTop: 4,
+      });
+      blocks.push({
+        kind: "text",
+        style: "body",
+        text:
+          joinParts([s.dataQuality.summary, heldBack ? "Crop-specific signals may be held back until field context is stronger." : undefined], " ") ??
+          s.dataQuality.summary,
+      });
+    }
+
+    blocks.push({
+      kind: "key-value",
+      pairs: [
+        { key: "Moisture source", value: sourceSummary ?? "Unavailable" },
+        { key: "Confidence", value: joinParts([s.confidence, s.confidenceSub]) ?? s.confidence },
+        ...(s.historicalAnomaly?.description
+          ? [{ key: "Historical signal", value: s.historicalAnomaly.description }]
+          : []),
+      ],
+      columns: 2,
+      marginTop: 6,
+    });
+
+    if (s.confidenceBreakdown) {
+      blocks.push({
+        kind: "metric-grid",
+        cells: [
+          { label: "Freshness", value: s.confidenceBreakdown.freshness },
+          { label: "Agreement", value: s.confidenceBreakdown.agreement },
+          { label: "Resolution", value: s.confidenceBreakdown.resolution },
+          { label: "Scale fit", value: s.confidenceBreakdown.scaleFit },
+        ],
+        columns: 4,
+        marginTop: 6,
+      });
+    }
+
+    if (s.dataSources) {
+      blocks.push({
+        kind: "text",
+        style: "caption",
+        text: `Inputs: Satellite ${s.dataSources.satellite ?? "Unavailable"} · Weather ${s.dataSources.weather ?? "Unavailable"} · Soil ${s.dataSources.soil ?? "Unavailable"}`,
+      });
+    }
+  }
+
   /* ━━ GROWTH PROGRESSION ━━ */
 
   if (c && c.growthSegments.length > 0) {
@@ -200,6 +295,41 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
   /* ━━ CROP SIGNAL SUMMARY ━━ */
 
   if (c) {
+    blocks.push({
+      kind: "section-header",
+      label: "Recent Weather Pressure",
+      meta: s?.nextRain ? `Next rain ${s.nextRain}` : undefined,
+      accentColor: GREEN,
+    });
+
+    blocks.push({
+      kind: "metric-grid",
+      cells: [
+        ...(c.fieldTiles.slice(0, 4).map((tile) => ({
+          label: tile.label,
+          value: tile.value,
+          sub: tile.sub,
+          valueColor: hexToRgb(tile.valueColor),
+        }))),
+      ],
+      columns: c.fieldTiles.length <= 3 ? 3 : 4,
+      marginTop: 4,
+    });
+
+    if (s) {
+      const trendValue = s.trend ?? "—";
+      blocks.push({
+        kind: "metric-strip",
+        cells: [
+          { label: "Trend (7d)", value: trendValue, valueColor: trendValue.startsWith("-") ? AMBER : undefined },
+          { label: "Precipitation", value: s.precipitation ?? "—" },
+          { label: "Rain Chance", value: s.rainChance ?? "—" },
+          { label: "7-Day Total", value: s.sevenDayTotal ?? "—" },
+        ],
+        marginTop: 6,
+      });
+    }
+
     blocks.push({
       kind: "section-header",
       label: "Crop Signals",
@@ -417,6 +547,14 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
   blocks.push({ kind: "divider", marginTop: 16 });
 
   if (c && c.provenanceRows.length > 0) {
+    const heldBack = s?.dataQuality?.label && s.dataQuality.label !== "Ready";
+    if (heldBack) {
+      blocks.push({
+        kind: "text",
+        style: "caption",
+        text: `Crop interpretation is currently constrained by ${s?.dataQuality?.label?.toLowerCase()} field context. Provenance is included so the reader can see which signals are source-backed versus held back.`,
+      });
+    }
     blocks.push({
       kind: "key-value",
       pairs: c.provenanceRows.map((row) => ({

@@ -103,3 +103,144 @@ test("prepareFieldCropReportArtifact renders a branded crop PDF artifact", () =>
   assert.match(pdfText, /ACTIVE CROP ALERTS/);
   assert.match(pdfText, /\/Subtype \/Image/);
 });
+
+test("prepareFieldCropReportArtifact includes truth and weather pressure context", () => {
+  const crop: FieldCropProps = {
+    cropName: "Rye",
+    lld: "NE-10-034-28-W1",
+    growthSegments: [
+      { label: "Seedling", active: false, color: "#4ade80" },
+      { label: "Vegetative", active: true, color: "#16a34a" },
+    ],
+    accumulatedGddLabel: "96",
+    gddUnitLabel: "base 5°C",
+    thresholdStageLabel: "Vegetative",
+    thresholds: [],
+    healthIndexTitle: "Crop Signal",
+    healthIndex: {
+      value: 0.34,
+      label: "Context loaded",
+      subLabel: "Preseason canopy context",
+      fillColor: "#f59e0b",
+      metrics: [{ label: "NDVI", value: "0.02", valueColor: "#f59e0b" }],
+    },
+    moistureBalanceTitle: "Root Moisture Balance",
+    moistureBalance: {
+      value: 0.078,
+      label: "7.8%",
+      subLabel: "Model estimate",
+      fillColor: "#3b82f6",
+      metrics: [{ label: "Status", value: "Deficit", valueColor: "#ef4444" }],
+    },
+    fieldTiles: [
+      {
+        label: "FROST RISK",
+        value: "Watch",
+        sub: "Min -4.2°C · next 7d",
+        valueColor: "#f59e0b",
+        bg: "rgba(245,158,11,0.12)",
+        border: "rgba(245,158,11,0.25)",
+      },
+      {
+        label: "CROP WATER DEMAND",
+        value: "2.1",
+        sub: "Peak next 24h",
+        valueColor: "#f59e0b",
+        bg: "rgba(245,158,11,0.12)",
+        border: "rgba(245,158,11,0.25)",
+      },
+      {
+        label: "GDD 72H",
+        value: "12.3",
+        sub: "Base 5°C",
+        valueColor: "#16a34a",
+        bg: "rgba(22,163,74,0.12)",
+        border: "rgba(22,163,74,0.25)",
+      },
+      {
+        label: "WATER BALANCE",
+        value: "-3.8mm",
+        sub: "72h forecast balance",
+        valueColor: "#ef4444",
+        bg: "rgba(239,68,68,0.12)",
+        border: "rgba(239,68,68,0.25)",
+      },
+    ],
+    diseaseRisks: [],
+    provenanceLabel: "IMAGERY PROVENANCE",
+    provenanceRows: [{ key: "Provider", value: "Sentinel-2" }],
+    provenanceChips: ["Sentinel-2", "Open-Meteo"],
+    alerts: [],
+    footer: "Generated from crop context and imagery observations.",
+  };
+
+  const summary: FieldSummaryProps = {
+    name: "Sigurson",
+    lld: "NE-10-034-28-W1",
+    crop: "Rye",
+    cropStage: "Vegetative",
+    contextLabel: "Field overview",
+    conditionsMeta: "Field average",
+    updatedLabel: "UPDATED APR 2, 2026",
+    moisture: 0.078,
+    cloudCover: "14%",
+    surfaceMoisture: "6%",
+    fieldState: "Dry",
+    fieldStateColor: "#f59e0b",
+    rootMoisture: "7.8%",
+    rootMoistureSub: "Severe deficit",
+    trend: "-2.1%",
+    trendSub: "vs weather + soil model",
+    spread: "0.02",
+    spreadSub: "2 mapped cells",
+    confidence: "Low",
+    confidenceSub: "modeled",
+    moistureConfidenceLevel: "low",
+    moistureDerivationMode: "modeled",
+    sourceTagExtended: "Model estimate · weather + soil",
+    precipitation: "0.0 mm",
+    precipitationSub: "Current observation",
+    nextRain: "3d",
+    nextRainSub: "Forecast window",
+    rainChance: "20%",
+    rainChanceSub: "Next window",
+    sevenDayTotal: "4.0 mm",
+    sevenDayTotalSub: "Loaded forecast",
+    alerts: [],
+    outlook: [],
+    confidenceBreakdown: {
+      freshness: "Recent weather feed",
+      agreement: "Optical support is limited",
+      resolution: "Field-scale estimate",
+      scaleFit: "Moderate",
+      sourceAge: "Recent weather feed",
+      coverage: "Field-scale estimate",
+    },
+    dataSources: {
+      satellite: "Sentinel-2 preseason optical",
+      weather: "Open-Meteo",
+      soil: "Modeled soil profile",
+    },
+    dataQuality: {
+      label: "Limited",
+      tone: "warning",
+      summary: "Optical validity is still thin for crop interpretation.",
+      reasons: ["Limited canopy support."],
+    },
+  };
+
+  const artifact = prepareFieldCropReportArtifact({
+    fieldId: "field-234",
+    fieldName: "Sigurson",
+    areaLabel: "129.5 ha",
+    crop,
+    summary,
+    generatedAt: "2026-04-02T09:00:00.000Z",
+  });
+
+  const pdfText = Buffer.from(artifact.bytes).toString("utf8");
+  assert.match(pdfText, /TRUTH & FRESHNESS/i);
+  assert.match(pdfText, /RECENT WEATHER PRESSURE/i);
+  assert.match(pdfText, /Limited Context/i);
+  assert.match(pdfText, /Model estimate/i);
+});
