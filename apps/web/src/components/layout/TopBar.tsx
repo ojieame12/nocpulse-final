@@ -26,6 +26,8 @@ interface TopBarProps {
   } | null;
   guestBadgeLabel?: string | null;
   guestCtaHref?: string | null;
+  statusBadgeLabel?: string | null;
+  statusBadgeTone?: "warning" | "info";
 }
 
 function NocPulseLogo(props: ComponentPropsWithoutRef<"img">) {
@@ -53,6 +55,8 @@ export function TopBar({
   viewer = null,
   guestBadgeLabel = null,
   guestCtaHref = null,
+  statusBadgeLabel = null,
+  statusBadgeTone = "warning",
 }: TopBarProps) {
   const isDark = theme === "dark";
   const navItems = showSettingsNav
@@ -92,6 +96,35 @@ export function TopBar({
     whiteSpace: "nowrap",
     boxShadow: "0 4px 0 #002a15",
   };
+  const statusBadgeStyle: CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 30,
+    padding: "0 12px",
+    borderRadius: 999,
+    background:
+      statusBadgeTone === "info"
+        ? isDark
+          ? "rgba(96, 165, 250, 0.16)"
+          : "rgba(59, 130, 246, 0.1)"
+        : isDark
+          ? "rgba(245, 158, 11, 0.18)"
+          : "rgba(245, 158, 11, 0.12)",
+    color:
+      statusBadgeTone === "info"
+        ? isDark
+          ? "#bfdbfe"
+          : "#1d4ed8"
+        : isDark
+          ? "#fcd34d"
+          : "var(--status-warning)",
+    fontFamily: "var(--font-body)",
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.01em",
+    whiteSpace: "nowrap",
+  };
   const viewerMeta = viewer?.email
     ? `${viewer.email} · ${viewer.workspaceRoleLabel}`
     : viewer
@@ -129,6 +162,9 @@ export function TopBar({
       </nav>
 
       <div className="app-topbar__right">
+        {statusBadgeLabel ? (
+          <span style={statusBadgeStyle}>{statusBadgeLabel}</span>
+        ) : null}
         {guestBadgeLabel ? (
           <span style={guestBadgeStyle}>{guestBadgeLabel}</span>
         ) : null}

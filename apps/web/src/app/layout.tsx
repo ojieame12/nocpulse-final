@@ -3,10 +3,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 import "../styles/field-detail-panel.css";
 import "../styles/landing.css";
+import { OfflineSupportBootstrap } from "../components/system/OfflineSupportBootstrap";
 
 export const metadata: Metadata = {
   title: "NocPulse — Agricultural Intelligence",
   description: "Field intelligence for growers. Satellite health scores, explainable alerts, and actionable crop monitoring.",
+  manifest: "/manifest.webmanifest",
 };
 
 export default function RootLayout({
@@ -22,7 +24,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <OfflineSupportBootstrap />
+        {children}
+      </body>
     </html>
   );
 }
