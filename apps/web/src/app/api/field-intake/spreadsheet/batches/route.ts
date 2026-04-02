@@ -1,7 +1,5 @@
 import {
-  jsonError,
   jsonOk,
-  jsonServerError,
   readJsonObject,
 } from "../../../../../server/http/json";
 import {
@@ -19,6 +17,11 @@ import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../server/runtime/resolveRequestContext";
+import {
+  handleFieldIntakeRouteError,
+  jsonFieldIntakeError,
+  withFieldIntakeRateLimitCode,
+} from "../../_shared/intakeErrors";
 
 const FIELD_INTAKE_SPREADSHEET_PREVIEW_ACTOR_RATE_LIMIT = {
   scope: "field-intake-spreadsheet-preview:actor",
@@ -41,7 +44,11 @@ export async function POST(request: Request) {
   const body = await readJsonObject(request);
 
   if (!body) {
-    return jsonError(400, "Expected a JSON request body.");
+    return jsonFieldIntakeError({
+      status: 400,
+      code: "invalid_request_body",
+      message: "We could not read that spreadsheet save request.",
+    });
   }
 
   try {
@@ -49,7 +56,11 @@ export async function POST(request: Request) {
     const runtime = getWebServerRuntime();
 
     if (runtime.mode !== "supabase") {
-      return jsonError(503, "Supabase runtime is not configured.");
+      return jsonFieldIntakeError({
+        status: 503,
+        code: "runtime_unavailable",
+        message: "Field intake is temporarily unavailable.",
+      });
     }
 
     const actor = await resolveRequestActor(request, runtime, {
@@ -76,7 +87,7 @@ export async function POST(request: Request) {
     });
 
     if (rateLimitResponse) {
-      return rateLimitResponse;
+      return withFieldIntakeRateLimitCode(rateLimitResponse);
     }
 
     const result = await runtime.services.fieldIntake.saveSpreadsheetImportPreview({
@@ -97,13 +108,19 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (error instanceof RequestContextError) {
-      return jsonError(error.status, error.message);
+      return handleFieldIntakeRouteError(error, {
+        event: "field-intake-spreadsheet-batches-route",
+        code: "import_batch_save_failed",
+        message: "We could not save that spreadsheet preview.",
+        status: error.status,
+      });
     }
 
-    return jsonServerError(error, {
-      status: 400,
+    return handleFieldIntakeRouteError(error, {
       event: "field-intake-spreadsheet-batches-route",
-      message: "Import batch save failed.",
+      code: "import_batch_save_failed",
+      message: "We could not save that spreadsheet preview.",
+      status: 400,
     });
   }
 }

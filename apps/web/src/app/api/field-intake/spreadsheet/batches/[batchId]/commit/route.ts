@@ -1,7 +1,5 @@
 import {
-  jsonError,
   jsonOk,
-  jsonServerError,
   readJsonObject,
 } from "../../../../../../../server/http/json";
 import {
@@ -20,6 +18,11 @@ import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../../../server/runtime/resolveRequestContext";
+import {
+  handleFieldIntakeRouteError,
+  jsonFieldIntakeError,
+  withFieldIntakeRateLimitCode,
+} from "../../../../_shared/intakeErrors";
 
 type RouteContext = {
   params: Promise<{
@@ -48,7 +51,11 @@ export async function POST(request: Request, context: RouteContext) {
   const body = await readJsonObject(request);
 
   if (!body) {
-    return jsonError(400, "Expected a JSON request body.");
+    return jsonFieldIntakeError({
+      status: 400,
+      code: "invalid_request_body",
+      message: "We could not read that spreadsheet commit request.",
+    });
   }
 
   try {
@@ -56,7 +63,11 @@ export async function POST(request: Request, context: RouteContext) {
     const { batchId } = await context.params;
 
     if (!batchId) {
-      return jsonError(400, "Route param `batchId` is required.");
+      return jsonFieldIntakeError({
+        status: 400,
+        code: "invalid_payload",
+        message: "That spreadsheet import request is missing a batch id.",
+      });
     }
 
     const runtime = getWebServerRuntime({
@@ -64,7 +75,11 @@ export async function POST(request: Request, context: RouteContext) {
     });
 
     if (runtime.mode !== "supabase") {
-      return jsonError(503, "Supabase runtime is not configured.");
+      return jsonFieldIntakeError({
+        status: 503,
+        code: "runtime_unavailable",
+        message: "Field intake is temporarily unavailable.",
+      });
     }
 
     const actor = await resolveRequestActor(request, runtime, {
@@ -92,7 +107,7 @@ export async function POST(request: Request, context: RouteContext) {
     });
 
     if (rateLimitResponse) {
-      return rateLimitResponse;
+      return withFieldIntakeRateLimitCode(rateLimitResponse);
     }
 
     const result = await runtime.services.fieldIntake.commitSpreadsheetImportBatch({
@@ -131,13 +146,19 @@ export async function POST(request: Request, context: RouteContext) {
     });
   } catch (error) {
     if (error instanceof RequestContextError) {
-      return jsonError(error.status, error.message);
+      return handleFieldIntakeRouteError(error, {
+        event: "field-intake-spreadsheet-batch-commit-route",
+        code: "import_batch_commit_failed",
+        message: "We could not finish that spreadsheet import.",
+        status: error.status,
+      });
     }
 
-    return jsonServerError(error, {
-      status: 400,
+    return handleFieldIntakeRouteError(error, {
       event: "field-intake-spreadsheet-batch-commit-route",
-      message: "Import batch commit failed.",
+      code: "import_batch_commit_failed",
+      message: "We could not finish that spreadsheet import.",
+      status: 400,
     });
   }
 }

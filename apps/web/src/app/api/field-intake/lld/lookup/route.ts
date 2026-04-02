@@ -1,7 +1,5 @@
 import {
-  jsonError,
   jsonOk,
-  jsonServerError,
   readJsonObject,
 } from "../../../../../server/http/json";
 import {
@@ -15,6 +13,11 @@ import {
   z,
 } from "../../../../../server/http/validation";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
+import {
+  handleFieldIntakeRouteError,
+  jsonFieldIntakeError,
+  withFieldIntakeRateLimitCode,
+} from "../../_shared/intakeErrors";
 
 const FIELD_INTAKE_LLD_LOOKUP_IP_RATE_LIMIT = {
   scope: "field-intake-lld-lookup:ip",
@@ -31,7 +34,11 @@ export async function POST(request: Request) {
   const body = await readJsonObject(request);
 
   if (!body) {
-    return jsonError(400, "Expected a JSON request body.");
+    return jsonFieldIntakeError({
+      status: 400,
+      code: "invalid_request_body",
+      message: "We could not read that lookup request.",
+    });
   }
 
   try {
@@ -39,7 +46,11 @@ export async function POST(request: Request) {
     const runtime = getWebServerRuntime();
 
     if (runtime.mode !== "supabase") {
-      return jsonError(503, "Supabase runtime is not configured.");
+      return jsonFieldIntakeError({
+        status: 503,
+        code: "runtime_unavailable",
+        message: "Field intake is temporarily unavailable.",
+      });
     }
     const rateLimitResponse = await enforceRouteRateLimits({
       runtime,
@@ -53,7 +64,7 @@ export async function POST(request: Request) {
     });
 
     if (rateLimitResponse) {
-      return rateLimitResponse;
+      return withFieldIntakeRateLimitCode(rateLimitResponse);
     }
 
     const result = await runtime.services.fieldIntake.lookupLldBoundary({
@@ -65,10 +76,11 @@ export async function POST(request: Request) {
       result,
     });
   } catch (error) {
-    return jsonServerError(error, {
-      status: 400,
+    return handleFieldIntakeRouteError(error, {
       event: "field-intake-lld-lookup-route",
-      message: "LLD lookup failed.",
+      code: "lld_lookup_failed",
+      message: "We could not complete that land lookup.",
+      status: 400,
     });
   }
 }

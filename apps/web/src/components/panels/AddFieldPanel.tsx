@@ -4,6 +4,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, Search, FileSpreadsheet, Map as MapIcon, Plus, FileUp, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, Lbl, LblM, Sub, Mono } from './fieldDetailCardPrimitives';
 import {
+  describeAddFieldApiError,
+  readAddFieldApiResult,
+} from './addFieldPanelErrors';
+import {
   chooseFirstInsightField,
   type FirstInsightFieldEntry,
 } from '../../features/fields/firstInsightChooser';
@@ -242,23 +246,6 @@ function buildTrackedJobs(
       action: entry.action,
     })),
   );
-}
-
-async function readApiResult<T>(response: Response): Promise<T> {
-  const payload = (await response.json()) as {
-    result?: T;
-    error?: { message?: string };
-  };
-
-  if (!response.ok) {
-    throw new Error(payload.error?.message ?? 'Request failed.');
-  }
-
-  if (!payload.result) {
-    throw new Error('Request completed without a result payload.');
-  }
-
-  return payload.result;
 }
 
 function FieldInput({
@@ -752,7 +739,7 @@ export function AddFieldPanel({
       }),
     });
 
-    const result = await readApiResult<LldLookupPayload>(response);
+    const result = await readAddFieldApiResult<LldLookupPayload>(response);
 
     setPreviewCard({
       title: 'LLD Draft Ready',
@@ -792,7 +779,7 @@ export function AddFieldPanel({
       }),
     });
 
-    const result = await readApiResult<ManualFieldCreatePayload>(response);
+    const result = await readAddFieldApiResult<ManualFieldCreatePayload>(response);
     const queuedJobCount = countQueuedJobs(result.onboardingDispatches);
     const lldResolution = result.intakeMetadata?.lldResolution;
     const boundaryConfidenceLabel =
@@ -865,7 +852,7 @@ export function AddFieldPanel({
       body: formData,
     });
 
-    const result = await readApiResult<BoundaryPreviewPayload>(response);
+    const result = await readAddFieldApiResult<BoundaryPreviewPayload>(response);
 
     setPreviewCard({
       title: 'Boundary Preview Ready',
@@ -909,7 +896,7 @@ export function AddFieldPanel({
       body: formData,
     });
 
-    const result = await readApiResult<ManualFieldCreatePayload>(response);
+    const result = await readAddFieldApiResult<ManualFieldCreatePayload>(response);
     const queuedJobCount = countQueuedJobs(result.onboardingDispatches);
 
     setPreviewCard({
@@ -970,7 +957,7 @@ export function AddFieldPanel({
       body: formData,
     });
 
-    const result = await readApiResult<SpreadsheetPreviewPayload>(response);
+    const result = await readAddFieldApiResult<SpreadsheetPreviewPayload>(response);
     setSpreadsheetPreview(result);
     setLldDraftReady(false);
     setBoundaryDraftReady(false);
@@ -987,11 +974,13 @@ export function AddFieldPanel({
         { label: 'Issues', value: String(result.issueCount) },
       ],
     });
-    setStatusTone(result.issueCount > 0 ? 'neutral' : 'positive');
+    setStatusTone(result.fieldCount === 0 ? 'danger' : result.issueCount > 0 ? 'neutral' : 'positive');
     setStatusText(
-      result.issueCount > 0
-        ? `Preview found ${result.issueCount} issue${result.issueCount === 1 ? '' : 's'}.`
-        : 'Spreadsheet preview completed successfully.',
+      result.fieldCount === 0
+        ? 'We could not find any importable field rows in that spreadsheet. Review the columns and upload a corrected file.'
+        : result.issueCount > 0
+          ? `Preview found ${result.issueCount} issue${result.issueCount === 1 ? '' : 's'}.`
+          : 'Spreadsheet preview completed successfully.',
     );
   };
 
@@ -1008,7 +997,7 @@ export function AddFieldPanel({
         preview: spreadsheetPreview,
       }),
     });
-    const saved = await readApiResult<{ batch: { id: string } }>(saveResponse);
+    const saved = await readAddFieldApiResult<{ batch: { id: string } }>(saveResponse);
 
     const commitResponse = await fetch(
       `/api/field-intake/spreadsheet/batches/${saved.batch.id}/commit`,
@@ -1023,7 +1012,7 @@ export function AddFieldPanel({
         }),
       },
     );
-    const committed = await readApiResult<SpreadsheetCommitPayload>(commitResponse);
+    const committed = await readAddFieldApiResult<SpreadsheetCommitPayload>(commitResponse);
     const createdCount = committed.candidates.filter((entry) => entry.action === 'created').length;
     const reusedCount = committed.candidates.length - createdCount;
     const queuedFieldCount = countQueuedFields(committed.onboardingDispatches);
@@ -1112,7 +1101,7 @@ export function AddFieldPanel({
       }
     } catch (error) {
       setStatusTone('danger');
-      setStatusText(error instanceof Error ? error.message : 'Field intake request failed.');
+      setStatusText(describeAddFieldApiError(error));
     } finally {
       setIsSubmitting(false);
     }

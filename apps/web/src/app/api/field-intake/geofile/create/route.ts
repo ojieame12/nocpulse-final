@@ -1,7 +1,5 @@
 import {
-  jsonError,
   jsonOk,
-  jsonServerError,
 } from "../../../../../server/http/json";
 import {
   buildActorRateLimitIdentifier,
@@ -24,6 +22,11 @@ import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../server/runtime/resolveRequestContext";
+import {
+  handleFieldIntakeRouteError,
+  jsonFieldIntakeError,
+  withFieldIntakeRateLimitCode,
+} from "../../_shared/intakeErrors";
 
 const FIELD_INTAKE_GEOFILE_ACTOR_RATE_LIMIT = {
   scope: "field-intake-geofile-create:actor",
@@ -54,7 +57,11 @@ export async function POST(request: Request) {
   try {
     formData = await request.formData();
   } catch {
-    return jsonError(400, "Expected multipart form data.");
+    return jsonFieldIntakeError({
+      status: 400,
+      code: "invalid_request_body",
+      message: "We could not read that boundary field request.",
+    });
   }
 
   try {
@@ -73,7 +80,11 @@ export async function POST(request: Request) {
     });
 
     if (runtime.mode !== "supabase") {
-      return jsonError(503, "Supabase runtime is not configured.");
+      return jsonFieldIntakeError({
+        status: 503,
+        code: "runtime_unavailable",
+        message: "Field intake is temporarily unavailable.",
+      });
     }
 
     const actor = await resolveRequestActor(request, runtime, {
@@ -100,7 +111,7 @@ export async function POST(request: Request) {
     });
 
     if (rateLimitResponse) {
-      return rateLimitResponse;
+      return withFieldIntakeRateLimitCode(rateLimitResponse);
     }
 
     const parsed = await runtime.services.fieldIntake.parseBoundaryFile({
@@ -156,13 +167,19 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (error instanceof RequestContextError) {
-      return jsonError(error.status, error.message);
+      return handleFieldIntakeRouteError(error, {
+        event: "field-intake-geofile-create-route",
+        code: "boundary_create_failed",
+        message: "We could not create that field from the boundary file.",
+        status: error.status,
+      });
     }
 
-    return jsonServerError(error, {
-      status: 400,
+    return handleFieldIntakeRouteError(error, {
       event: "field-intake-geofile-create-route",
-      message: "Geofile field create failed.",
+      code: "boundary_create_failed",
+      message: "We could not create that field from the boundary file.",
+      status: 400,
     });
   }
 }
