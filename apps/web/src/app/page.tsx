@@ -11,7 +11,7 @@ import { Footer } from "../components/landing/footer";
 
 export default function Home() {
   return (
-    <main style={{ backgroundColor: "var(--ds-surface-white)" }}>
+    <main data-theme="dark" style={{ backgroundColor: "var(--ds-surface-white)" }}>
       <LandingNavbar />
       <Hero />
       <DecisionIntelligence />

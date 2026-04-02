@@ -183,6 +183,17 @@ html[data-theme="dark"] {
   opacity: 0.85;
 }
 
+/* Logo: white by default (dark theme), invert to dark on light theme */
+.landing-nav-logo {
+  opacity: 0.9;
+  transition: filter 0.3s ease, opacity 0.3s ease;
+}
+
+:not([data-theme="dark"]) .landing-nav-logo {
+  filter: brightness(0) saturate(100%);
+  opacity: 0.7;
+}
+
 /* Font aliases — map v1 landing font vars to v3 app font vars */
 :root {
   --font-mackinac: var(--font-heading, 'P22 Mackinac', Georgia, serif);

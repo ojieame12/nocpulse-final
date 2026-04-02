@@ -52,7 +52,7 @@ export function LandingNavbar() {
     >
       <Link href="/">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-light.svg" alt="NocPulse" style={{ height: 18, opacity: 0.9 }} />
+        <img src="/logo-light.svg" alt="NocPulse" className="landing-nav-logo" style={{ height: 18 }} />
       </Link>
 
       <div className="landing-nav-links">
