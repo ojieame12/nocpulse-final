@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.fieldpulse.cadence.hail</string>
+  <key>WorkingDirectory</key>
+  <string>/Users/ojieame/FieldPulse-v3</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>FIELDPULSE_WORKSPACE_ID</key>
+    <string>a625a72d-a2de-43ee-8bb4-aad93466f750</string>
+  </dict>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>./scripts/run-cadence.sh hail</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Minute</key>
+      <integer>20</integer>
+      <key>Hour</key>
+      <integer>0</integer>
+    </dict>
+    <dict>
+      <key>Minute</key>
+      <integer>20</integer>
+      <key>Hour</key>
+      <integer>6</integer>
+    </dict>
+    <dict>
+      <key>Minute</key>
+      <integer>20</integer>
+      <key>Hour</key>
+      <integer>12</integer>
+    </dict>
+    <dict>
+      <key>Minute</key>
+      <integer>20</integer>
+      <key>Hour</key>
+      <integer>18</integer>
+    </dict>
+  </array>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/ojieame/FieldPulse-v3/logs/cadence/hail/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/ojieame/FieldPulse-v3/logs/cadence/hail/launchd.err.log</string>
+</dict>
+</plist>

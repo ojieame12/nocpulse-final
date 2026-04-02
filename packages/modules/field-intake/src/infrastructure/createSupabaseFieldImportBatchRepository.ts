@@ -299,33 +299,21 @@ export function createSupabaseFieldImportBatchRepository(
       },
     ) {
       const updateResult = await client
-        .from("field_import_candidates")
-        .update({
-          status: "committed",
-          committed_field_id: input.fieldId,
-          commit_action: input.action,
-          committed_at: new Date().toISOString(),
+        .rpc("mark_field_import_candidate_committed", {
+          target_workspace_id: workspaceId,
+          target_batch_id: batchId,
+          target_candidate_id: candidateId,
+          target_field_id: input.fieldId,
+          target_commit_action: input.action,
         })
-        .eq("workspace_id", workspaceId)
-        .eq("batch_id", batchId)
-        .eq("id", candidateId)
-        .select("id")
         .single();
 
-      const updatedCandidate = requireSupabaseData(
-        updateResult,
-        "fieldIntake.markCandidateCommitted.update",
+      return mapFieldImportCandidate(
+        requireSupabaseData(
+          updateResult,
+          "fieldIntake.markCandidateCommitted.update",
+        ),
       );
-      const candidates = await listCandidatesByBatch(workspaceId, batchId);
-      const candidate = candidates.find((entry) => entry.id === updatedCandidate.id);
-
-      if (!candidate) {
-        throw new Error(
-          `[field-intake] committed candidate ${updatedCandidate.id} could not be reloaded`,
-        );
-      }
-
-      return candidate;
     },
 
     async markBatchCommitted(
@@ -334,30 +322,19 @@ export function createSupabaseFieldImportBatchRepository(
       actorUserId: UserId,
     ) {
       const updateResult = await client
-        .from("field_import_batches")
-        .update({
-          status: "committed",
-          committed_by: actorUserId,
-          committed_at: new Date().toISOString(),
+        .rpc("mark_field_import_batch_committed", {
+          target_workspace_id: workspaceId,
+          target_batch_id: batchId,
+          actor_user_id: actorUserId,
         })
-        .eq("workspace_id", workspaceId)
-        .eq("id", batchId)
-        .select("id")
         .single();
 
-      const updatedBatch = requireSupabaseData(
-        updateResult,
-        "fieldIntake.markBatchCommitted.update",
+      return mapFieldImportBatch(
+        requireSupabaseData(
+          updateResult,
+          "fieldIntake.markBatchCommitted.update",
+        ),
       );
-      const batch = await this.getBatchById(workspaceId, updatedBatch.id);
-
-      if (!batch) {
-        throw new Error(
-          `[field-intake] committed batch ${updatedBatch.id} could not be reloaded`,
-        );
-      }
-
-      return batch;
     },
   };
 }

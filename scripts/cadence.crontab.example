@@ -1,0 +1,10 @@
+SHELL=/bin/bash
+PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+
+# Edit FIELDPULSE_DIR if your checkout lives elsewhere.
+FIELDPULSE_DIR=/Users/ojieame/FieldPulse-v3
+
+# Every 6 hours.
+0 */6 * * * cd "$FIELDPULSE_DIR" && ./scripts/run-cadence.sh market
+10 */6 * * * cd "$FIELDPULSE_DIR" && ./scripts/run-cadence.sh probe
+20 */6 * * * cd "$FIELDPULSE_DIR" && FIELDPULSE_WORKSPACE_ID=a625a72d-a2de-43ee-8bb4-aad93466f750 ./scripts/run-cadence.sh hail

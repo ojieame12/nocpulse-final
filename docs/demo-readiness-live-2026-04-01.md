@@ -34,7 +34,11 @@ Workspace: `8f2afceb-aefe-4e90-a24e-7ab07c4423fe`
 
 ## Locked Demo Set
 
-These fields are currently `ready` for both vegetation and moisture:
+These fields are currently `ready` for both vegetation and moisture, and are the only Hope Creek fields allowed in:
+
+- default first-open product surfaces
+- launch demos
+- first-insight chooser candidates
 
 - `Main Farm`
 - `Rath`
@@ -50,6 +54,36 @@ These fields are currently `ready` for both vegetation and moisture:
 Current demo risk fields in that 10-field shortlist:
 
 - none
+
+## Launch-Visible Exclusions
+
+These fields remain manually inspectable, but they should not be selected by default in launch-visible flows.
+
+### Excluded because moisture is still thin
+
+- `Biehn`
+- `Bricks`
+- `Carl Yard`
+- `Christoph Creek`
+- `Church`
+
+Reason:
+- vegetation is strong enough to inspect manually
+- moisture is not yet strong enough to support the first-insight path
+
+### Excluded because overall field quality is still thin
+
+- all remaining Hope Creek fields outside the locked 10-field demo set
+
+Reason:
+- they do not yet provide a consistent first impression across vegetation and moisture
+- they are acceptable for operator inspection, but not for default user-facing selection
+
+### Product rule
+
+- launch-visible and first-open flows must use the locked 10-field set only
+- fields outside the allowlist can still be opened intentionally by operators or advanced users
+- the default chooser must never fall back to arbitrary field ordering when no launch-visible candidate exists
 
 ## Other Vegetation-Ready Fields
 
