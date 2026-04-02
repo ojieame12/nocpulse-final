@@ -106,14 +106,58 @@ function deriveBoundingBox(boundary: MapMultiPolygon): MapBoundingBox {
   return [west, south, east, north];
 }
 
+/**
+ * Deep-clone a boundary, filtering out degenerate rings and ensuring ring
+ * closure.  Deck.gl rejects MultiPolygon coordinates with empty or
+ * sub-4-point rings, and some PostGIS round-trips can produce them
+ * (especially for cached LLD boundaries near meridian edges).
+ */
 function cloneBoundary(boundary: BuildFieldBoundaryPreviewRenderModelInput["boundary"]): MapMultiPolygon {
+  const sanitized: MapGeoPoint[][][] = [];
+
+  for (const polygon of boundary.coordinates) {
+    const rings: MapGeoPoint[][] = [];
+
+    for (const ring of polygon) {
+      // A valid GeoJSON ring needs ≥ 4 points (3 unique + closing vertex).
+      if (ring.length < 4) continue;
+
+      const cloned: MapGeoPoint[] = ring.map(
+        ([longitude, latitude]) => [longitude, latitude],
+      );
+
+      // Ensure ring is closed (first === last).
+      const first = cloned[0];
+      const last = cloned[cloned.length - 1];
+      if (first[0] !== last[0] || first[1] !== last[1]) {
+        cloned.push([first[0], first[1]]);
+      }
+
+      // Reject rings where all points are identical (degenerate).
+      const hasDistinct = cloned.some(
+        (pt, i) => i > 0 && (pt[0] !== first[0] || pt[1] !== first[1]),
+      );
+      if (!hasDistinct) continue;
+
+      rings.push(cloned);
+    }
+
+    // A polygon needs at least one outer ring.
+    if (rings.length > 0) {
+      sanitized.push(rings);
+    }
+  }
+
+  // If everything was filtered out, produce a minimal degenerate polygon
+  // so downstream code doesn't crash on empty coordinates.
+  if (sanitized.length === 0) {
+    console.warn("[map] boundary had no valid rings after sanitization — using degenerate fallback");
+    sanitized.push([[[0, 0], [0, 0.0001], [0.0001, 0.0001], [0.0001, 0], [0, 0]]]);
+  }
+
   return {
     type: "MultiPolygon",
-    coordinates: boundary.coordinates.map((polygon) =>
-      polygon.map((ring) =>
-        ring.map(([longitude, latitude]) => [longitude, latitude]),
-      ),
-    ),
+    coordinates: sanitized,
   };
 }
 

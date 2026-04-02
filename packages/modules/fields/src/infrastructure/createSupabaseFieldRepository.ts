@@ -75,7 +75,19 @@ function toFieldBoundary(value: JsonValue): FieldBoundary {
     throw new Error("[fields] invalid field boundary geojson");
   }
 
-  return value as unknown as FieldBoundary;
+  // Validate coordinate nesting depth and filter degenerate rings.
+  // ST_AsGeoJSON can produce empty inner rings or sub-4-point rings
+  // that crash Deck.gl downstream.
+  const coordinates = (value.coordinates as unknown[][][]).map(
+    (polygon: unknown[][]) =>
+      (polygon ?? []).filter((ring: unknown[]) => Array.isArray(ring) && ring.length >= 4),
+  ).filter((polygon) => polygon.length > 0);
+
+  if (coordinates.length === 0) {
+    throw new Error("[fields] field boundary has no valid polygon rings");
+  }
+
+  return { type: "MultiPolygon", coordinates } as unknown as FieldBoundary;
 }
 
 function toLabelPoint(value: JsonValue): GeoPoint {
