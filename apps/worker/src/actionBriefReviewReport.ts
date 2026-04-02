@@ -50,6 +50,20 @@ export type ActionBriefReviewReport = {
   summaries: ActionBriefReviewWorkspaceSummary[];
 };
 
+export type ActionBriefReviewAggregate = {
+  workspaceCount: number;
+  alertCount: number;
+  activeCount: number;
+  resolvedCount: number;
+  dismissedCount: number;
+  acknowledgedCount: number;
+  unacknowledgedActiveCount: number;
+  averageHoursToAcknowledge: number | null;
+  averageHoursToResolution: number | null;
+  dismissalRate: number | null;
+  resolutionRate: number | null;
+};
+
 function average(values: readonly number[]) {
   if (values.length === 0) {
     return null;
@@ -142,6 +156,45 @@ export function buildActionBriefReviewReport(input: {
     lookbackDays: input.lookbackDays,
     workspaceCount: summaries.length,
     summaries,
+  };
+}
+
+export function summarizeActionBriefReviewAlerts(
+  alerts: readonly ActionBriefAlertRow[],
+): ActionBriefReviewAggregate {
+  const acknowledgementDurations = alerts
+    .map((alert) => hoursBetween(alert.started_at, alert.acknowledged_at))
+    .filter((value): value is number => value != null);
+  const resolutionDurations = alerts
+    .map((alert) => hoursBetween(alert.started_at, alert.resolved_at))
+    .filter((value): value is number => value != null);
+
+  const workspaceIds = new Set(
+    alerts
+      .map((alert) => alert.workspace_id)
+      .filter((workspaceId): workspaceId is string => typeof workspaceId === "string"),
+  );
+
+  const activeCount = alerts.filter((alert) => alert.status === "active").length;
+  const resolvedCount = alerts.filter((alert) => alert.status === "resolved").length;
+  const dismissedCount = alerts.filter((alert) => alert.status === "dismissed").length;
+  const acknowledgedCount = alerts.filter((alert) => alert.acknowledged_at != null).length;
+  const unacknowledgedActiveCount = alerts.filter(
+    (alert) => alert.status === "active" && alert.acknowledged_at == null,
+  ).length;
+
+  return {
+    workspaceCount: workspaceIds.size,
+    alertCount: alerts.length,
+    activeCount,
+    resolvedCount,
+    dismissedCount,
+    acknowledgedCount,
+    unacknowledgedActiveCount,
+    averageHoursToAcknowledge: average(acknowledgementDurations),
+    averageHoursToResolution: average(resolutionDurations),
+    dismissalRate: alerts.length > 0 ? Number((dismissedCount / alerts.length).toFixed(4)) : null,
+    resolutionRate: alerts.length > 0 ? Number((resolvedCount / alerts.length).toFixed(4)) : null,
   };
 }
 

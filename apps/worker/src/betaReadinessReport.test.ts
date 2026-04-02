@@ -24,6 +24,19 @@ test("buildBetaReadinessAssessment returns GO when core beta gates are healthy",
       failedCount: 0,
       cancelledCount: 0,
     },
+    actionBriefReview: {
+      workspaceCount: 1,
+      alertCount: 8,
+      activeCount: 1,
+      resolvedCount: 5,
+      dismissedCount: 2,
+      acknowledgedCount: 7,
+      unacknowledgedActiveCount: 0,
+      averageHoursToAcknowledge: 6,
+      averageHoursToResolution: 24,
+      dismissalRate: 0.25,
+      resolutionRate: 0.625,
+    },
     sourceIntegrity: {
       fieldCount: 20,
       sourceBackedLatestCount: 20,
@@ -89,6 +102,19 @@ test("buildBetaReadinessAssessment returns NO-GO when queue and insight evidence
       failedCount: 0,
       cancelledCount: 0,
     },
+    actionBriefReview: {
+      workspaceCount: 0,
+      alertCount: 0,
+      activeCount: 0,
+      resolvedCount: 0,
+      dismissedCount: 0,
+      acknowledgedCount: 0,
+      unacknowledgedActiveCount: 0,
+      averageHoursToAcknowledge: null,
+      averageHoursToResolution: null,
+      dismissalRate: null,
+      resolutionRate: null,
+    },
     sourceIntegrity: {
       fieldCount: 30,
       sourceBackedLatestCount: 10,
@@ -137,4 +163,90 @@ test("buildBetaReadinessAssessment returns NO-GO when queue and insight evidence
     true,
   );
   assert.equal(result.nextActions.length > 0, true);
+});
+
+test("buildBetaReadinessAssessment returns NO-GO when action brief trust is weak despite healthy cadence", () => {
+  const result = buildBetaReadinessAssessment({
+    queueHealth: {
+      totalCount: 10,
+      queuedCount: 0,
+      runningCount: 0,
+      completedCount: 10,
+      failedCount: 0,
+      cancelledCount: 0,
+      staleRunningCount: 0,
+      cancellationRequestedCount: 0,
+      oldestQueuedAt: null,
+      oldestRunningAt: null,
+      latestUpdatedAt: "2026-04-02T12:00:00.000Z",
+    },
+    actionBrief: {
+      queuedCount: 0,
+      runningCount: 0,
+      completedCount: 12,
+      failedCount: 0,
+      cancelledCount: 0,
+    },
+    actionBriefReview: {
+      workspaceCount: 1,
+      alertCount: 10,
+      activeCount: 6,
+      resolvedCount: 1,
+      dismissedCount: 3,
+      acknowledgedCount: 4,
+      unacknowledgedActiveCount: 6,
+      averageHoursToAcknowledge: 48,
+      averageHoursToResolution: 72,
+      dismissalRate: 0.3,
+      resolutionRate: 0.1,
+    },
+    sourceIntegrity: {
+      fieldCount: 20,
+      sourceBackedLatestCount: 20,
+      seededFallbackCount: 0,
+      syntheticRasterCount: 0,
+      missingSoilContextCount: 0,
+      lowConfidenceCount: 0,
+    },
+    fieldQuality: {
+      generatedAt: "2026-04-02T12:00:00.000Z",
+      workspaceFilter: "hope-creek",
+      workspaceId: "workspace-1",
+      workspaceSlug: "hope-creek",
+      lookbackDays: 30,
+      fieldCount: 20,
+      readyCount: 12,
+      thinCount: 8,
+      fallbackCount: 0,
+      brokenCount: 0,
+      vegetationReadyCount: 12,
+      moistureReadyCount: 12,
+      sourceBackedLatestCount: 20,
+      seededFallbackCount: 0,
+      syntheticRasterCount: 0,
+      missingSoilContextCount: 0,
+      lowConfidenceCount: 0,
+      reasonCounts: {},
+    },
+    firstInsight: {
+      eventCount: 5,
+      uniqueActorCount: 2,
+      uniqueFieldCount: 3,
+      allowlistedEventCount: 5,
+      nonAllowlistedEventCount: 0,
+      averageWorkspaceSummaryComparisonCount: 3,
+    },
+  });
+
+  assert.equal(result.overallStatus, "NO-GO");
+  assert.equal(
+    result.gates.some((gate) => gate.key === "action-brief-review" && gate.status === "NO-GO"),
+    true,
+  );
+  assert.equal(
+    result.nextActions.includes(
+      "Inspect action-brief review behavior and tune thresholds or copy if alerts are piling up or getting dismissed.",
+    ),
+    true,
+  );
 });
