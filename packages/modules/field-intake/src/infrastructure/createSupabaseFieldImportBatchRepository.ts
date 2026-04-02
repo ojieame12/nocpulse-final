@@ -22,9 +22,12 @@ import type {
 } from "../contracts/FieldImportBatchRepository";
 import type { FieldBoundary } from "@fieldpulse/module-fields";
 import type { LldComponents } from "../contracts/LldComponents";
+import { isReusableSpreadsheetImportBatch } from "./reuseSpreadsheetImportBatch.shared";
 
 type FieldImportBatchRow =
   DatabaseSchema["app"]["Functions"]["create_field_import_batch"]["Returns"][number];
+type FieldImportBatchTableRow =
+  DatabaseSchema["app"]["Tables"]["field_import_batches"]["Row"];
 type FieldImportCandidateRow =
   DatabaseSchema["app"]["Functions"]["get_field_import_batch_candidates"]["Returns"][number];
 type FieldImportCandidateTableRow =
@@ -122,7 +125,7 @@ function toLldComponentsList(value: JsonValue): readonly LldComponents[] {
   });
 }
 
-function mapFieldImportBatch(row: FieldImportBatchRow): FieldImportBatch {
+function mapFieldImportBatch(row: FieldImportBatchRow | FieldImportBatchTableRow): FieldImportBatch {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
@@ -215,6 +218,53 @@ export function createSupabaseFieldImportBatchRepository(
     };
 
   return {
+    async findReusableSpreadsheetImportBatch(
+      input: CreateSpreadsheetImportBatchInput,
+      actorUserId: UserId,
+    ) {
+      const createdAfter = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const result = await client
+        .from("field_import_batches")
+        .select("*")
+        .eq("workspace_id", input.workspaceId)
+        .eq("source_type", "spreadsheet")
+        .eq("status", "previewed")
+        .eq("created_by", actorUserId)
+        .eq("file_name", input.preview.fileName)
+        .eq("sheet_name", input.preview.sheetName)
+        .eq("row_count", input.preview.rowCount)
+        .eq("valid_row_count", input.preview.validRowCount)
+        .eq("field_count", input.preview.fieldCount)
+        .eq("issue_count", input.preview.issueCount)
+        .gte("created_at", createdAfter)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      for (const row of result.data ?? []) {
+        const batch = mapFieldImportBatch(row);
+        const candidates = await listCandidatesByBatch(batch.workspaceId, batch.id);
+
+        if (
+          isReusableSpreadsheetImportBatch({
+            preview: input.preview,
+            batch,
+            candidates,
+          })
+        ) {
+          return {
+            batch,
+            candidates,
+          };
+        }
+      }
+
+      return null;
+    },
+
     async createSpreadsheetImportBatch(
       input: CreateSpreadsheetImportBatchInput,
       actorUserId: UserId,

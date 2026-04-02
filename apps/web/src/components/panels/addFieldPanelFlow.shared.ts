@@ -8,6 +8,17 @@ export type AddFieldSubmitPhase =
   | "boundary-create"
   | "hydration-retry";
 
+export type SavedSpreadsheetBatchResume = {
+  workspaceId: string | null;
+  batchId: string;
+  fileName: string;
+  sheetName: string;
+  rowCount: number;
+  fieldCount: number;
+  issueCount: number;
+  savedAt: string;
+};
+
 export function applySuggestedFieldName(
   currentFieldName: string,
   suggestedFieldName: string | null | undefined,
@@ -119,5 +130,66 @@ export function resolveAddFieldProgressCopy(input: {
       };
     default:
       return null;
+  }
+}
+
+export function buildSavedSpreadsheetBatchResume(input: {
+  workspaceId: string | null;
+  batchId: string;
+  fileName: string;
+  sheetName: string;
+  rowCount: number;
+  fieldCount: number;
+  issueCount: number;
+  savedAt?: string;
+}): SavedSpreadsheetBatchResume {
+  return {
+    workspaceId: input.workspaceId,
+    batchId: input.batchId,
+    fileName: input.fileName,
+    sheetName: input.sheetName,
+    rowCount: input.rowCount,
+    fieldCount: input.fieldCount,
+    issueCount: input.issueCount,
+    savedAt: input.savedAt ?? new Date().toISOString(),
+  };
+}
+
+export function parseSavedSpreadsheetBatchResume(
+  value: string | null,
+): SavedSpreadsheetBatchResume | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Partial<SavedSpreadsheetBatchResume>;
+    if (
+      typeof parsed.batchId !== "string" ||
+      typeof parsed.fileName !== "string" ||
+      typeof parsed.sheetName !== "string" ||
+      typeof parsed.rowCount !== "number" ||
+      typeof parsed.fieldCount !== "number" ||
+      typeof parsed.issueCount !== "number" ||
+      typeof parsed.savedAt !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      workspaceId:
+        typeof parsed.workspaceId === "string" || parsed.workspaceId === null
+          ? parsed.workspaceId
+          : null,
+      batchId: parsed.batchId,
+      fileName: parsed.fileName,
+      sheetName: parsed.sheetName,
+      rowCount: parsed.rowCount,
+      fieldCount: parsed.fieldCount,
+      issueCount: parsed.issueCount,
+      savedAt: parsed.savedAt,
+    };
+  } catch {
+    return null;
   }
 }

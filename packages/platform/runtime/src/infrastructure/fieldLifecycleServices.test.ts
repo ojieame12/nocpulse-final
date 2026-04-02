@@ -12,7 +12,10 @@ import type {
   ServerJobDispatcher,
   ServerRepositories,
 } from "../contracts/ServerRuntime";
-import { commitFieldImportBatch } from "./fieldLifecycleServices";
+import {
+  commitFieldImportBatch,
+  saveSpreadsheetImportPreview,
+} from "./fieldLifecycleServices";
 
 const WORKSPACE_ID = "workspace-1";
 const ACTOR_USER_ID = "user-1";
@@ -216,6 +219,9 @@ function createRepositories(): ServerRepositories {
       async createSpreadsheetImportBatch() {
         throw new Error("not used");
       },
+      async findReusableSpreadsheetImportBatch() {
+        return null;
+      },
       async getLatestCommittedCandidateByField() {
         return null;
       },
@@ -324,6 +330,70 @@ function createRepositories(): ServerRepositories {
     } as unknown as ServerRepositories["imageryRasterObservations"],
   } as unknown as ServerRepositories;
 }
+
+test("saveSpreadsheetImportPreview reuses a matching recent preview batch", async () => {
+  const batch = createBatch();
+  const candidate = createCandidate();
+  let createCalls = 0;
+
+  const repositories = createRepositories();
+  repositories.fieldImportBatches.findReusableSpreadsheetImportBatch = async () => ({
+    batch,
+    candidates: [candidate],
+  });
+  repositories.fieldImportBatches.createSpreadsheetImportBatch = async () => {
+    createCalls += 1;
+    return { batch, candidates: [candidate] };
+  };
+
+  const result = await saveSpreadsheetImportPreview(repositories, {
+    actorUserId: ACTOR_USER_ID,
+    workspaceId: WORKSPACE_ID,
+    preview: {
+      fileName: batch.fileName,
+      sheetName: batch.sheetName,
+      rowCount: batch.rowCount,
+      validRowCount: batch.validRowCount,
+      fieldCount: batch.fieldCount,
+      issueCount: batch.issueCount,
+      issues: batch.issues,
+      fields: [candidate],
+    },
+  });
+
+  assert.equal(createCalls, 0);
+  assert.equal(result.batch.id, batch.id);
+});
+
+test("saveSpreadsheetImportPreview creates a new batch when no reusable preview exists", async () => {
+  const batch = createBatch();
+  const candidate = createCandidate();
+  let createCalls = 0;
+
+  const repositories = createRepositories();
+  repositories.fieldImportBatches.findReusableSpreadsheetImportBatch = async () => null;
+  repositories.fieldImportBatches.createSpreadsheetImportBatch = async () => {
+    createCalls += 1;
+    return { batch, candidates: [candidate] };
+  };
+
+  await saveSpreadsheetImportPreview(repositories, {
+    actorUserId: ACTOR_USER_ID,
+    workspaceId: WORKSPACE_ID,
+    preview: {
+      fileName: batch.fileName,
+      sheetName: batch.sheetName,
+      rowCount: batch.rowCount,
+      validRowCount: batch.validRowCount,
+      fieldCount: batch.fieldCount,
+      issueCount: batch.issueCount,
+      issues: batch.issues,
+      fields: [candidate],
+    },
+  });
+
+  assert.equal(createCalls, 1);
+});
 
 function createDispatcher(recordedKeys: string[]): ServerJobDispatcher {
   return {
