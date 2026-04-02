@@ -512,7 +512,6 @@ export function buildFieldDetailModeData({
             .filter(Boolean)
             .join(" · ")
         : `${contract.shortLabel} field distribution`,
-    trendColor: modeTrend.series?.color ?? undefined,
     spatialColumns: [
       { label: "P10", value: formatMetricDisplayValue(metricKey, p10) },
       { label: "Median", value: formatMetricDisplayValue(metricKey, p50) },
