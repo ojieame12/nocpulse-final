@@ -47,6 +47,7 @@
     "report:read-model": "tsx src/fieldReportReadModel.ts",
     "report:quality": "tsx src/fieldQualityAudit.ts",
     "report:first-insight": "tsx src/previewFirstInsightReport.ts",
+    "report:first-insight-funnel": "tsx src/firstInsightFunnelReport.ts",
     "hail:cadence": "tsx src/hailRefreshCadence.ts",
     "hail:report": "tsx src/hailRefreshReport.ts",
     "health": "tsx src/health.ts",

@@ -1910,10 +1910,20 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     () =>
       buildPreviewFirstInsightAuditPayload({
         workspaceId,
-        fieldData,
+        fieldId: fieldData.fieldId,
+        activePanel,
+        isGuestSession,
+        summary: fieldData.summary,
         workspaceFirstInsightSummary,
       }),
-    [fieldData, workspaceFirstInsightSummary, workspaceId],
+    [
+      activePanel,
+      fieldData.fieldId,
+      fieldData.summary,
+      isGuestSession,
+      workspaceFirstInsightSummary,
+      workspaceId,
+    ],
   );
 
   useEffect(() => {
@@ -1947,6 +1957,8 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         window.sessionStorage.setItem(sessionKey, '1');
       })
       .catch(() => {
+      })
+      .finally(() => {
         firstInsightTrackingInFlightRef.current.delete(sessionKey);
       });
   }, [firstInsightAuditPayload]);

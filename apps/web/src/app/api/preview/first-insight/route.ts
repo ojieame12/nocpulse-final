@@ -103,10 +103,9 @@ export async function POST(request: Request) {
         dataQualityLabel: payload.dataQualityLabel,
         moistureConfidenceLevel: payload.moistureConfidenceLevel,
         moistureDerivationMode: payload.moistureDerivationMode,
-        workspaceSummaryComparisonCount:
-          payload.workspaceSummaryComparisonCount,
         focusFieldId: payload.focusFieldId,
         focusFieldName: payload.focusFieldName,
+        workspaceSummaryComparisonCount: payload.workspaceSummaryComparisonCount,
       },
     });
 
