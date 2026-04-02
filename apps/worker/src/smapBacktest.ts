@@ -29,6 +29,7 @@ import {
 } from "@fieldpulse/module-validation";
 import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import { createServerRuntime } from "@fieldpulse/platform-runtime";
+import { buildValidationPoint } from "./smapBacktest.shared";
 import { loadWorkerEnv } from "./runtime/loadEnv";
 import {
   parseCliArgs,
@@ -282,7 +283,7 @@ async function main() {
     // Fetch NocPulse moisture snapshots for this field
     const { data: snapshots, error: snapError } = await db
       .from("field_moisture_snapshots")
-      .select("observed_at, root_zone_pct")
+      .select("observed_at, root_zone_pct, source_key, inputs")
       .eq("field_id", field.id)
       .gte("observed_at", windowStart)
       .lt("observed_at", windowEndExclusive)
@@ -296,7 +297,14 @@ async function main() {
     }
 
     // Build NocPulse lookup by date
-    const nocpulseByDate = new Map<string, number>();
+    const nocpulseByDate = new Map<
+      string,
+      {
+        pct: number;
+        sourceKey: string | null;
+        derivationMode: string | null;
+      }
+    >();
     for (const snap of snapshots ?? []) {
       const date =
         typeof snap.observed_at === "string"
@@ -304,8 +312,18 @@ async function main() {
           : "";
       const pct =
         typeof snap.root_zone_pct === "number" ? snap.root_zone_pct : NaN;
+      const inputs =
+        snap.inputs && typeof snap.inputs === "object"
+          ? (snap.inputs as { derivationMode?: unknown })
+          : null;
+      const derivationMode =
+        typeof inputs?.derivationMode === "string"
+          ? inputs.derivationMode
+          : null;
+      const sourceKey =
+        typeof snap.source_key === "string" ? snap.source_key : null;
       if (date && Number.isFinite(pct)) {
-        nocpulseByDate.set(date, pct);
+        nocpulseByDate.set(date, { pct, sourceKey, derivationMode });
       }
     }
 
@@ -331,25 +349,38 @@ async function main() {
 
     const timeseries: SmapFieldReport["timeseries"] = [];
     const pairs: Array<{ predicted: number; observed: number }> = [];
+    let rawMatchedDates = 0;
 
     for (const date of sortedDates) {
-      const nocpulsePct = nocpulseByDate.get(date) ?? null;
+      const nocpulseSnapshot = nocpulseByDate.get(date) ?? null;
+      const nocpulsePct = nocpulseSnapshot?.pct ?? null;
       const smapPct = smapByDate.get(date) ?? null;
+      const result = buildValidationPoint(date, nocpulsePct, smapPct, {
+        sourceKey: nocpulseSnapshot?.sourceKey ?? null,
+        derivationMode: nocpulseSnapshot?.derivationMode ?? null,
+      });
 
-      timeseries.push({ date, nocpulsePct, smapPct });
+      timeseries.push(result.point);
 
-      if (nocpulsePct !== null && smapPct !== null) {
-        pairs.push({ predicted: nocpulsePct, observed: smapPct });
+      if (result.rawMatched) {
+        rawMatchedDates += 1;
+      }
+
+      if (result.pair) {
+        pairs.push(result.pair);
       }
     }
 
     const metrics = computeValidationMetrics(pairs);
+    const excludedMatchedDates = rawMatchedDates - pairs.length;
 
     const report: SmapFieldReport = {
       fieldId: field.id,
       fieldName: field.name ?? "Unnamed",
       periodDays: days,
       matchedDates: pairs.length,
+      rawMatchedDates,
+      excludedMatchedDates,
       metrics,
       timeseries,
     };
@@ -357,7 +388,10 @@ async function main() {
     fieldReports.push(report);
 
     console.log(
-      `[smap-backtest] ${field.name ?? field.id}: ${pairs.length} matched dates, ` +
+      `[smap-backtest] ${field.name ?? field.id}: ` +
+        `${pairs.length}/${rawMatchedDates} scored/raw matched dates` +
+        (excludedMatchedDates > 0 ? ` (${excludedMatchedDates} excluded)` : "") +
+        `, ` +
         `RMSE=${metrics.rmse.toFixed(2)}, MAE=${metrics.mae.toFixed(2)}, ` +
         `r=${metrics.pearsonR.toFixed(3)}, bias=${metrics.bias.toFixed(2)}`,
     );
