@@ -1,9 +1,13 @@
 import type { SidebarFieldItem } from "../../components/layout/Sidebar";
 import type { FieldViewModel, PreviewShellViewer } from "../../app/preview/PreviewShell";
+import {
+  OFFLINE_FIELD_STORE,
+  isIndexedDbAvailable,
+  openOfflineDb,
+  waitForRequest,
+  waitForTransaction,
+} from "./offlineStorage";
 
-const OFFLINE_DB_NAME = "fieldpulse-offline";
-const OFFLINE_DB_VERSION = 1;
-const OFFLINE_FIELD_STORE = "recent-field-snapshots";
 const MAX_OFFLINE_FIELDS_PER_OWNER = 8;
 
 type OfflineFieldSnapshotRecord = {
@@ -15,47 +19,6 @@ type OfflineFieldSnapshotRecord = {
   savedAt: string;
   data: FieldViewModel;
 };
-
-function isIndexedDbAvailable() {
-  return typeof window !== "undefined" && "indexedDB" in window;
-}
-
-function waitForRequest<T>(request: IDBRequest<T>) {
-  return new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed."));
-  });
-}
-
-function waitForTransaction(transaction: IDBTransaction) {
-  return new Promise<void>((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () =>
-      reject(transaction.error ?? new Error("IndexedDB transaction failed."));
-    transaction.onabort = () =>
-      reject(transaction.error ?? new Error("IndexedDB transaction aborted."));
-  });
-}
-
-function openOfflineDb() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    if (!isIndexedDbAvailable()) {
-      reject(new Error("IndexedDB is not available."));
-      return;
-    }
-
-    const request = window.indexedDB.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(OFFLINE_FIELD_STORE)) {
-        db.createObjectStore(OFFLINE_FIELD_STORE, { keyPath: "key" });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () =>
-      reject(request.error ?? new Error("Unable to open offline database."));
-  });
-}
 
 export function buildOfflineCacheOwnerKey(input: {
   workspaceId: string;

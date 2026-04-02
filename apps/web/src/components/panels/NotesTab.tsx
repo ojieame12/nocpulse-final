@@ -8,6 +8,7 @@ export type ScoutNoteOutcome = 'confirmed' | 'not_confirmed' | 'resolved' | 'mon
 
 export interface FieldNoteHistoryItem {
   id: string; date: string; text: string; status: ScoutNoteOutcome;
+  syncStatus?: 'pending' | 'failed';
   findingId?: string | null; zoneId?: string | null; cellKey?: string | null;
 }
 
@@ -17,7 +18,7 @@ export interface FieldNotesInspectionTarget {
 }
 
 export interface FieldNotesProps {
-  fieldId: string; name: string; lld: string;
+  workspaceId: string; fieldId: string; name: string; lld: string;
   inspectionTarget: FieldNotesInspectionTarget | null;
   entries: readonly FieldNoteHistoryItem[];
   submitUrl: string;
