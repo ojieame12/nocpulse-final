@@ -53,6 +53,7 @@ import {
   type FieldNotesProps,
 } from "./NotesTab";
 import type { FieldActivityPanelModel } from "../../features/fields/FieldActivityPanelModel";
+import type { WorkspaceFirstInsightSummaryCard } from "../../features/fields/workspaceFirstInsightSummary";
 export type { ModeKey } from "./fieldDetailTypes";
 export { MODE_TO_METRIC_KEY } from "./fieldDetailTypes";
 import type { ModeKey, SeverityKey, DetailPanelModeVital, DetailPanelModeData } from "./fieldDetailTypes";
@@ -225,6 +226,7 @@ function SubPageView({
   market: FieldMarketProps | null;
   crop: FieldCropProps | null;
   action: FieldActionProps | null;
+  workspaceFirstInsightSummary?: WorkspaceFirstInsightSummaryCard | null;
   notes: FieldNotesProps | null;
   activity: FieldActivityPanelModel | null;
   selectedZoneId: string | null;
@@ -762,6 +764,7 @@ export interface FieldDetailPanelProps {
   market: FieldMarketProps | null;
   crop: FieldCropProps | null;
   action: FieldActionProps | null;
+  workspaceFirstInsightSummary?: WorkspaceFirstInsightSummaryCard | null;
   notes: FieldNotesProps | null;
   activity: FieldActivityPanelModel | null;
   onMarketScenarioSaved?: (() => void | Promise<void>) | null;
@@ -926,6 +929,7 @@ export function FieldDetailPanel({
   report,
   market,
   action,
+  workspaceFirstInsightSummary = null,
   notes,
   activity,
   onMarketScenarioSaved,
@@ -1487,6 +1491,78 @@ export function FieldDetailPanel({
               <p className="fdp__hero-sub">{liveModeData.sub}</p>
             </div>
           </div>
+
+          {workspaceFirstInsightSummary ? (
+            <Card span={2} style={{ border: "1px solid var(--border-light)" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <div
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    background: "rgba(59, 130, 246, 0.12)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <Eye size={14} color="#3b82f6" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Lbl color="#3b82f6">{workspaceFirstInsightSummary.headline}</Lbl>
+                  <p
+                    style={{
+                      fontFamily: "var(--font-body)",
+                      fontSize: 12,
+                      color: "var(--text-primary)",
+                      margin: "6px 0 0",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {workspaceFirstInsightSummary.summary}
+                  </p>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                      gap: 10,
+                      marginTop: 12,
+                    }}
+                  >
+                    {workspaceFirstInsightSummary.comparisons.map((comparison) => (
+                      <div
+                        key={`${comparison.label}:${comparison.fieldId}`}
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: 12,
+                          border: "1px solid var(--border-light)",
+                          background: "rgba(248, 250, 248, 0.9)",
+                        }}
+                      >
+                        <LblM>{comparison.label}</LblM>
+                        <p
+                          style={{
+                            fontFamily: "var(--font-body)",
+                            fontSize: 13,
+                            color: "var(--text-primary)",
+                            margin: "6px 0 0",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {comparison.fieldName}
+                        </p>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }}>
+                          <Big size={18}>{comparison.value}</Big>
+                          <Sub>{comparison.note}</Sub>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ) : null}
 
           {firstInsightCard ? (
             <Card span={2} style={{ border: "1px solid var(--border-light)" }}>
