@@ -94,7 +94,7 @@ function normalizeFieldName(value: string | null | undefined) {
 }
 
 function resolveMoistureConfidencePriority(
-  confidence: PreviewFieldSelection["latestMoisture"] extends { confidence: infer T } ? T : never,
+  confidence: NonNullable<PreviewFieldSelection["latestMoisture"]>["confidence"] | undefined,
 ) {
   switch (confidence) {
     case "high":
