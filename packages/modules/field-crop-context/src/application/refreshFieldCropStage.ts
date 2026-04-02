@@ -27,6 +27,41 @@ function toObservedDay(iso: string) {
   return iso.slice(0, 10);
 }
 
+function extractSeedingDate(value: unknown) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const seedingDate = (value as { seedingDate?: unknown }).seedingDate;
+  return typeof seedingDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(seedingDate)
+    ? seedingDate
+    : null;
+}
+
+function uniqueDailyGddHistory(input: {
+  observedDay: string;
+  latestSignal: { observedAt: string; gdd24h: number | null };
+  recentSignals?: readonly { observedAt: string; gdd24h: number | null }[];
+}) {
+  const byDay = new Map<string, number>();
+  const orderedSignals = [
+    ...(input.recentSignals ?? []),
+    input.latestSignal,
+  ].sort((left, right) => left.observedAt.localeCompare(right.observedAt));
+
+  for (const signal of orderedSignals) {
+    const day = toObservedDay(signal.observedAt);
+
+    if (day > input.observedDay) {
+      continue;
+    }
+
+    byDay.set(day, roundTo(Math.max(0, signal.gdd24h ?? 0), 3));
+  }
+
+  return byDay;
+}
+
 export type RefreshFieldCropStageUseCaseInput = {
   repository: RefreshFieldCropStageRepository;
   input: RefreshFieldCropStageInput;
@@ -45,11 +80,33 @@ export async function refreshFieldCropStage(
   }
 
   const observedDay = toObservedDay(input.input.weatherSignalSet.observedAt);
+  const seedingDate = extractSeedingDate(current.metadata);
+  const signalHistory = uniqueDailyGddHistory({
+    observedDay,
+    latestSignal: input.input.weatherSignalSet,
+    recentSignals: input.input.recentWeatherSignals,
+  });
   const alreadyApplied = current.lastGddObservedOn === observedDay;
-  const appliedDailyGdd = alreadyApplied
+  const fallbackAppliedDailyGdd = alreadyApplied
     ? 0
     : roundTo(Math.max(0, input.input.weatherSignalSet.gdd24h ?? 0), 3);
-  const accumulatedGdd = roundTo(current.accumulatedGdd + appliedDailyGdd, 3);
+  const appliedDailyGdd =
+    seedingDate != null
+      ? observedDay < seedingDate
+        ? 0
+        : signalHistory.get(observedDay) ?? 0
+      : fallbackAppliedDailyGdd;
+  const accumulatedGdd =
+    seedingDate != null
+      ? observedDay < seedingDate
+        ? 0
+        : roundTo(
+            [...signalHistory.entries()]
+              .filter(([day]) => day >= seedingDate)
+              .reduce((sum, [, gdd24h]) => sum + gdd24h, 0),
+            3,
+          )
+      : roundTo(current.accumulatedGdd + appliedDailyGdd, 3);
   const derivedGrowthStage = deriveGrowthStageFromAccumulatedGdd(
     accumulatedGdd,
     input.input.thresholds,
@@ -69,7 +126,8 @@ export async function refreshFieldCropStage(
     growthStage,
     growthStageSource,
     accumulatedGdd,
-    lastGddObservedOn: observedDay,
+    lastGddObservedOn:
+      seedingDate != null && observedDay < seedingDate ? null : observedDay,
     lastWeatherSignalSetId: input.input.weatherSignalSet.id,
     lastStageUpdatedAt: input.input.requestedAt,
     sourceKey: input.input.sourceKey ?? DEFAULT_SOURCE_KEY,
@@ -78,6 +136,7 @@ export async function refreshFieldCropStage(
         ? current.metadata
         : {}),
       lastDerivedGrowthStage: derivedGrowthStage,
+      seasonAccumulationStartDate: seedingDate,
       lastAppliedObservedDay: observedDay,
       lastAppliedDailyGdd: appliedDailyGdd,
     },
@@ -88,8 +147,9 @@ export async function refreshFieldCropStage(
     appliedDailyGdd,
     derivedGrowthStage,
     updated:
-      appliedDailyGdd > 0 ||
+      next.accumulatedGdd !== current.accumulatedGdd ||
       next.growthStage !== current.growthStage ||
-      next.growthStageSource !== current.growthStageSource,
+      next.growthStageSource !== current.growthStageSource ||
+      next.lastGddObservedOn !== current.lastGddObservedOn,
   };
 }

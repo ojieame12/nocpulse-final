@@ -148,6 +148,23 @@ export function createSupabaseFieldWeatherDerivedSignalSetRepository(
       return result.data ? mapSignalSet(result.data) : null;
     },
 
+    async listRecentByField(workspaceId, fieldId, limit = 240) {
+      const result = await client
+        .from("field_weather_signal_sets")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("field_id", fieldId)
+        .order("observed_at", { ascending: false })
+        .order("updated_at", { ascending: false })
+        .limit(limit);
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      return (result.data ?? []).map(mapSignalSet);
+    },
+
     async upsertSignalSet(input) {
       const result = await client
         .from("field_weather_signal_sets")

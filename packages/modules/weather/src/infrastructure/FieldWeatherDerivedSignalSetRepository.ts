@@ -7,6 +7,11 @@ export type FieldWeatherDerivedSignalSetRepository = {
     workspaceId: WorkspaceId,
     fieldId: EntityId,
   ): Promise<FieldWeatherDerivedSignalSet | null>;
+  listRecentByField(
+    workspaceId: WorkspaceId,
+    fieldId: EntityId,
+    limit?: number,
+  ): Promise<readonly FieldWeatherDerivedSignalSet[]>;
   upsertSignalSet(
     input: UpsertFieldWeatherDerivedSignalSetInput,
   ): Promise<FieldWeatherDerivedSignalSet>;

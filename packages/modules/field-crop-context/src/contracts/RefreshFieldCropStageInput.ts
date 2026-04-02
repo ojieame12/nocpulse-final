@@ -15,6 +15,10 @@ export type RefreshFieldCropStageInput = {
     observedAt: TimestampIso;
     gdd24h: number | null;
   };
+  recentWeatherSignals?: readonly {
+    observedAt: TimestampIso;
+    gdd24h: number | null;
+  }[];
   thresholds: readonly StageProgressionThreshold[];
   sourceKey?: string;
 };

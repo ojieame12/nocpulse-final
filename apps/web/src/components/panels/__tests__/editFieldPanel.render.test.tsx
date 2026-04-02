@@ -12,6 +12,7 @@ function createBaseProps() {
     areaHaLabel: "259.0 ha",
     lld: "NW-25-010-17-W4",
     crop: "Canola",
+    seedingDate: "2026-04-28",
     cropStage: "Vegetative stage",
     growthStageKey: "vegetative",
     growthStageSource: "derived",
@@ -26,6 +27,8 @@ test("EditFieldPanel renders the derived-stage auto option and manual-stage choi
   const markup = renderToStaticMarkup(<EditFieldPanel {...createBaseProps()} />);
 
   assert.match(markup, /Growth stage/);
+  assert.match(markup, /Seeding date/);
+  assert.match(markup, /value="2026-04-28"/);
   assert.match(markup, /Auto \(use current derived stage\)/);
   assert.match(markup, /Pre Seed/);
   assert.match(markup, /Vegetative/);
@@ -39,6 +42,7 @@ test("EditFieldPanel renders the clear-manual option when a manual override is a
   const markup = renderToStaticMarkup(
     <EditFieldPanel
       {...createBaseProps()}
+      seedingDate={null}
       growthStageSource="manual"
       growthStageLabel="Flowering stage"
       growthStageKey="flowering"

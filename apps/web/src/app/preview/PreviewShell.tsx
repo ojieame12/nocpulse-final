@@ -65,6 +65,7 @@ export type FieldViewModel = {
   fieldName: string;
   areaHaLabel: string;
   cropContext: {
+    seedingDate: string | null;
     cropType: string | null;
     growthStage: string | null;
     growthStageSource: string | null;
@@ -282,11 +283,14 @@ function patchFieldViewModelCrop(
   field: FieldViewModel,
   crop: {
     cropName: string;
+    seedingDate?: string | null;
     growthStage?: string | null;
   },
 ): FieldViewModel {
   const nextGrowthStage =
     crop.growthStage === undefined ? field.cropContext?.growthStage ?? null : crop.growthStage;
+  const nextSeedingDate =
+    crop.seedingDate === undefined ? field.cropContext?.seedingDate ?? null : crop.seedingDate;
   const nextGrowthStageSource =
     crop.growthStage === undefined
       ? field.cropContext?.growthStageSource ?? null
@@ -308,11 +312,13 @@ function patchFieldViewModelCrop(
     cropContext: field.cropContext
       ? {
           ...field.cropContext,
+          seedingDate: nextSeedingDate,
           cropType: crop.cropName,
           growthStage: nextGrowthStage,
           growthStageSource: nextGrowthStageSource,
         }
       : {
+          seedingDate: nextSeedingDate,
           cropType: crop.cropName,
           growthStage: nextGrowthStage,
           growthStageSource: nextGrowthStageSource,
@@ -1175,6 +1181,9 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       patchCachedField(fieldId, (field) =>
         patchFieldViewModelCrop(field, {
           cropName: nextCropName,
+          ...(crop.seedingDate !== undefined
+            ? { seedingDate: crop.seedingDate || null }
+            : {}),
           ...(crop.growthStage !== undefined
             ? { growthStage: crop.growthStage }
             : {}),
@@ -2018,6 +2027,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             areaHaLabel={fieldData.areaHaLabel}
             lld={fieldData.summary?.lld ?? fieldData.cropPanel?.lld ?? null}
             crop={fieldData.summary?.crop ?? fieldData.cropPanel?.cropName ?? null}
+            seedingDate={fieldData.cropContext?.seedingDate ?? null}
             cropStage={fieldData.summary?.cropStage ?? fieldData.cropPanel?.thresholdStageLabel ?? null}
             growthStageKey={fieldData.cropContext?.growthStage ?? null}
             growthStageSource={fieldData.cropContext?.growthStageSource ?? null}

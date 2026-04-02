@@ -527,6 +527,9 @@ export async function buildFieldOverviewViewModel(
     defaultGrowthStage: defaultCropRules.crop.growthStage,
     gddBaseC: defaultCropRules.crop.gddBaseC,
   });
+  const cropContextMetadata = readModel.cropContext
+    ? toPrimitiveMetadata(readModel.cropContext.metadata)
+    : {};
   const opticalSeasonality = resolveOpticalSeasonality({
     cropStagePresentation,
     latestOpticalCaptureAt:
@@ -1011,6 +1014,10 @@ export async function buildFieldOverviewViewModel(
     areaHaLabel: `${field.areaHa.toFixed(1)} ha`,
     cropContext: readModel.cropContext
       ? {
+          seedingDate:
+            typeof cropContextMetadata.seedingDate === "string"
+              ? cropContextMetadata.seedingDate
+              : null,
           cropType: readModel.cropContext.cropType ?? null,
           growthStage: readModel.cropContext.growthStage ?? null,
           growthStageSource: readModel.cropContext.growthStageSource ?? null,

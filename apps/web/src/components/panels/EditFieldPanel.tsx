@@ -44,6 +44,7 @@ export interface EditFieldPanelProps {
   areaHaLabel: string;
   lld: string | null;
   crop: string | null;
+  seedingDate: string | null;
   cropStage: string | null;
   growthStageKey: string | null;
   growthStageSource: string | null;
@@ -156,6 +157,7 @@ export function EditFieldPanel({
   areaHaLabel,
   lld,
   crop,
+  seedingDate,
   cropStage,
   growthStageKey,
   growthStageSource,
@@ -170,12 +172,14 @@ export function EditFieldPanel({
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [localName, setLocalName] = useState(fieldName);
   const normalizedGrowthStage = normalizeGrowthStageValue(growthStageKey);
+  const [selectedSeedingDate, setSelectedSeedingDate] = useState(seedingDate ?? "");
   const [selectedGrowthStage, setSelectedGrowthStage] = useState<string>(
     growthStageSource === "manual" && normalizedGrowthStage
       ? normalizedGrowthStage
       : AUTO_GROWTH_STAGE_VALUE,
   );
   const [growthStageSaving, setGrowthStageSaving] = useState(false);
+  const [seedingDateSaving, setSeedingDateSaving] = useState(false);
   const trimmedCrop = crop?.trim() ?? "";
 
   useEffect(() => {
@@ -184,13 +188,38 @@ export function EditFieldPanel({
   }, [fieldId, fieldName]);
 
   useEffect(() => {
+    setSelectedSeedingDate(seedingDate ?? "");
     setSelectedGrowthStage(
       growthStageSource === "manual" && normalizedGrowthStage
         ? normalizedGrowthStage
         : AUTO_GROWTH_STAGE_VALUE,
     );
     setGrowthStageSaving(false);
-  }, [fieldId, growthStageSource, normalizedGrowthStage]);
+    setSeedingDateSaving(false);
+  }, [fieldId, growthStageSource, normalizedGrowthStage, seedingDate]);
+
+  async function handleSeedingDateChange(nextValue: string) {
+    if (!onUpdateCrop || !trimmedCrop || seedingDateSaving) {
+      return;
+    }
+
+    const previousValue = selectedSeedingDate;
+    setSelectedSeedingDate(nextValue);
+    setSeedingDateSaving(true);
+
+    try {
+      const result = await onUpdateCrop(fieldId, {
+        cropName: trimmedCrop,
+        seedingDate: nextValue,
+      });
+
+      if (result === false) {
+        setSelectedSeedingDate(previousValue);
+      }
+    } finally {
+      setSeedingDateSaving(false);
+    }
+  }
 
   async function handleGrowthStageChange(nextValue: string) {
     if (!onUpdateCrop || !trimmedCrop || growthStageSaving) {
@@ -271,6 +300,22 @@ export function EditFieldPanel({
               onCommit={onUpdateCrop ? (v) => onUpdateCrop(fieldId, { cropName: v }) : undefined}
               icon={Leaf}
             />
+            <div className="fdp-edit__row">
+              <div className="fdp-edit__row-label">
+                <Calendar size={11} strokeWidth={2.2} />
+                <span>Seeding date</span>
+              </div>
+              <input
+                type="date"
+                className="fdp-edit__row-input"
+                value={selectedSeedingDate}
+                onChange={(event) => {
+                  void handleSeedingDateChange(event.target.value);
+                }}
+                disabled={!onUpdateCrop || !trimmedCrop || seedingDateSaving}
+                aria-label="Seeding date"
+              />
+            </div>
             <StatRow label="Stage" value={cropStage ?? '—'} icon={Activity} />
             <div className="fdp-edit__row">
               <div className="fdp-edit__row-label">

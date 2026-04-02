@@ -796,6 +796,13 @@ export function createServerServices(
           return current;
         }
 
+        const recentSignalHistory =
+          await repositories.weatherSignalSets.listRecentByField(
+            input.workspaceId,
+            input.fieldId,
+            240,
+          );
+
         const resolvedRules = resolveCropRuleContext({
           rulePack: prairieDefaultRulePack,
           cropContext: {
@@ -815,6 +822,10 @@ export function createServerServices(
               observedAt: signalSet.observedAt,
               gdd24h: signalSet.gdd24h,
             },
+            recentWeatherSignals: recentSignalHistory.map((entry) => ({
+              observedAt: entry.observedAt,
+              gdd24h: entry.gdd24h,
+            })),
             thresholds: resolvedRules.crop.stageProgression,
           },
         });

@@ -146,6 +146,10 @@ export async function PATCH(
       fieldId,
     });
     const currentMetadata = isRecord(current?.metadata) ? current.metadata : {};
+    const currentSeedingDate =
+      typeof currentMetadata.seedingDate === "string"
+        ? currentMetadata.seedingDate
+        : null;
     const nextVariety = body.variety !== undefined
       ? payload.variety ?? null
       : (typeof currentMetadata.variety === "string"
@@ -154,9 +158,9 @@ export async function PATCH(
     const nextSeedingDate =
       body.seedingDate !== undefined
         ? payload.seedingDate ?? null
-        : (typeof currentMetadata.seedingDate === "string"
-            ? currentMetadata.seedingDate
-            : null);
+        : currentSeedingDate;
+    const seedingDateChanged =
+      body.seedingDate !== undefined && nextSeedingDate !== currentSeedingDate;
     const sourceKey = payload.sourceKey ?? current?.sourceKey ?? "manual-admin";
     const seasonYear = resolveSeasonYear(
       payload.seasonYear,
@@ -204,6 +208,15 @@ export async function PATCH(
       }
     }
 
+    if (seedingDateChanged) {
+      cropContext =
+        (await runtime.services.fieldCropContext.refreshGrowthStage({
+          workspaceId: actor.workspaceId,
+          fieldId,
+          requestedAt: new Date().toISOString(),
+        })) ?? cropContext;
+    }
+
     await logAuditEvent({
       runtime,
       action: "field.crop_context_updated",
@@ -218,6 +231,7 @@ export async function PATCH(
         sourceKey,
         hasVariety: nextVariety !== null,
         hasSeedingDate: nextSeedingDate !== null,
+        seedingDateChanged,
         growthStage: cropContext.growthStage,
         growthStageSource: cropContext.growthStageSource,
         manualGrowthStageOverride: cropContext.growthStageSource === "manual",
