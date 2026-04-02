@@ -4,8 +4,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, Search, FileSpreadsheet, Map as MapIcon, Plus, FileUp, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, Lbl, LblM, Sub, Mono } from './fieldDetailCardPrimitives';
 import {
+  type AddFieldRetryAction,
   describeAddFieldApiError,
   readAddFieldApiResult,
+  resolveAddFieldRetryLabel,
 } from './addFieldPanelErrors';
 import {
   chooseFirstInsightField,
@@ -667,6 +669,7 @@ export function AddFieldPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusTone, setStatusTone] = useState<NoticeTone>('neutral');
   const [statusText, setStatusText] = useState<string | null>(null);
+  const [retryAction, setRetryAction] = useState<AddFieldRetryAction | null>(null);
   const [previewCard, setPreviewCard] = useState<PreviewCard | null>(null);
   const [spreadsheetPreview, setSpreadsheetPreview] = useState<SpreadsheetPreviewPayload | null>(null);
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>([]);
@@ -680,6 +683,7 @@ export function AddFieldPanel({
   const clearFeedback = () => {
     setStatusTone('neutral');
     setStatusText(null);
+    setRetryAction(null);
     setPreviewCard(null);
     setSpreadsheetPreview(null);
     setTrackedJobs([]);
@@ -761,6 +765,7 @@ export function AddFieldPanel({
     );
     setLldDraftReady(true);
     setBoundaryDraftReady(false);
+    setRetryAction(null);
   };
 
   const handleCreateLldField = async () => {
@@ -823,6 +828,7 @@ export function AddFieldPanel({
     });
     setTrackedJobs(nextTrackedJobs);
     setLldDraftReady(false);
+    setRetryAction(null);
     onOnboardingTracked?.({
       preferredFieldId,
       fieldIds: [result.field.id],
@@ -868,6 +874,7 @@ export function AddFieldPanel({
     setStatusText('Boundary file parsed successfully.');
     setBoundaryDraftReady(true);
     setLldDraftReady(false);
+    setRetryAction(null);
   };
 
   const handleCreateBoundaryField = async () => {
@@ -931,6 +938,7 @@ export function AddFieldPanel({
     });
     setTrackedJobs(nextTrackedJobs);
     setBoundaryDraftReady(false);
+    setRetryAction(null);
     onOnboardingTracked?.({
       preferredFieldId,
       fieldIds: [result.field.id],
@@ -982,6 +990,7 @@ export function AddFieldPanel({
           ? `Preview found ${result.issueCount} issue${result.issueCount === 1 ? '' : 's'}.`
           : 'Spreadsheet preview completed successfully.',
     );
+    setRetryAction(null);
   };
 
   const handleCommitSpreadsheet = async () => {
@@ -1055,6 +1064,7 @@ export function AddFieldPanel({
       hydrationSummaries: committed.fieldHydrationSummaries,
     });
     setTrackedJobs(nextTrackedJobs);
+    setRetryAction(null);
     onOnboardingTracked?.({
       preferredFieldId,
       fieldIds: committed.candidates.map((entry) => entry.field.id),
@@ -1073,6 +1083,20 @@ export function AddFieldPanel({
   };
 
   const handlePrimaryAction = async () => {
+    let attemptedAction: AddFieldRetryAction;
+
+    switch (method) {
+      case 'lld':
+        attemptedAction = lldDraftReady ? 'lld-create' : 'lld-lookup';
+        break;
+      case 'csv':
+        attemptedAction = spreadsheetPreview ? 'spreadsheet-commit' : 'spreadsheet-preview';
+        break;
+      case 'kml':
+        attemptedAction = boundaryDraftReady ? 'boundary-create' : 'boundary-parse';
+        break;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -1102,10 +1126,49 @@ export function AddFieldPanel({
     } catch (error) {
       setStatusTone('danger');
       setStatusText(describeAddFieldApiError(error));
+      setRetryAction(attemptedAction);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleRetryAction = async () => {
+    if (!retryAction || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      switch (retryAction) {
+        case 'lld-lookup':
+          await handleLookupLld();
+          break;
+        case 'lld-create':
+          await handleCreateLldField();
+          break;
+        case 'boundary-parse':
+          await handlePreviewBoundaryFile();
+          break;
+        case 'boundary-create':
+          await handleCreateBoundaryField();
+          break;
+        case 'spreadsheet-preview':
+          await handlePreviewSpreadsheet();
+          break;
+        case 'spreadsheet-commit':
+          await handleCommitSpreadsheet();
+          break;
+      }
+    } catch (error) {
+      setStatusTone('danger');
+      setStatusText(describeAddFieldApiError(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const retryLabel = resolveAddFieldRetryLabel(retryAction);
 
   return (
     <div className="fdp" style={{ position: 'absolute', top: 'var(--space-lg)', right: 'var(--space-lg)', bottom: 'var(--space-xl)' }}>
@@ -1242,6 +1305,29 @@ export function AddFieldPanel({
         {statusText ? (
           <Card span={-1} accent={statusTone === 'danger' ? '#ef4444' : statusTone === 'positive' ? 'var(--primary-green)' : undefined}>
             <Sub>{statusText}</Sub>
+            {statusTone === 'danger' && retryLabel ? (
+              <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={handleRetryAction}
+                  disabled={isSubmitting}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(239,68,68,0.25)',
+                    background: 'rgba(239,68,68,0.08)',
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    opacity: isSubmitting ? 0.6 : 1,
+                  }}
+                >
+                  {retryLabel}
+                </button>
+              </div>
+            ) : null}
           </Card>
         ) : null}
 

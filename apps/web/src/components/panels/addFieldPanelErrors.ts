@@ -20,6 +20,14 @@ export class AddFieldApiError extends Error {
   }
 }
 
+export type AddFieldRetryAction =
+  | "lld-lookup"
+  | "lld-create"
+  | "boundary-parse"
+  | "boundary-create"
+  | "spreadsheet-preview"
+  | "spreadsheet-commit";
+
 export async function readAddFieldApiResult<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as {
     result?: T;
@@ -91,5 +99,24 @@ export function describeAddFieldApiError(error: unknown) {
       return error.message;
     default:
       return error.message;
+  }
+}
+
+export function resolveAddFieldRetryLabel(action: AddFieldRetryAction | null) {
+  switch (action) {
+    case "lld-lookup":
+      return "Retry lookup";
+    case "lld-create":
+      return "Retry create";
+    case "boundary-parse":
+      return "Retry parse";
+    case "boundary-create":
+      return "Retry create";
+    case "spreadsheet-preview":
+      return "Retry preview";
+    case "spreadsheet-commit":
+      return "Retry import";
+    default:
+      return null;
   }
 }
