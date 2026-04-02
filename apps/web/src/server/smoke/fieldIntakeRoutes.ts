@@ -102,6 +102,33 @@ async function main() {
   );
   const lldCreateJson = await lldCreateResponse.json();
   assertRouteStatus("LLD create", lldCreateResponse.status, 201);
+  const repeatedLldCreateResponse = await createLldField(
+    new Request("http://localhost/api/field-intake/lld/create", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...actorHeaders,
+      },
+      body: JSON.stringify({
+        code: "NW-25-042-04-W4",
+        suggestedFieldName: `Route LLD Created ${runId}`,
+        cropType: "barley",
+      }),
+    }),
+  );
+  const repeatedLldCreateJson = await repeatedLldCreateResponse.json();
+  assertRouteStatus("LLD create replay", repeatedLldCreateResponse.status, [200, 201]);
+
+  const repeatedLldFieldId = repeatedLldCreateJson.result?.field?.id as
+    | string
+    | undefined;
+  assertPresent("Repeated LLD create field id", repeatedLldFieldId);
+
+  if (repeatedLldFieldId !== lldCreateJson.result?.field?.id) {
+    throw new Error(
+      `Repeated LLD create returned ${repeatedLldFieldId} instead of reusing ${String(lldCreateJson.result?.field?.id)}`,
+    );
+  }
   const actorResponse = await getActor(
     new Request("http://localhost/api/auth/actor", {
       headers: actorHeaders,
@@ -337,6 +364,8 @@ async function main() {
         lldFieldName: lldJson.result?.draft?.name,
         lldCreateStatus: lldCreateResponse.status,
         lldCreateFieldId: lldCreateJson.result?.field?.id,
+        repeatedLldCreateStatus: repeatedLldCreateResponse.status,
+        repeatedLldCreateFieldId: repeatedLldFieldId,
         geofileStatus: geofileResponse.status,
         geofileFieldName: geofileJson.result?.draft?.name,
         geofileCreateStatus: geofileCreateResponse.status,
