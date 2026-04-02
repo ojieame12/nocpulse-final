@@ -1967,8 +1967,6 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       prebuiltStages={prebuiltStagesByField.get(fieldData.fieldId) ?? null}
       workspaceFirstInsightSummary={workspaceFirstInsightSummary}
       hydrationConfidence={hydrationConfidenceByField.get(fieldData.fieldId) ?? null}
-      workspaceFirstInsightSummary={workspaceFirstInsightSummary}
-      hydrationConfidence={hydrationConfidenceByField.get(fieldData.fieldId) ?? null}
     />
   );
 
