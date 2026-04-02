@@ -811,7 +811,10 @@ test("buildActionProps prioritizes spring seeding readiness over frost watch whe
   assert.match(action.signals[0]?.detail ?? "", /Target 7°C for 3d/i);
   assert.match(action.signals[1]?.label ?? "", /Frost min -1.8°C/);
   assert.match(action.signals[1]?.detail ?? "", /2 frost-risk nights next 7d/i);
-  assert.match(action.questions[1]?.answer ?? "", /7°C for 3d rule/i);
+  assert.match(
+    action.questions[1]?.answer ?? "",
+    /seed-depth soil temperature is still missing/i,
+  );
 });
 
 test("buildActionProps deduplicates active signals while preserving active intelligence counts", () => {
