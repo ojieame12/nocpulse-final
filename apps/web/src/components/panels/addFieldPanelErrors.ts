@@ -92,6 +92,8 @@ export function describeAddFieldApiError(error: unknown) {
       return "We could not read that spreadsheet file. Check the file and try again.";
     case "import_batch_not_found":
       return "That saved spreadsheet import could not be found. Upload the file again and retry the import.";
+    case "hydration_retry_failed":
+      return "We could not retry field hydration for that field. Try again in a moment.";
     case "rate_limited":
       return error.message;
     case "invalid_request_body":

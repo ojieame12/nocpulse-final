@@ -8,6 +8,7 @@ export type FieldIntakeErrorCode =
   | "file_empty"
   | "file_required"
   | "file_too_large"
+  | "hydration_retry_failed"
   | "import_batch_commit_failed"
   | "import_batch_not_found"
   | "import_batch_save_failed"

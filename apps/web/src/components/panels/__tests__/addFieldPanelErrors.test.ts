@@ -31,6 +31,18 @@ test("describeAddFieldApiError preserves rate-limit messaging", () => {
   assert.equal(message, "Too many field intake requests. Wait 2 minutes and try again.");
 });
 
+test("describeAddFieldApiError returns hydration retry guidance", () => {
+  const message = describeAddFieldApiError(
+    new AddFieldApiError({
+      status: 400,
+      code: "hydration_retry_failed",
+      message: "We could not retry hydration for that field.",
+    }),
+  );
+
+  assert.match(message, /retry field hydration/i);
+});
+
 test("readAddFieldApiResult throws AddFieldApiError with code and detail", async () => {
   const response = Response.json(
     {
