@@ -56,12 +56,14 @@ Escalate if:
 ```bash
 corepack pnpm -C /Users/ojieame/FieldPulse-v3/apps/worker run report:quality -- --workspace-slug hope-creek --json
 corepack pnpm -C /Users/ojieame/FieldPulse-v3/apps/worker run report:quality -- --workspace-id a625a72d-a2de-43ee-8bb4-aad93466f750 --json
+corepack pnpm -C /Users/ojieame/FieldPulse-v3 ops:launch-visible -- --workspace-slug hope-creek --json
 ```
 
 Look for:
 - enough `ready` fields to support first impressions
 - low `fallback` / `broken` counts
 - long-tail cleanup still needed on `thin` fields
+- at least two `ready` allowlisted fields on curated workspaces before widening beta
 
 ## 5. Verify first-insight evidence
 

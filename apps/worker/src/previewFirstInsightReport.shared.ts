@@ -50,7 +50,7 @@ export type PreviewFirstInsightReport = {
   >;
 };
 
-const WORKSPACE_FIRST_INSIGHT_ALLOWLIST: Readonly<
+export const WORKSPACE_FIRST_INSIGHT_ALLOWLIST: Readonly<
   Record<string, readonly string[]>
 > = {
   "8f2afceb-aefe-4e90-a24e-7ab07c4423fe": [
@@ -67,7 +67,7 @@ const WORKSPACE_FIRST_INSIGHT_ALLOWLIST: Readonly<
   ],
 };
 
-function getWorkspaceFirstInsightAllowlist(workspaceId?: string | null) {
+export function getWorkspaceFirstInsightAllowlist(workspaceId?: string | null) {
   if (!workspaceId) {
     return null;
   }
