@@ -74,3 +74,41 @@ test("lookupLldBoundary falls back to synthetic geometry when cache misses", asy
     49.84934387351778,
   ]);
 });
+
+test("lookupLldBoundary trims suggested field names before using them", async () => {
+  const result = await lookupLldBoundary(
+    {
+      code: "NW-25-010-17-W4",
+      suggestedFieldName: "  North Quarter  ",
+    },
+    {
+      geocodeCache: {
+        async lookup() {
+          return null;
+        },
+      },
+    },
+  );
+
+  assert.equal(result.resolution, "synthetic");
+  assert.equal(result.draft.name, "North Quarter");
+});
+
+test("lookupLldBoundary falls back to the normalized quarter name when suggested name is blank", async () => {
+  const result = await lookupLldBoundary(
+    {
+      code: "NW-25-010-17-W4",
+      suggestedFieldName: "   ",
+    },
+    {
+      geocodeCache: {
+        async lookup() {
+          return null;
+        },
+      },
+    },
+  );
+
+  assert.equal(result.resolution, "synthetic");
+  assert.equal(result.draft.name, "Quarter NW 25 010 17 W4");
+});
