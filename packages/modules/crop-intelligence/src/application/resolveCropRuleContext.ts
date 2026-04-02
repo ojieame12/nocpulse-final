@@ -4,6 +4,7 @@ import type {
   DiseaseRiskRulePack,
   CropProfile,
   RulePack,
+  SeedingThresholdRulePack,
   WeatherRiskRulePack,
   MoistureStressRulePack,
 } from "../contracts/RulePack";
@@ -12,6 +13,7 @@ export type ResolvedCropRuleContext = {
   crop: ResolvedCropContext;
   moistureStress: MoistureStressRulePack;
   weatherRisk: WeatherRiskRulePack;
+  seedingThresholds: SeedingThresholdRulePack;
   diseaseRisk: DiseaseRiskRulePack;
 };
 
@@ -78,6 +80,16 @@ function mergeWeatherRiskRules(
       ...base.atmosphericDemand,
       ...(override?.atmosphericDemand ?? {}),
     },
+  };
+}
+
+function mergeSeedingThresholdRules(
+  base: SeedingThresholdRulePack,
+  override?: Partial<SeedingThresholdRulePack>,
+): SeedingThresholdRulePack {
+  return {
+    ...base,
+    ...override,
   };
 }
 
@@ -168,6 +180,10 @@ export function resolveCropRuleContext(input: {
     weatherRisk: mergeWeatherRiskRules(
       input.rulePack.weatherRisk,
       stageOverrides?.weatherRisk,
+    ),
+    seedingThresholds: mergeSeedingThresholdRules(
+      input.rulePack.seedingThresholds,
+      profile.seedingThresholds,
     ),
     diseaseRisk: resolveDiseaseRiskRules(input.rulePack.diseaseRisk, {
       cropKey: profile.key,

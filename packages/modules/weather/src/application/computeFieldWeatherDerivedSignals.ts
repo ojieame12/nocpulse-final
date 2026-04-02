@@ -7,6 +7,11 @@ type LoadLatestFieldWeatherObservationRepository = {
     workspaceId: string,
     fieldId: string,
   ): Promise<import("../contracts/FieldWeatherObservation").FieldWeatherObservation | null>;
+  listRecentByField(
+    workspaceId: string,
+    fieldId: string,
+    limit?: number,
+  ): Promise<readonly import("../contracts/FieldWeatherObservation").FieldWeatherObservation[]>;
 };
 
 type ListFieldWeatherForecastRepository = {
@@ -19,6 +24,10 @@ type ListFieldWeatherForecastRepository = {
 };
 
 type UpsertFieldWeatherDerivedSignalSetRepository = {
+  getLatestByField(
+    workspaceId: string,
+    fieldId: string,
+  ): Promise<FieldWeatherDerivedSignalSet | null>;
   upsertSignalSet(
     input: ReturnType<typeof deriveWeatherSignalSet>,
   ): Promise<FieldWeatherDerivedSignalSet>;
@@ -43,21 +52,48 @@ export async function computeFieldWeatherDerivedSignals(
     return null;
   }
 
+  const recentObservations = await input.observations.listRecentByField(
+    input.input.workspaceId,
+    input.input.fieldId,
+    168,
+  );
   const forecasts = await input.forecasts.listByField({
     workspaceId: input.input.workspaceId,
     fieldId: input.input.fieldId,
     validAfter: observation.observedAt,
-    limit: input.input.forecastLimit ?? 72,
+    limit: input.input.forecastLimit ?? 168,
   });
+  const previousSignalSet = await input.signalSets.getLatestByField(
+    input.input.workspaceId,
+    input.input.fieldId,
+  );
 
   return input.signalSets.upsertSignalSet(
     deriveWeatherSignalSet({
       workspaceId: input.input.workspaceId,
       fieldId: input.input.fieldId,
       observation,
+      recentObservations,
       forecasts,
       signalVersion: input.input.signalVersion,
       gddBaseC: input.input.gddBaseC,
+      soilTempThresholdC: input.input.soilTempThresholdC,
+      frostProbabilityPct7d:
+        previousSignalSet?.observedAt === observation.observedAt
+          ? previousSignalSet.frostProbabilityPct7d
+          : null,
+      frostProbabilityThresholdC:
+        previousSignalSet?.observedAt === observation.observedAt
+          ? previousSignalSet.provenance?.frostProbabilityThresholdC ?? null
+          : null,
+      frostProbabilityModelKey:
+        previousSignalSet?.observedAt === observation.observedAt
+          ? previousSignalSet.provenance?.frostProbabilityModelKey ?? null
+          : null,
+      frostProbabilityMemberCount:
+        previousSignalSet?.observedAt === observation.observedAt
+          ? previousSignalSet.provenance?.frostProbabilityMemberCount ?? null
+          : null,
     }),
   );
 }

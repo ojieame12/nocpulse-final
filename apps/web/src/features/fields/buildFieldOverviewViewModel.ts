@@ -527,6 +527,9 @@ export async function buildFieldOverviewViewModel(
     defaultGrowthStage: defaultCropRules.crop.growthStage,
     gddBaseC: defaultCropRules.crop.gddBaseC,
   });
+  const cropContextMetadata = readModel.cropContext
+    ? toPrimitiveMetadata(readModel.cropContext.metadata)
+    : {};
   const opticalSeasonality = resolveOpticalSeasonality({
     cropStagePresentation,
     latestOpticalCaptureAt:
@@ -877,7 +880,7 @@ export async function buildFieldOverviewViewModel(
       ? currentMoistureBaseline - previousMoistureBaseline
       : null;
   const latestObservation = readModel.weather.profile.latestObservation;
-  const forecast = readModel.weather.profile.forecasts.slice(0, 4);
+  const forecast = readModel.weather.profile.forecasts.slice(0, 7);
   const weatherDataAvailability = readModel.weather.profile.dataAvailability ?? {
     latestObservation: true,
     forecasts: true,
@@ -1009,6 +1012,17 @@ export async function buildFieldOverviewViewModel(
     authStatusLabel,
     fieldName: field.name,
     areaHaLabel: `${field.areaHa.toFixed(1)} ha`,
+    cropContext: readModel.cropContext
+      ? {
+          seedingDate:
+            typeof cropContextMetadata.seedingDate === "string"
+              ? cropContextMetadata.seedingDate
+              : null,
+          cropType: readModel.cropContext.cropType ?? null,
+          growthStage: readModel.cropContext.growthStage ?? null,
+          growthStageSource: readModel.cropContext.growthStageSource ?? null,
+        }
+      : null,
     createdAtLabel: new Date(field.createdAt).toLocaleString("en-US", {
       dateStyle: "medium",
       timeStyle: "short",

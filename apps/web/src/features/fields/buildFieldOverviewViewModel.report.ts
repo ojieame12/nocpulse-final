@@ -2,7 +2,6 @@ import {
   prairieDefaultRulePack,
   resolveCropRuleContext,
 } from "@fieldpulse/module-crop-intelligence";
-import { resolveMetricModeContract } from "@fieldpulse/map/server";
 import type { FieldRasterObservation } from "@fieldpulse/module-imagery";
 import type {
   FieldReportProps,
@@ -30,6 +29,10 @@ import {
   resolveCropStagePresentation,
   resolveOpticalSeasonality,
 } from "./buildFieldOverviewViewModel.cropSignals";
+import {
+  isSpringSeedingContext,
+  resolveSoilTempPresentation,
+} from "./buildFieldOverviewViewModel.spring";
 
 function formatSignedMillimetres(value: number | null | undefined) {
   if (value == null) {
@@ -38,6 +41,29 @@ function formatSignedMillimetres(value: number | null | undefined) {
 
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(1)} mm`;
+}
+
+function formatOpticalPassDate(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new Date(value).toLocaleDateString("en-CA", {
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return value.slice(0, 10);
+  }
+}
+
+function formatWholePercent(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return `${Math.round(value)}%`;
 }
 
 /** Build a compact detail string for hail alerts (size + time window). */
@@ -111,6 +137,7 @@ export function buildReportProps(
     },
   });
   const latestOpticalRaster = rm.imagery?.latestOpticalRasterObservation ?? null;
+  const latestOpticalCapture = rm.imagery?.latestOpticalCapture ?? null;
   const latestNdmiRaster =
     rm.imagery?.latestNdmiRasterObservation ??
     latestOpticalRaster ??
@@ -146,21 +173,37 @@ export function buildReportProps(
     latestNdmiRaster?.cells ?? [],
     "ndmi",
   );
-  const ndmiMetricContract = resolveMetricModeContract(
-    "ndmi",
-    latestNdmiRaster?.sourceKey,
-  );
   const radarWetnessAvg = averageAgronomicMeasurement(
     latestRadarWetnessRaster?.cells ?? [],
     "radar-wetness",
   );
-  const radarWetnessMetricContract = resolveMetricModeContract(
-    "radar-wetness",
-    latestRadarWetnessRaster?.sourceKey,
-  );
   const rootMoistureAvg = moisture?.rootZoneAvgPct ?? null;
   const surfaceMoistureAvg = moisture?.surfaceAvgPct ?? null;
-  const frostMinTemp = weatherSignals?.frostRiskMinTempC ?? null;
+  const frostMinTemp =
+    weatherSignals?.frostRiskMinTempC7d ??
+    weatherSignals?.frostRiskMinTempC ??
+    null;
+  const frostRiskNights7d = weatherSignals?.frostRiskNights7d ?? null;
+  const frostProbabilityPct7d = weatherSignals?.frostProbabilityPct7d ?? null;
+  const frostLabel =
+    weatherSignals?.frostRiskMinTempC7d != null
+      ? frostRiskNights7d != null && frostRiskNights7d > 0
+        ? `Frost Min 7d (${frostRiskNights7d}n${frostProbabilityPct7d != null ? ` · ${Math.round(frostProbabilityPct7d)}%` : ""})`
+        : frostProbabilityPct7d != null
+          ? `Frost Min 7d (${Math.round(frostProbabilityPct7d)}%)`
+          : "Frost Min 7d"
+      : "Frost Min";
+  const springSeedingContext = isSpringSeedingContext(cropStagePresentation);
+  const soilTempPresentation = resolveSoilTempPresentation({
+    soilTemp6cmCurrentC:
+      weatherSignals?.soilTemp6cmCurrentC ??
+      obs?.soilTemperature6cmC ??
+      null,
+    soilTemp6cmSustainedDays: weatherSignals?.soilTemp6cmSustainedDays ?? null,
+    thresholdC:
+      weatherSignals?.provenance?.soilTempThresholdC ??
+      resolvedRules.seedingThresholds.soilTempMinC,
+  });
   const peakVpd = weatherSignals?.peakForecastVpdKpa24h ?? null;
   const waterBalance72h = weatherSignals?.netWaterBalance72hMm ?? null;
 
@@ -196,13 +239,21 @@ export function buildReportProps(
     },
     {
       iconKey: "soil-moisture" as ReadingIconKey,
-      label: "Soil Moisture",
-      value: obs?.soilMoisturePct != null ? `${obs.soilMoisturePct.toFixed(1)}%` : "—",
+      label:
+        springSeedingContext && soilTempPresentation != null
+          ? "Soil @ 6 cm"
+          : "Surface Moisture",
+      value:
+        springSeedingContext && soilTempPresentation != null
+          ? soilTempPresentation.value
+          : obs?.soilMoisturePct != null
+            ? `${obs.soilMoisturePct.toFixed(1)}%`
+            : "—",
       sourceTag: weatherSourceTag,
     },
     {
       iconKey: "root-moisture" as ReadingIconKey,
-      label: "Soil Moisture",
+      label: "Root-Zone Moisture",
       value: rootMoistureAvg != null ? `${rootMoistureAvg.toFixed(1)}%` : "—",
       sourceTag: moistureSourceTag,
     },
@@ -214,25 +265,25 @@ export function buildReportProps(
     },
     {
       iconKey: "ndvi" as ReadingIconKey,
-      label: "NDVI",
+      label: "Crop Health",
       value: opticalNdviAvg != null ? opticalNdviAvg.toFixed(2) : "—",
       sourceTag: opticalSourceTag,
     },
     {
       iconKey: "ndre" as ReadingIconKey,
-      label: "NDRE",
+      label: "Canopy Vigor",
       value: opticalNdreAvg != null ? opticalNdreAvg.toFixed(2) : "—",
       sourceTag: opticalSourceTag,
     },
     {
       iconKey: "ndmi" as ReadingIconKey,
-      label: ndmiMetricContract.label,
+      label: "Leaf Moisture",
       value: ndmiAvg != null ? ndmiAvg.toFixed(2) : "—",
       sourceTag: ndmiSourceTag,
     },
     {
       iconKey: "radar-wetness" as ReadingIconKey,
-      label: radarWetnessMetricContract.label,
+      label: "Surface Wetness (Radar)",
       value: radarWetnessAvg != null ? radarWetnessAvg.toFixed(2) : "—",
       sourceTag: radarSourceTag,
     },
@@ -386,7 +437,7 @@ export function buildReportProps(
 
   const cropParams: ReportCropParam[] = [
     {
-      label: "Soil Moisture",
+      label: "Root-Zone Moisture",
       value: rootMoistureAvg != null ? `${rootMoistureAvg.toFixed(1)}%` : "—",
       rangeLow: `${resolvedRules.moistureStress.rootZoneCriticalPct}%`,
       rangeHigh: "70%",
@@ -406,7 +457,7 @@ export function buildReportProps(
           : 0,
     },
     {
-      label: "Frost Min",
+      label: frostLabel,
       value: frostMinTemp != null ? `${frostMinTemp.toFixed(1)}°C` : "—",
       rangeLow: `${resolvedRules.weatherRisk.frost.killTempC}°C`,
       rangeHigh: `>${resolvedRules.weatherRisk.frost.damageTempC}°C`,
@@ -426,7 +477,7 @@ export function buildReportProps(
           : 0,
     },
     {
-      label: "Peak VPD",
+      label: "Crop Water Demand",
       value: peakVpd != null ? `${peakVpd.toFixed(1)} kPa` : "—",
       rangeLow: "0",
       rangeHigh: `${resolvedRules.weatherRisk.atmosphericDemand.severeVpdKpa.toFixed(1)} kPa`,
@@ -495,14 +546,26 @@ export function buildReportProps(
       minC: entry.minC,
     })),
   ];
+  const latestOpticalPassDate = formatOpticalPassDate(
+    latestOpticalCapture?.capturedAt ?? latestOpticalRaster?.observedAt ?? null,
+  );
+  const latestOpticalCloudCover = formatWholePercent(
+    latestOpticalCapture?.cloudCoverPct ?? null,
+  );
   const vegetationEmptyText =
     latestOpticalRaster == null
-      ? "Awaiting first Sentinel-2 or Planet optical pass."
+      ? latestOpticalPassDate && latestOpticalCloudCover
+        ? `Satellite imagery is still pending — the last pass on ${latestOpticalPassDate} had ${latestOpticalCloudCover} cloud cover. Sentinel-2 revisits about every 5 days, and this view updates automatically after a clearer pass.`
+        : latestOpticalPassDate
+          ? `Satellite imagery is still pending — the last pass on ${latestOpticalPassDate} did not produce a usable crop-health layer. Sentinel-2 revisits about every 5 days.`
+          : "Satellite imagery is still processing. First usable crop-health passes usually arrive 5–10 days after field creation, depending on cloud cover."
       : opticalSeasonality.status === "context-only"
-        ? `${opticalSeasonality.detail} Trend is informational — more captures needed.`
+        ? `${opticalSeasonality.detail} Trend is informational until another clear in-season pass arrives.`
       : opticalHistory.length <= 1
-        ? "One optical capture stored. More passes needed for a trend."
-        : "Optical history present, but NDVI/NDRE values are not yet populated.";
+        ? latestOpticalPassDate
+          ? `One usable optical pass from ${latestOpticalPassDate} is stored. Another clear pass is needed before crop-health and canopy-vigor trends can be shown.`
+          : "One usable optical pass is stored. Another clear pass is needed before crop-health and canopy-vigor trends can be shown."
+        : "Optical history is present, but crop-health and canopy-vigor values are still being prepared.";
   const usingSarTrend = moistureHistory.length >= 2;
   const usingModelFallback = !usingSarTrend && hasModelTrend;
   const moistureHistoryEmptyText =
@@ -535,7 +598,7 @@ export function buildReportProps(
       emptyText: vegetationEmptyText,
       series: [
         {
-          label: "NDVI",
+          label: "Crop Health",
           color: "#16a34a",
           format: "index" as const,
           points: vegetationHistory.map((observation: FieldRasterObservation, index: number) => ({
@@ -544,7 +607,7 @@ export function buildReportProps(
           })),
         },
         {
-          label: "NDRE",
+          label: "Canopy Vigor",
           color: "#14b8a6",
           format: "index" as const,
           points: vegetationHistory.map((observation: FieldRasterObservation, index: number) => ({
@@ -601,7 +664,7 @@ export function buildReportProps(
               })),
             },
             {
-              label: radarWetnessMetricContract.label,
+              label: "Surface Wetness (Radar)",
               color: "#06b6d4",
               format: "index" as const,
               points: moistureHistory.map((observation: FieldRasterObservation, index: number) => ({

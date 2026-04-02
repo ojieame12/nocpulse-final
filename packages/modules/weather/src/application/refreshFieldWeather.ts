@@ -15,6 +15,11 @@ import type { WeatherProviderClient } from "../contracts/WeatherProviderClient";
 import { deriveWeatherSignalSet } from "./deriveWeatherSignalSet";
 
 type RefreshFieldWeatherObservationRepository = {
+  listRecentByField(
+    workspaceId: string,
+    fieldId: string,
+    limit?: number,
+  ): Promise<readonly FieldWeatherObservation[]>;
   upsertObservation(
     input: UpsertFieldWeatherObservationInput,
   ): Promise<FieldWeatherObservation>;
@@ -48,6 +53,7 @@ export async function refreshFieldWeather(
     longitude: input.weather.longitude,
     requestedAt: input.weather.requestedAt,
     forecastHours: input.weather.forecastHours,
+    frostDamageThresholdC: input.weather.frostDamageThresholdC,
   });
 
   const observation = await input.observationRepository.upsertObservation({
@@ -61,9 +67,15 @@ export async function refreshFieldWeather(
     windSpeedKph: fetched.observation.windSpeedKph,
     relativeHumidityPct: fetched.observation.relativeHumidityPct ?? null,
     soilMoisturePct: fetched.observation.soilMoisturePct ?? null,
+    soilTemperature6cmC: fetched.observation.soilTemperature6cmC ?? null,
     evapotranspirationMm: fetched.observation.evapotranspirationMm ?? null,
     provenance: fetched.observation.provenance,
   });
+  const recentObservations = await input.observationRepository.listRecentByField(
+    input.weather.workspaceId,
+    input.weather.fieldId,
+    168,
+  );
   const forecasts = await input.forecastRepository.replaceForecastSet({
     workspaceId: input.weather.workspaceId,
     fieldId: input.weather.fieldId,
@@ -77,8 +89,15 @@ export async function refreshFieldWeather(
       workspaceId: input.weather.workspaceId,
       fieldId: input.weather.fieldId,
       observation,
+      recentObservations,
       forecasts,
       gddBaseC: input.weather.gddBaseC,
+      soilTempThresholdC: input.weather.soilTempThresholdC,
+      frostProbabilityPct7d: fetched.ensemble?.frostProbabilityPct7d ?? null,
+      frostProbabilityThresholdC:
+        fetched.ensemble?.frostProbabilityThresholdC ?? null,
+      frostProbabilityModelKey: fetched.ensemble?.modelKey ?? null,
+      frostProbabilityMemberCount: fetched.ensemble?.memberCount ?? null,
     }),
   );
 

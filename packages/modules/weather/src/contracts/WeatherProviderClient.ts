@@ -12,6 +12,7 @@ export type FetchFieldWeatherInput = {
   longitude: number;
   requestedAt?: TimestampIso;
   forecastHours?: number;
+  frostDamageThresholdC?: number;
 };
 
 export type WeatherProviderObservation = {
@@ -21,6 +22,7 @@ export type WeatherProviderObservation = {
   windSpeedKph: number;
   relativeHumidityPct?: number | null;
   soilMoisturePct?: number | null;
+  soilTemperature6cmC?: number | null;
   evapotranspirationMm?: number | null;
   provenance?: FieldWeatherObservationProvenance;
 };
@@ -35,6 +37,12 @@ export type FetchFieldWeatherResult = {
   sourceKey: string;
   observation: WeatherProviderObservation;
   forecastSet: WeatherProviderForecastSet;
+  ensemble?: {
+    frostProbabilityPct7d: number | null;
+    frostProbabilityThresholdC: number | null;
+    modelKey: string | null;
+    memberCount: number | null;
+  } | null;
 };
 
 export type WeatherProviderClient = {

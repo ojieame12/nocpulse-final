@@ -22,7 +22,9 @@ import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../server/runtime/resolveRequestContext";
-import type { JsonValue } from "@fieldpulse/platform-db";
+
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 const FIELD_CROP_CONTEXT_RATE_LIMIT = {
   scope: "field-crop-context:actor",
@@ -42,6 +44,15 @@ const CropContextBodySchema = z
     cropName: nullableTrimmedText(),
     variety: nullableTrimmedText(),
     seedingDate: nullableTrimmedText(),
+    growthStage: z
+      .enum(["pre-seed", "vegetative", "flowering", "ripening"], {
+        errorMap: () => ({
+          message:
+            "[crop-context] growthStage must be one of pre-seed, vegetative, flowering, or ripening.",
+        }),
+      })
+      .nullable()
+      .optional(),
     seasonYear: optionalYearInput(
       "[crop-context] seasonYear must be a valid integer year.",
     ),
@@ -137,6 +148,10 @@ export async function PATCH(
       fieldId,
     });
     const currentMetadata = isRecord(current?.metadata) ? current.metadata : {};
+    const currentSeedingDate =
+      typeof currentMetadata.seedingDate === "string"
+        ? currentMetadata.seedingDate
+        : null;
     const nextVariety = body.variety !== undefined
       ? payload.variety ?? null
       : (typeof currentMetadata.variety === "string"
@@ -145,9 +160,9 @@ export async function PATCH(
     const nextSeedingDate =
       body.seedingDate !== undefined
         ? payload.seedingDate ?? null
-        : (typeof currentMetadata.seedingDate === "string"
-            ? currentMetadata.seedingDate
-            : null);
+        : currentSeedingDate;
+    const seedingDateChanged =
+      body.seedingDate !== undefined && nextSeedingDate !== currentSeedingDate;
     const sourceKey = payload.sourceKey ?? current?.sourceKey ?? "manual-admin";
     const seasonYear = resolveSeasonYear(
       payload.seasonYear,
@@ -155,7 +170,7 @@ export async function PATCH(
       current?.seasonYear,
     );
 
-    const cropContext = await runtime.services.fieldCropContext.upsertFieldContext({
+    let cropContext = await runtime.services.fieldCropContext.upsertFieldContext({
       workspaceId: actor.workspaceId,
       fieldId,
       seasonYear,
@@ -175,6 +190,35 @@ export async function PATCH(
       },
     });
 
+    if (body.growthStage !== undefined) {
+      const requestedAt = new Date().toISOString();
+
+      if (payload.growthStage == null) {
+        cropContext =
+          (await runtime.services.fieldCropContext.clearGrowthStageOverride({
+            workspaceId: actor.workspaceId,
+            fieldId,
+            requestedAt,
+          })) ?? cropContext;
+      } else {
+        cropContext = await runtime.services.fieldCropContext.setGrowthStageOverride({
+          workspaceId: actor.workspaceId,
+          fieldId,
+          growthStage: payload.growthStage,
+          requestedAt,
+        });
+      }
+    }
+
+    if (seedingDateChanged) {
+      cropContext =
+        (await runtime.services.fieldCropContext.refreshGrowthStage({
+          workspaceId: actor.workspaceId,
+          fieldId,
+          requestedAt: new Date().toISOString(),
+        })) ?? cropContext;
+    }
+
     await logAuditEvent({
       runtime,
       action: "field.crop_context_updated",
@@ -189,6 +233,10 @@ export async function PATCH(
         sourceKey,
         hasVariety: nextVariety !== null,
         hasSeedingDate: nextSeedingDate !== null,
+        seedingDateChanged,
+        growthStage: cropContext.growthStage,
+        growthStageSource: cropContext.growthStageSource,
+        manualGrowthStageOverride: cropContext.growthStageSource === "manual",
       },
     });
 

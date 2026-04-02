@@ -23,6 +23,7 @@ const IGNORED_PATH_SEGMENTS = new Set([
   "dist",
   ".git",
   "coverage",
+  "__archive__",
 ]);
 
 async function main() {
@@ -68,6 +69,7 @@ function validateSpecifier({ file, specifier, sourceBoundary, violations }) {
   if (
     sourceBoundary.scope === "app" &&
     sourceBoundary.name === "web" &&
+    !isServerOnlyWebFile(file) &&
     WEB_FORBIDDEN_PACKAGES.some((pkg) => specifier === pkg || specifier.startsWith(`${pkg}/`))
   ) {
     violations.push(`${relative(file)} imports "${specifier}", which is forbidden in apps/web.`);
@@ -217,6 +219,7 @@ async function walk(dir, files) {
   }
 
   for (const entry of entries) {
+    if (entry.name.startsWith(".next-dev")) continue;
     if (IGNORED_PATH_SEGMENTS.has(entry.name)) continue;
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -227,6 +230,19 @@ async function walk(dir, files) {
       files.push(fullPath);
     }
   }
+}
+
+function isServerOnlyWebFile(file) {
+  const relativeFile = relative(file).split(path.sep).join("/");
+  if (!relativeFile.startsWith("apps/web/")) {
+    return false;
+  }
+
+  if (relativeFile.startsWith("apps/web/src/server/")) {
+    return true;
+  }
+
+  return /\/src\/app\/.+\/route\.(?:ts|tsx|mts|cts)$/.test(relativeFile);
 }
 
 function relative(file) {

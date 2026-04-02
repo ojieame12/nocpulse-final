@@ -9,8 +9,16 @@ export type FieldWeatherDerivedSignalSetProvenance = {
   calculationMode?: string;
   forecastSampleCount24h?: number;
   forecastSampleCount72h?: number;
+  forecastSampleCount168h?: number;
+  observationSampleCount72h?: number;
+  observationSampleCount168h?: number;
+  soilTempThresholdC?: number;
+  frostProbabilityModelKey?: string;
+  frostProbabilityThresholdC?: number;
+  frostProbabilityMemberCount?: number;
   windowHours24?: number;
   windowHours72?: number;
+  windowHours168?: number;
 };
 
 export type FieldWeatherDerivedSignalSet = WorkspaceScoped & {
@@ -29,6 +37,13 @@ export type FieldWeatherDerivedSignalSet = WorkspaceScoped & {
   leafWetHours24h: number;
   sprayWindowCount24h: number;
   frostRiskMinTempC: number | null;
+  frostRiskMinTempC7d: number | null;
+  frostRiskNights7d: number | null;
+  frostProbabilityPct7d: number | null;
+  recentPrecipTotal72hMm: number | null;
+  freezeThawCycles7d: number | null;
+  soilTemp6cmCurrentC: number | null;
+  soilTemp6cmSustainedDays: number | null;
   gdd24h: number | null;
   gdd72h: number | null;
   gddBaseC: number;

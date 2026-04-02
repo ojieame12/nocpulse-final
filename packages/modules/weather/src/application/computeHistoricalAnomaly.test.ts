@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { computeHistoricalAnomaly } from "./computeHistoricalAnomaly";
-import type { HistoricalSoilMoistureResult } from "../infrastructure/createOpenMeteoHistoricalClient";
+import type { HistoricalSoilMoistureResult } from "../contracts/HistoricalSoilMoistureResult";
 
 // ---------------------------------------------------------------------------
 // Helpers to build test data

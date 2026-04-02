@@ -100,6 +100,30 @@ importers:
 
   apps/worker:
     dependencies:
+      '@fieldpulse/module-alerts':
+        specifier: workspace:*
+        version: link:../../packages/modules/alerts
+      '@fieldpulse/module-auth':
+        specifier: workspace:*
+        version: link:../../packages/modules/auth
+      '@fieldpulse/module-crop-intelligence':
+        specifier: workspace:*
+        version: link:../../packages/modules/crop-intelligence
+      '@fieldpulse/module-field-crop-context':
+        specifier: workspace:*
+        version: link:../../packages/modules/field-crop-context
+      '@fieldpulse/module-field-intake':
+        specifier: workspace:*
+        version: link:../../packages/modules/field-intake
+      '@fieldpulse/module-field-onboarding':
+        specifier: workspace:*
+        version: link:../../packages/modules/field-onboarding
+      '@fieldpulse/module-fields':
+        specifier: workspace:*
+        version: link:../../packages/modules/fields
+      '@fieldpulse/module-hail':
+        specifier: workspace:*
+        version: link:../../packages/modules/hail
       '@fieldpulse/module-imagery':
         specifier: workspace:*
         version: link:../../packages/modules/imagery
@@ -109,12 +133,24 @@ importers:
       '@fieldpulse/module-moisture':
         specifier: workspace:*
         version: link:../../packages/modules/moisture
+      '@fieldpulse/module-reports':
+        specifier: workspace:*
+        version: link:../../packages/modules/reports
+      '@fieldpulse/module-scouting':
+        specifier: workspace:*
+        version: link:../../packages/modules/scouting
       '@fieldpulse/module-soil':
         specifier: workspace:*
         version: link:../../packages/modules/soil
       '@fieldpulse/module-validation':
         specifier: workspace:*
         version: link:../../packages/modules/validation
+      '@fieldpulse/module-weather':
+        specifier: workspace:*
+        version: link:../../packages/modules/weather
+      '@fieldpulse/module-workspaces':
+        specifier: workspace:*
+        version: link:../../packages/modules/workspaces
       '@fieldpulse/platform-config':
         specifier: workspace:*
         version: link:../../packages/platform/config
@@ -130,6 +166,9 @@ importers:
       '@fieldpulse/platform-runtime':
         specifier: workspace:*
         version: link:../../packages/platform/runtime
+      '@fieldpulse/platform-storage':
+        specifier: workspace:*
+        version: link:../../packages/platform/storage
     devDependencies:
       '@types/node':
         specifier: ^24.0.1

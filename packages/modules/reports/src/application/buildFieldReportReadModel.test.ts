@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { FieldAlert } from "../../../alerts/src/contracts/FieldAlert";
-import type { FieldDetail } from "../../../fields/src/contracts/FieldDetail";
-import type { FieldMoistureSnapshot } from "../../../moisture/src/contracts/FieldMoistureSnapshot";
+import type { FieldAlert } from "@fieldpulse/module-alerts";
+import type { FieldDetail } from "@fieldpulse/module-fields";
+import type { FieldMoistureSnapshot } from "@fieldpulse/module-moisture";
 import { buildFieldReportReadModel } from "./buildFieldReportReadModel";
 
 function createFieldAlert(input: {

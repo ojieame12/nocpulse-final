@@ -1,6 +1,6 @@
 import type { FieldBasisAssumption } from "../contracts/FieldBasisAssumption";
+import type { FieldBasisAssumptionRepository } from "../contracts/FieldBasisAssumptionRepository";
 import type { UpsertFieldBasisAssumptionInput } from "../contracts/UpsertFieldBasisAssumptionInput";
-import type { FieldBasisAssumptionRepository } from "../infrastructure/FieldBasisAssumptionRepository";
 
 export type UpsertFieldBasisAssumptionUseCaseInput = {
   repository: FieldBasisAssumptionRepository;

@@ -288,13 +288,13 @@ function resolveCropHealthSectionTitle(
 ) {
   switch (metricKey) {
     case "ndvi":
-      return "NDVI VIGOR INDEX";
+      return "CROP HEALTH INDEX";
     case "ndre":
-      return "NDRE RED-EDGE INDEX";
+      return "CANOPY VIGOR INDEX";
     case "ndmi":
-      return "NDMI CANOPY WATER INDEX";
+      return "LEAF MOISTURE INDEX";
     case "radar-wetness":
-      return "RADAR WETNESS INDEX";
+      return "SURFACE WETNESS (RADAR)";
     default:
       return "CANOPY SIGNAL CONTEXT";
   }
@@ -516,7 +516,11 @@ function buildInteractiveReport(
       reading.label === "NDVI" ||
       reading.label === "NDRE" ||
       reading.label === "NDMI" ||
-      reading.label === "Radar Wetness"
+      reading.label === "Radar Wetness" ||
+      reading.label === "Crop Health" ||
+      reading.label === "Canopy Vigor" ||
+      reading.label === "Leaf Moisture" ||
+      reading.label === "Surface Wetness (Radar)"
     ) {
       if (
         selection.metricKey !== "ndvi" &&

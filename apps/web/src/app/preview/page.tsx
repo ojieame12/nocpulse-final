@@ -41,6 +41,7 @@ export default async function PreviewPage({ searchParams }: PreviewPageProps) {
     fieldId: vm.fieldId,
     fieldName: vm.fieldName,
     areaHaLabel: vm.areaHaLabel,
+    cropContext: vm.cropContext ?? null,
     mapPreview: vm.mapPreview,
     sidebarFields: vm.sidebarFields,
     summary: vm.summary ?? null,

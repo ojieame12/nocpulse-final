@@ -7,7 +7,7 @@ import type { TimestampIso, WorkspaceId } from "@fieldpulse/platform-db";
 import { isPointInPolygonalGeoJson, isPolygonalGeoJson } from "../domain/geojson/isPointInPolygonalGeoJson";
 import type { CropIntelligenceRun } from "../contracts/CropIntelligenceRun";
 import type { FieldIntelligenceFinding } from "../contracts/FieldIntelligenceFinding";
-import type { FieldIntelligenceZoneRepository } from "../infrastructure/FieldIntelligenceZoneRepository";
+import type { FieldIntelligenceZoneRepository } from "../contracts/FieldIntelligenceZoneRepository";
 import type { UpsertCropIntelligenceRunInput } from "../contracts/UpsertCropIntelligenceRunInput";
 import type { UpsertFieldIntelligenceFindingInput } from "../contracts/UpsertFieldIntelligenceFindingInput";
 import { buildTrackedZoneReferences } from "../domain/zones/buildTrackedZoneReferences";

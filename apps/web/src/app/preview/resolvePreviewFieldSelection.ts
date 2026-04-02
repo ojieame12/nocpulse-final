@@ -1,6 +1,6 @@
-import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import type { FieldBoundaryPreviewRenderModel } from "@fieldpulse/map/server";
 import { RequestContextError } from "../../server/runtime/resolveRequestContext";
+import { createServerDatabaseClient } from "../../server/runtime/createServerDatabaseClient";
 import { getWebServerRuntime } from "../../server/runtime/getWebServerRuntime";
 import { resolveServerComponentActorContext } from "../../server/runtime/resolveServerComponentActorContext";
 import {
@@ -20,6 +20,13 @@ type PreviewFieldSelectionResult =
       selectedFieldId: string;
       workspaceFieldFeatures: FieldBoundaryPreviewRenderModel["workspaceFieldFeatures"];
     };
+
+type PreviewFieldRow = {
+  id: string;
+  name: string;
+  legal_land_description: string | null;
+  boundary: FieldBoundaryPreviewRenderModel["boundaryFeature"]["geometry"];
+};
 
 export async function resolvePreviewFieldSelection(
   requestedFieldId?: string,
@@ -80,10 +87,7 @@ export async function resolvePreviewFieldSelection(
     return { status: "no-fields" };
   }
 
-  const client = createSupabaseDatabaseClient({
-    url: runtime.env.supabase.url!,
-    serviceKey: runtime.env.supabase.serviceRoleKey!,
-  });
+  const client = createServerDatabaseClient(runtime);
 
   const fieldRows = await client
     .from("fields")
@@ -94,15 +98,14 @@ export async function resolvePreviewFieldSelection(
   const workspaceFieldFeatures: FieldBoundaryPreviewRenderModel["workspaceFieldFeatures"] =
     fieldRows.error
       ? []
-      : (fieldRows.data ?? []).map((row) => ({
+      : ((fieldRows.data ?? []) as PreviewFieldRow[]).map((row) => ({
           type: "Feature" as const,
           properties: {
             fieldId: row.id,
             fieldName: row.name,
             legalLandDescription: row.legal_land_description ?? null,
           },
-          geometry:
-            row.boundary as FieldBoundaryPreviewRenderModel["boundaryFeature"]["geometry"],
+          geometry: row.boundary,
         }));
 
   const selectedFieldId = resolvePreviewFieldId(

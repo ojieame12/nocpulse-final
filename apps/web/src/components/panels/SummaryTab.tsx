@@ -117,7 +117,7 @@ export interface FieldSummaryProps {
 
 /* ── Layer Pills ── */
 
-const LAYERS = ['NDVI', 'NDRE', 'NDMI'] as const;
+const LAYERS = ['Crop Health', 'Canopy Vigor', 'Leaf Moisture'] as const;
 const EXTRA = ['Moisture'] as const;
 type Layer = (typeof LAYERS)[number] | (typeof EXTRA)[number];
 
@@ -160,7 +160,7 @@ const CONFIDENCE_RING: Record<MoistureConfidenceLevel, { color: string; label: s
 };
 
 export function SummaryTab({ field }: { field: FieldSummaryProps }) {
-  const [activeLayer, setActiveLayer] = useState<Layer>('NDVI');
+  const [activeLayer, setActiveLayer] = useState<Layer>('Crop Health');
   const moistureColor = field.moisture < 0.3 ? '#ef4444' : '#16a34a';
   const contextLabel = field.contextLabel ?? 'Field overview';
   const conditionsMeta = field.conditionsMeta ?? 'Field average';
@@ -385,7 +385,7 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
             <span className="image-viewer__date">Mar 26, 2026, 2:00 AM</span>
           </div>
           <span className="image-viewer__title">
-            Clear pass — trusted for NDVI assessment.
+            Clear pass — trusted for crop-health assessment.
           </span>
           <span className="image-viewer__desc">
             10m native resolution. Rendered overlays are smoothed for readability.

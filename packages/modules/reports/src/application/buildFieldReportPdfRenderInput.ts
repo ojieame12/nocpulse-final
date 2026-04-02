@@ -118,14 +118,14 @@ function signalNote(label: string, value: number | null): string {
   if (value === null) return "Data unavailable";
   const lbl = label.toLowerCase();
   if (lbl.includes("vpd") && !lbl.includes("peak")) {
-    if (value < 0.4) return "Low VPD. Fungal disease risk elevated.";
-    if (value > 1.5) return "High VPD. Rapid transpiration likely.";
-    return "Within comfortable range for most crops.";
+    if (value < 0.4) return "Low crop water demand. Fungal disease risk elevated.";
+    if (value > 1.5) return "High crop water demand. Rapid transpiration likely.";
+    return "Within a comfortable crop water demand range.";
   }
   if (lbl.includes("peak") && lbl.includes("vpd")) {
-    if (value > 2.0) return "Extreme VPD forecast. Expect crop stress.";
-    if (value > 1.2) return "Elevated peak VPD. Monitor plant turgor.";
-    return "Peak VPD within acceptable range.";
+    if (value > 2.0) return "Extreme crop water demand forecast. Expect crop stress.";
+    if (value > 1.2) return "Elevated peak crop water demand. Monitor plant turgor.";
+    return "Peak crop water demand is within range.";
   }
   if (lbl.includes("water balance") && lbl.includes("24")) {
     if (value < -5) return "Significant deficit. Irrigation needed soon.";
@@ -517,7 +517,7 @@ export function buildFieldReportPdfRenderInput({
     // Build signal rows with thresholds and advisory notes
     const signalRows: { label: string; value: string; range: string; status: string; note: string; color?: RGB }[] = [
       {
-        label: "VPD (current)",
+        label: "Crop Water Demand (current)",
         value: `${fmt(sig.currentVpdKpa, 2)} kPa`,
         range: "0.4 – 1.5 kPa",
         status: sig.currentVpdKpa !== null && sig.currentVpdKpa < 0.4 ? "Low" : sig.currentVpdKpa !== null && sig.currentVpdKpa > 1.5 ? "High" : "OK",
@@ -525,7 +525,7 @@ export function buildFieldReportPdfRenderInput({
         color: sig.currentVpdKpa !== null && (sig.currentVpdKpa < 0.4 || sig.currentVpdKpa > 1.5) ? AMBER : undefined,
       },
       {
-        label: "Peak VPD (24h)",
+        label: "Peak Crop Water Demand (24h)",
         value: `${fmt(sig.peakForecastVpdKpa24h, 2)} kPa`,
         range: "< 2.0 kPa",
         status: sig.peakForecastVpdKpa24h !== null && sig.peakForecastVpdKpa24h > 2.0 ? "High" : "OK",

@@ -338,7 +338,7 @@ export function SettingsPanel({
           <SettingRow label="Email Alerts" desc="Critical and high severity findings">
             <Toggle checked={emailAlerts} onChange={setEmailAlerts} />
           </SettingRow>
-          <SettingRow label="Health Warnings" desc="Field status changes and NDVI drops">
+          <SettingRow label="Health Warnings" desc="Field status changes and crop-health drops">
             <Toggle checked={healthWarnings} onChange={setHealthWarnings} />
           </SettingRow>
           <SettingRow label="Spray Windows" desc="Application timing notifications">

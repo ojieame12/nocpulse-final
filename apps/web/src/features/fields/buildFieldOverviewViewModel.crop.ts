@@ -12,6 +12,11 @@ import {
   resolveOpticalSeasonality,
   titleCaseStage,
 } from "./buildFieldOverviewViewModel.cropSignals";
+import {
+  isSpringSeedingContext,
+  resolveFieldAccessPresentation,
+  resolveSoilTempPresentation,
+} from "./buildFieldOverviewViewModel.spring";
 
 function metricTone(input: "danger" | "warning" | "positive" | "info") {
   switch (input) {
@@ -47,6 +52,7 @@ export function buildCropProps(rm: any): FieldCropProps {
   const cropContext = rm.cropContext ?? null;
   const moisture = rm.moisture ?? null;
   const weatherSignals = rm.weather?.signals ?? null;
+  const latestObservation = rm.weather?.profile?.latestObservation ?? null;
   const latestOpticalRaster = rm.imagery?.latestOpticalRasterObservation ?? null;
   const latestOpticalRasterCells = latestOpticalRaster?.cells ?? [];
   const latestOpticalCapture = rm.imagery?.latestOpticalCapture ?? null;
@@ -113,14 +119,42 @@ export function buildCropProps(rm: any): FieldCropProps {
     ndreAvg,
     hasOpticalRaster: latestOpticalRaster != null,
   });
-  const frostMinTemp = weatherSignals?.frostRiskMinTempC ?? null;
+  const frostMinTemp =
+    weatherSignals?.frostRiskMinTempC7d ??
+    weatherSignals?.frostRiskMinTempC ??
+    null;
+  const frostRiskNights7d = weatherSignals?.frostRiskNights7d ?? null;
+  const frostProbabilityPct7d = weatherSignals?.frostProbabilityPct7d ?? null;
+  const frostProbabilityLabel =
+    frostProbabilityPct7d != null && Number.isFinite(frostProbabilityPct7d)
+      ? `${Math.round(frostProbabilityPct7d)}% probability`
+      : null;
+  const frostHorizonLabel =
+    weatherSignals?.frostRiskMinTempC7d != null ? "next 7d" : "next 24h";
+  const soilTempPresentation = resolveSoilTempPresentation({
+    soilTemp6cmCurrentC:
+      weatherSignals?.soilTemp6cmCurrentC ??
+      latestObservation?.soilTemperature6cmC ??
+      null,
+    soilTemp6cmSustainedDays: weatherSignals?.soilTemp6cmSustainedDays ?? null,
+    thresholdC:
+      weatherSignals?.provenance?.soilTempThresholdC ??
+      resolvedRules.seedingThresholds.soilTempMinC,
+  });
+  const fieldAccessPresentation = resolveFieldAccessPresentation({
+    surfaceMoisturePct: latestObservation?.soilMoisturePct ?? null,
+    recentPrecipTotal72hMm: weatherSignals?.recentPrecipTotal72hMm ?? null,
+    freezeThawCycles7d: weatherSignals?.freezeThawCycles7d ?? null,
+    thresholds: resolvedRules.seedingThresholds,
+  });
+  const springSeedingContext = isSpringSeedingContext(cropStagePresentation);
   const peakVpd = weatherSignals?.peakForecastVpdKpa24h ?? null;
   const waterBalance24h = weatherSignals?.netWaterBalance24hMm ?? null;
   const waterBalance72h = weatherSignals?.netWaterBalance72hMm ?? null;
 
   const thresholdRows: FieldCropProps["thresholds"] = [
     {
-      param: "Soil Moisture (%)",
+      param: "Root-Zone Moisture (%)",
       min: `${resolvedRules.moistureStress.rootZoneCriticalPct}`,
       optimal: `${resolvedRules.moistureStress.rootZoneMonitorPct}–70`,
       optimalColor: "#16a34a",
@@ -194,10 +228,12 @@ export function buildCropProps(rm: any): FieldCropProps {
         frostMinTemp == null
           ? "No forecast data available"
           : frostMinTemp <= resolvedRules.weatherRisk.frost.killTempC
-            ? "Kill temperature forecast — protect crop immediately"
+            ? `Kill temperature forecast ${frostHorizonLabel} — protect crop immediately`
             : frostMinTemp <= resolvedRules.weatherRisk.frost.damageTempC
-              ? "Damage risk — monitor overnight lows"
-              : "Above frost damage threshold",
+              ? frostRiskNights7d != null && frostRiskNights7d > 0
+                ? `${frostRiskNights7d} frost night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""} — monitor lows closely`
+                : `Damage risk ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""} — monitor overnight lows`
+              : `Above frost damage threshold ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""}`,
       status:
         frostMinTemp == null
           ? "warn"
@@ -216,7 +252,7 @@ export function buildCropProps(rm: any): FieldCropProps {
               : "#16a34a44",
     },
     {
-      param: "Peak VPD (kPa)",
+      param: "Crop Water Demand (kPa)",
       min: "0",
       optimal: `<${resolvedRules.weatherRisk.atmosphericDemand.elevatedVpdKpa.toFixed(1)}`,
       optimalColor: "#16a34a",
@@ -224,11 +260,11 @@ export function buildCropProps(rm: any): FieldCropProps {
       actual: peakVpd != null ? `${peakVpd.toFixed(2)} kPa` : "—",
       notes:
         peakVpd == null
-          ? "No VPD forecast available"
+          ? "No crop water demand forecast available"
           : peakVpd >= resolvedRules.weatherRisk.atmosphericDemand.severeVpdKpa
             ? "Severe atmospheric demand — high transpiration stress"
             : peakVpd >= resolvedRules.weatherRisk.atmosphericDemand.elevatedVpdKpa
-              ? "Elevated VPD — monitor crop water demand"
+              ? "Elevated crop water demand — monitor moisture closely"
               : "Atmospheric demand within normal range",
       status:
         peakVpd == null
@@ -489,35 +525,61 @@ export function buildCropProps(rm: any): FieldCropProps {
         sub:
           frostMinTemp == null
             ? "No frost signal available"
-            : `Min temp ${frostMinTemp.toFixed(1)}°C`,
+            : frostRiskNights7d != null && frostRiskNights7d > 0
+              ? `Min ${frostMinTemp.toFixed(1)}°C · ${frostRiskNights7d} night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""}`
+              : `Min ${frostMinTemp.toFixed(1)}°C ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""}`,
         ...frostTone,
       },
       {
-        label: "ATMOSPHERIC DEMAND",
+        label: "CROP WATER DEMAND",
         value: peakVpd == null ? "No forecast" : peakVpd.toFixed(1),
         sub:
           peakVpd == null
-            ? "No VPD signal available"
-            : `Peak VPD next 24h`,
+            ? "No crop water demand signal available"
+            : "Peak next 24h",
         ...vpdTone,
       },
       {
-        label: "GDD 72H",
-        value: weatherSignals?.gdd72h != null ? weatherSignals.gdd72h.toFixed(1) : "No forecast",
+        label:
+          springSeedingContext && soilTempPresentation != null
+            ? soilTempPresentation.label
+            : "GDD 72H",
+        value:
+          springSeedingContext && soilTempPresentation != null
+            ? soilTempPresentation.value
+            : weatherSignals?.gdd72h != null
+              ? weatherSignals.gdd72h.toFixed(1)
+              : "No forecast",
         sub:
-          weatherSignals?.gdd72h != null
-            ? `Base ${resolvedRules.crop.gddBaseC}°C`
-            : "Weather still initializing",
-        ...gddTone,
+          springSeedingContext && soilTempPresentation != null
+            ? soilTempPresentation.sub
+            : weatherSignals?.gdd72h != null
+              ? `Base ${resolvedRules.crop.gddBaseC}°C`
+              : "Weather still initializing",
+        ...(springSeedingContext && soilTempPresentation != null
+          ? metricTone(soilTempPresentation.tone)
+          : gddTone),
       },
       {
-        label: "WATER BALANCE",
-        value: waterBalance72h != null ? `${waterBalance72h.toFixed(1)}mm` : "No forecast",
+        label:
+          springSeedingContext && fieldAccessPresentation != null
+            ? fieldAccessPresentation.label
+            : "WATER BALANCE",
+        value:
+          springSeedingContext && fieldAccessPresentation != null
+            ? fieldAccessPresentation.value
+            : waterBalance72h != null
+              ? `${waterBalance72h.toFixed(1)}mm`
+              : "No forecast",
         sub:
-          waterBalance72h != null
-            ? "72h forecast balance"
-            : "No forecast water balance yet",
-        ...waterTone,
+          springSeedingContext && fieldAccessPresentation != null
+            ? fieldAccessPresentation.sub
+            : waterBalance72h != null
+              ? "72h forecast balance"
+              : "No forecast water balance yet",
+        ...(springSeedingContext && fieldAccessPresentation != null
+          ? metricTone(fieldAccessPresentation.tone)
+          : waterTone),
       },
     ],
     diseaseRisks,

@@ -39,7 +39,7 @@ interface DiseaseCard {
 }
 
 const DISEASES: DiseaseCard[] = [
-  { name: 'Blackleg (Leptosphaeria)', desc: 'Risk: HIGH — warm humid conditions, spore count elevated', pct: '78%', color: '#ef4444', bg: '#fef2f2' },
+  { name: 'Blackleg Disease Risk', desc: 'Risk: HIGH — warm humid conditions, spore count elevated', pct: '78%', color: '#ef4444', bg: '#fef2f2' },
   { name: 'Sclerotinia Stem Rot',     desc: 'Risk: MODERATE — flowering stage vulnerability window',    pct: '45%', color: '#f59e0b', bg: '#fffbeb' },
   { name: 'Clubroot (Plasmodiophora)', desc: 'Risk: LOW — resistant cultivar, pH managed',              pct: '12%', color: '#16a34a', bg: '#f0fdf4' },
 ];
@@ -48,7 +48,7 @@ const DISEASES: DiseaseCard[] = [
 const SAR_ROWS = [
   { k: 'Satellite',       v: 'Sentinel-1A' },
   { k: 'Pass Direction',  v: 'Ascending' },
-  { k: 'Polarisation',    v: 'VV + VH' },
+  { k: 'Radar mode',      v: 'VV + VH' },
   { k: 'Last Capture',    v: '2025-03-25 06:42 UTC' },
   { k: 'Resolution',      v: '10m × 10m' },
 ];
@@ -66,7 +66,7 @@ interface StatusTile {
 const FIELD_TILES: StatusTile[] = [
   { label: 'FROST RISK',         value: 'High',  sub: 'Min temp: -2°C tonight',  valueColor: '#ef4444', bg: '#fef2f2', border: '#fecaca' },
   { label: 'SEEDING READINESS',  value: 'Ready', sub: 'Soil temp > 5°C for 5d',  valueColor: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
-  { label: 'ET₀ (mm/day)',       value: '3.8',   sub: 'Penman-Monteith',         valueColor: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe' },
+  { label: 'DAILY WATER USE',    value: '3.8',   sub: 'Evapotranspiration',      valueColor: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe' },
   { label: 'WATER BALANCE',      value: '+12mm', sub: 'Surplus this week',       valueColor: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
 ];
 
@@ -182,11 +182,11 @@ export function CropTab() {
         ))}
       </div>
 
-      {/* ── NDVI Health Index ── */}
+      {/* ── Crop Health Index ── */}
       <div className="crop-section">
-        <span className="crop-section__label">NDVI HEALTH INDEX</span>
+        <span className="crop-section__label">CROP HEALTH INDEX</span>
         <div className="donut-container">
-          <DonutChart value={0.72} label="0.72" caption="NDVI" size={150} color="#16a34a" />
+          <DonutChart value={0.72} label="0.72" caption="Crop Health" size={150} color="#16a34a" />
           <div className="donut-info">
             <div className="donut-info__row">
               <div className="donut-info__text">

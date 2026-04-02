@@ -89,6 +89,7 @@ export async function buildPreviewViewModel(initialFieldId?: string) {
           fieldId: viewModel.fieldId,
           fieldName: viewModel.fieldName,
           areaHaLabel: viewModel.areaHaLabel,
+          cropContext: viewModel.cropContext,
           mapPreview: {
             ...viewModel.mapPreview,
             workspaceFieldFeatures: [viewModel.mapPreview.boundaryFeature],
@@ -135,6 +136,7 @@ export async function buildPreviewViewModel(initialFieldId?: string) {
       fieldId: "__empty__",
       fieldName: "",
       areaHaLabel: "",
+      cropContext: null,
       mapPreview: buildEmptyMapPreview(),
       sidebarFields: [],
       summary: null,
@@ -170,6 +172,7 @@ export async function buildPreviewViewModel(initialFieldId?: string) {
     fieldId: viewModel.fieldId,
     fieldName: viewModel.fieldName,
     areaHaLabel: viewModel.areaHaLabel,
+    cropContext: viewModel.cropContext,
     mapPreview: {
       ...viewModel.mapPreview,
       workspaceFieldFeatures: selection.workspaceFieldFeatures,

@@ -12,6 +12,7 @@ type OpenMeteoHourlyPayload = {
   precipitation_probability?: Array<number | null>;
   wind_speed_10m?: Array<number | null>;
   et0_fao_evapotranspiration?: Array<number | null>;
+  soil_temperature_6cm?: Array<number | null>;
   soil_moisture_3_to_9cm?: Array<number | null>;
   soil_moisture_9_to_27cm?: Array<number | null>;
   soil_moisture_27_to_81cm?: Array<number | null>;
@@ -19,6 +20,16 @@ type OpenMeteoHourlyPayload = {
 
 type OpenMeteoForecastPayload = {
   hourly?: OpenMeteoHourlyPayload;
+};
+
+type OpenMeteoEnsembleHourlyPayload = {
+  time: string[];
+  temperature_2m?: Array<number | null>;
+  [key: `temperature_2m_member${string}`]: Array<number | null> | string[] | undefined;
+};
+
+type OpenMeteoEnsemblePayload = {
+  hourly?: OpenMeteoEnsembleHourlyPayload;
 };
 
 type CreateOpenMeteoWeatherProviderClientOptions = {
@@ -29,11 +40,14 @@ type CreateOpenMeteoWeatherProviderClientOptions = {
   sourceKey?: string;
   /** Pin a specific Open-Meteo weather model (e.g. "era5_land", "era5"). When absent, uses Best Match. */
   weatherModel?: string;
+  /** Ensemble model used to derive 7-day frost probability. Defaults to the documented sample model. */
+  ensembleModel?: string;
 };
 
-const DEFAULT_FORECAST_HOURS = 48;
+const DEFAULT_FORECAST_HOURS = 168;
 const DEFAULT_TIMEOUT_MS = 8_000;
 const DEFAULT_RETRIES = 2;
+const DEFAULT_ENSEMBLE_MODEL = "icon_seamless_eps";
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const HOURLY_FIELDS = [
   "temperature_2m",
@@ -42,6 +56,7 @@ const HOURLY_FIELDS = [
   "precipitation",
   "wind_speed_10m",
   "et0_fao_evapotranspiration",
+  "soil_temperature_6cm",
   "soil_moisture_3_to_9cm",
   "soil_moisture_9_to_27cm",
   "soil_moisture_27_to_81cm",
@@ -220,10 +235,112 @@ async function fetchOpenMeteoPayload(
   }
 }
 
+async function fetchOpenMeteoEnsemblePayload(input: {
+  latitude: number;
+  longitude: number;
+  forecastHours: number;
+  ensembleModel: string;
+  options: CreateOpenMeteoWeatherProviderClientOptions;
+}): Promise<OpenMeteoEnsemblePayload> {
+  const searchParams = new URLSearchParams({
+    latitude: input.latitude.toString(),
+    longitude: input.longitude.toString(),
+    hourly: "temperature_2m",
+    forecast_hours: input.forecastHours.toString(),
+    models: input.ensembleModel,
+    timezone: "UTC",
+  });
+  const publicBaseUrl = "https://ensemble-api.open-meteo.com/v1/ensemble";
+  const paidBaseUrl = "https://customer-ensemble-api.open-meteo.com/v1/ensemble";
+  const apiKey = input.options.apiKey?.trim();
+
+  if (!apiKey) {
+    return fetchPayloadFromBaseUrl(
+      publicBaseUrl,
+      searchParams,
+      input.options,
+    ) as Promise<OpenMeteoEnsemblePayload>;
+  }
+
+  try {
+    return await (fetchPayloadFromBaseUrl(
+      paidBaseUrl,
+      searchParams,
+      input.options,
+      apiKey,
+    ) as Promise<OpenMeteoEnsemblePayload>);
+  } catch (primaryError) {
+    try {
+      return await (fetchPayloadFromBaseUrl(
+        publicBaseUrl,
+        searchParams,
+        input.options,
+      ) as Promise<OpenMeteoEnsemblePayload>);
+    } catch (fallbackError) {
+      throw new Error(
+        `Open-Meteo ensemble paid endpoint failed (${
+          primaryError instanceof Error ? primaryError.message : String(primaryError)
+        }); public fallback failed (${
+          fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+        }).`,
+      );
+    }
+  }
+}
+
+function calculateFrostProbabilityFromEnsemble(input: {
+  payload: OpenMeteoEnsemblePayload;
+  thresholdC: number;
+}) {
+  const hourly = input.payload.hourly;
+
+  if (!hourly || hourly.time.length === 0) {
+    return {
+      frostProbabilityPct7d: null,
+      memberCount: null,
+    };
+  }
+
+  const memberEntries = Object.entries(hourly).filter(
+    (entry): entry is [string, Array<number | null>] => {
+      const [key, value] = entry;
+      return /^temperature_2m_member\d+$/.test(key) && Array.isArray(value);
+    },
+  );
+
+  if (memberEntries.length === 0) {
+    return {
+      frostProbabilityPct7d: null,
+      memberCount: 0,
+    };
+  }
+
+  const memberCount = memberEntries.length;
+  const riskyMemberCount = memberEntries.reduce((count, [, values]) => {
+    const memberMinimum = values.reduce<number | null>((minimum, value) => {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        return minimum;
+      }
+
+      return minimum == null ? value : Math.min(minimum, value);
+    }, null);
+
+    return memberMinimum != null && memberMinimum <= input.thresholdC
+      ? count + 1
+      : count;
+  }, 0);
+
+  return {
+    frostProbabilityPct7d: roundTo((riskyMemberCount / memberCount) * 100, 1),
+    memberCount,
+  };
+}
+
 function toFieldWeatherResult(
   payload: OpenMeteoForecastPayload,
   input: FetchFieldWeatherInput,
   options: CreateOpenMeteoWeatherProviderClientOptions,
+  ensemble: FetchFieldWeatherResult["ensemble"] = null,
 ): FetchFieldWeatherResult {
   const hourly = payload.hourly;
 
@@ -250,6 +367,7 @@ function toFieldWeatherResult(
     ),
     relativeHumidityPct: numberAt(hourly.relative_humidity_2m, observationIndex),
     soilMoisturePct: weightedSoilMoisturePct(hourly, observationIndex),
+    soilTemperature6cmC: numberAt(hourly.soil_temperature_6cm, observationIndex),
     evapotranspirationMm: numberAt(
       hourly.et0_fao_evapotranspiration,
       observationIndex,
@@ -299,6 +417,7 @@ function toFieldWeatherResult(
       forecastRunAt,
       entries,
     },
+    ensemble,
   };
 }
 
@@ -309,7 +428,38 @@ export function createOpenMeteoWeatherProviderClient(
     providerKey: "open-meteo",
     async fetchFieldWeather(input) {
       const payload = await fetchOpenMeteoPayload(input, options);
-      return toFieldWeatherResult(payload, input, options);
+      const forecastHours = Math.max(
+        1,
+        options.forecastHours ?? input.forecastHours ?? DEFAULT_FORECAST_HOURS,
+      );
+      let ensemble: FetchFieldWeatherResult["ensemble"] = null;
+
+      if (
+        typeof input.frostDamageThresholdC === "number" &&
+        Number.isFinite(input.frostDamageThresholdC)
+      ) {
+        const ensembleModel = options.ensembleModel ?? DEFAULT_ENSEMBLE_MODEL;
+        const ensemblePayload = await fetchOpenMeteoEnsemblePayload({
+          latitude: input.latitude,
+          longitude: input.longitude,
+          forecastHours,
+          ensembleModel,
+          options,
+        });
+        const probability = calculateFrostProbabilityFromEnsemble({
+          payload: ensemblePayload,
+          thresholdC: input.frostDamageThresholdC,
+        });
+
+        ensemble = {
+          frostProbabilityPct7d: probability.frostProbabilityPct7d,
+          frostProbabilityThresholdC: input.frostDamageThresholdC,
+          modelKey: ensembleModel,
+          memberCount: probability.memberCount,
+        };
+      }
+
+      return toFieldWeatherResult(payload, input, options, ensemble);
     },
   };
 }

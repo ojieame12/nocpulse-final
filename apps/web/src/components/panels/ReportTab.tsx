@@ -144,11 +144,13 @@ const READING_ICONS: Record<ReadingIconKey, { Icon: LucideIcon; color: string }>
 };
 
 const CROP_PARAM_ICONS: Record<string, { Icon: LucideIcon; color: string }> = {
+  "root-zone moisture": { Icon: Droplets,     color: "#3b82f6" },
   "root moisture":     { Icon: Droplets,     color: "#3b82f6" },
   "soil moisture":     { Icon: Droplets,     color: "#3b82f6" },
   "surface moisture":  { Icon: Droplets,     color: "#0ea5e9" },
   "surface wetness":   { Icon: Droplets,     color: "#0ea5e9" },
   "frost min":         { Icon: Snowflake,    color: "#818cf8" },
+  "crop water demand": { Icon: Gauge,        color: "#3b82f6" },
   "water balance 72h": { Icon: CloudDrizzle, color: "#06b6d4" },
   "water balance":     { Icon: CloudDrizzle, color: "#06b6d4" },
   "ndvi":              { Icon: Leaf,         color: "#16a34a" },
@@ -493,7 +495,7 @@ function ReportChart({
                 color: 'var(--color-slate-500)',
               }}
             >
-              {chart.emptyText ?? 'No chart history available yet.'}
+              {chart.emptyText ?? 'No history has been stored for this field yet.'}
             </span>
           </div>
         )}
@@ -515,7 +517,7 @@ function ForecastSection({ days }: { days: ReportForecastDay[] }) {
               color: 'var(--color-slate-500)',
             }}
           >
-            No forecast days have been stored for this field yet.
+            Forecast data is still initializing for this field. The first 7-day outlook appears after the next weather refresh.
           </span>
         </div>
       </div>

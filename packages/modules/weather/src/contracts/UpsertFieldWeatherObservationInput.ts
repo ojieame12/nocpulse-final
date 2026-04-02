@@ -12,6 +12,7 @@ export type UpsertFieldWeatherObservationInput = WorkspaceScoped & {
   windSpeedKph: number;
   relativeHumidityPct?: number | null;
   soilMoisturePct?: number | null;
+  soilTemperature6cmC?: number | null;
   evapotranspirationMm?: number | null;
   provenance?: FieldWeatherObservationProvenance;
 };

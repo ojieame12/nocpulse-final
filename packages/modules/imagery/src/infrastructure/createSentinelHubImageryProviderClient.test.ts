@@ -22,12 +22,14 @@ test("healthcheck retries transient Sentinel Hub token throttling", async () => 
   const originalSetTimeout = globalThis.setTimeout;
   let tokenAttempts = 0;
 
-  globalThis.setTimeout = ((callback: TimerHandler) => {
+  const immediateSetTimeout = ((callback: TimerHandler) => {
     if (typeof callback === "function") {
       callback();
     }
-    return 0 as ReturnType<typeof setTimeout>;
-  }) as typeof setTimeout;
+    return 0 as unknown as ReturnType<typeof setTimeout>;
+  }) as unknown as typeof setTimeout;
+
+  globalThis.setTimeout = immediateSetTimeout;
 
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -69,12 +71,14 @@ test("materializeFieldObservation retries throttled statistics requests and succ
   let tokenAttempts = 0;
   let statsAttempts = 0;
 
-  globalThis.setTimeout = ((callback: TimerHandler) => {
+  const immediateSetTimeout = ((callback: TimerHandler) => {
     if (typeof callback === "function") {
       callback();
     }
-    return 0 as ReturnType<typeof setTimeout>;
-  }) as typeof setTimeout;
+    return 0 as unknown as ReturnType<typeof setTimeout>;
+  }) as unknown as typeof setTimeout;
+
+  globalThis.setTimeout = immediateSetTimeout;
 
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);

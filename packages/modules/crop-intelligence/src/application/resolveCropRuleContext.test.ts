@@ -16,6 +16,8 @@ test("resolveCropRuleContext falls back to the generic crop profile when no crop
   assert.equal(result.crop.gddBaseC, 5);
   assert.equal(result.moistureStress.rootZoneMonitorPct, 28);
   assert.equal(result.weatherRisk.frost.damageTempC, -2);
+  assert.equal(result.seedingThresholds.soilTempMinC, 5);
+  assert.equal(result.seedingThresholds.sustainedDays, 3);
   assert.deepEqual(
     result.diseaseRisk.models.map((model) => model.key),
     ["generic-wet-canopy"],
@@ -39,6 +41,8 @@ test("resolveCropRuleContext normalizes crop aliases and applies crop-specific s
   assert.equal(result.crop.gddBaseC, 10);
   assert.equal(result.weatherRisk.frost.damageTempC, 0);
   assert.equal(result.weatherRisk.frost.killTempC, -1.5);
+  assert.equal(result.seedingThresholds.soilTempMinC, 10);
+  assert.equal(result.seedingThresholds.sustainedDays, 5);
   assert.equal(
     result.weatherRisk.atmosphericDemand.elevatedVpdKpa,
     prairieDefaultRulePack.weatherRisk.atmosphericDemand.elevatedVpdKpa,
@@ -62,6 +66,7 @@ test("resolveCropRuleContext filters disease models to the crop and stage when a
   assert.equal(result.crop.growthStage, "flowering");
   assert.equal(result.moistureStress.rootZoneMonitorPct, 29);
   assert.equal(result.moistureStress.rootZoneCriticalPct, 23);
+  assert.equal(result.seedingThresholds.soilTempMinC, 5);
   assert.deepEqual(
     result.diseaseRisk.models.map((model) => model.key),
     ["wheat-fhb"],

@@ -22,6 +22,7 @@ export {
   type FieldWeatherProfile,
   type FieldWeatherProfileDataAvailability,
 } from "./contracts/FieldWeatherProfile";
+export { type HistoricalSoilMoistureResult } from "./contracts/HistoricalSoilMoistureResult";
 export {
   type ComputeFieldWeatherDerivedSignalsInput,
 } from "./contracts/ComputeFieldWeatherDerivedSignalsInput";
@@ -87,7 +88,6 @@ export {
   createOpenMeteoHistoricalClient,
   parseArchiveResponse,
   type CreateOpenMeteoHistoricalClientOptions,
-  type HistoricalSoilMoistureResult,
   type OpenMeteoHistoricalClient,
 } from "./infrastructure/createOpenMeteoHistoricalClient";
 export {
