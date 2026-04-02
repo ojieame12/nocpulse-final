@@ -22,6 +22,9 @@ test("commitSpreadsheetImportBatch loads workspace fields once per batch", async
 
   const result = await commitSpreadsheetImportBatch({
     repository: {
+      async createSpreadsheetImportBatch() {
+        throw new Error("not used in this test");
+      },
       async getBatchById() {
         return {
           id: "batch-1",
@@ -29,7 +32,7 @@ test("commitSpreadsheetImportBatch loads workspace fields once per batch", async
           sourceType: "spreadsheet",
           fileName: "import.xlsx",
           sheetName: "Sheet1",
-          status: "pending",
+          status: "previewed",
           rowCount: 2,
           validRowCount: 2,
           fieldCount: 2,
@@ -109,6 +112,9 @@ test("commitSpreadsheetImportBatch loads workspace fields once per batch", async
             updatedAt: "2026-04-02T00:00:00.000Z",
           },
         ];
+      },
+      async getLatestCommittedCandidateByField() {
+        return null;
       },
       async markCandidateCommitted(_workspaceId, _batchId, candidateId, input) {
         markCommittedCalls += 1;
@@ -233,6 +239,9 @@ test("commitSpreadsheetImportBatch updates legal land description only when it c
 
   const result = await commitSpreadsheetImportBatch({
     repository: {
+      async createSpreadsheetImportBatch() {
+        throw new Error("not used in this test");
+      },
       async getBatchById() {
         return {
           id: "batch-1",
@@ -240,7 +249,7 @@ test("commitSpreadsheetImportBatch updates legal land description only when it c
           sourceType: "spreadsheet",
           fileName: "import.xlsx",
           sheetName: "Sheet1",
-          status: "pending",
+          status: "previewed",
           rowCount: 1,
           validRowCount: 1,
           fieldCount: 1,
@@ -288,6 +297,9 @@ test("commitSpreadsheetImportBatch updates legal land description only when it c
             updatedAt: "2026-04-02T00:00:00.000Z",
           },
         ];
+      },
+      async getLatestCommittedCandidateByField() {
+        return null;
       },
       async markCandidateCommitted(_workspaceId, _batchId, candidateId, input) {
         return {
