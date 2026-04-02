@@ -26,6 +26,8 @@ corepack pnpm -C /Users/ojieame/FieldPulse-v3 ops:beta-roster -- --days 30 --jso
 Use the returned `workspaceId`, `workspaceSlug`, and `status` to decide which workspace to inspect next.
 By default, this roster hides obvious smoke/test requests that use `@example.com` or `@example.invalid`.
 If you need to audit those too, add `--include-test`.
+It also collapses repeated real requests to one actionable row per email by default.
+If you need to see every repeat request, add `--include-duplicates`.
 
 For a workspace in `needs-curation`, run:
 
