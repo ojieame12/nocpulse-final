@@ -39,6 +39,7 @@ test("buildBetaWorkspaceRosterReport marks granted workspaces without activity a
   assert.equal(report.rows[0]?.requestKind, "real");
   assert.equal(report.rows[0]?.workspaceSlug, "hope-creek");
   assert.equal(report.rows[0]?.workspaceName, "Hope Creek");
+  assert.equal(report.rows[0]?.launchVisibleFollowup, null);
   assert.equal(report.excludedDuplicateRequestCount, 0);
   assert.equal(report.statusCounts["needs-intake"], 1);
 });
@@ -73,6 +74,9 @@ test("buildBetaWorkspaceRosterReport marks workspaces with weak launch-visible f
     launchVisibleByWorkspaceId: new Map([
       ["w1", { scopedFieldCount: 5, readyCount: 1, hasEnoughReadyFields: false }],
     ]),
+    launchVisibleFollowupByWorkspaceId: new Map([
+      ["w1", { missingReadyFieldCount: 1, topBlockers: [{ reason: "vegetation-empty", count: 1 }] }],
+    ]),
     workspaceById: new Map([
       ["w1", { id: "w1", slug: "hope-creek", name: "Hope Creek" }],
     ]),
@@ -81,6 +85,8 @@ test("buildBetaWorkspaceRosterReport marks workspaces with weak launch-visible f
   assert.equal(report.rows[0]?.status, "needs-curation");
   assert.equal(report.rows[0]?.requestKind, "real");
   assert.equal(report.rows[0]?.workspaceName, "Hope Creek");
+  assert.equal(report.rows[0]?.launchVisibleFollowup?.missingReadyFieldCount, 1);
+  assert.equal(report.rows[0]?.launchVisibleFollowup?.topBlockers[0]?.reason, "vegetation-empty");
   assert.equal(report.excludedDuplicateRequestCount, 0);
   assert.equal(report.statusCounts["needs-curation"], 1);
 });
@@ -115,12 +121,16 @@ test("buildBetaWorkspaceRosterReport marks insight-complete workspaces as ready-
     launchVisibleByWorkspaceId: new Map([
       ["w1", { scopedFieldCount: 5, readyCount: 3, hasEnoughReadyFields: true }],
     ]),
+    launchVisibleFollowupByWorkspaceId: new Map([
+      ["w1", { missingReadyFieldCount: 0, topBlockers: [] }],
+    ]),
     workspaceById: new Map([
       ["w1", { id: "w1", slug: "hope-creek", name: "Hope Creek" }],
     ]),
   });
 
   assert.equal(report.rows[0]?.status, "ready-for-outreach");
+  assert.equal(report.rows[0]?.launchVisibleFollowup?.missingReadyFieldCount, 0);
   assert.equal(report.excludedDuplicateRequestCount, 0);
   assert.equal(report.statusCounts["ready-for-outreach"], 1);
 });
@@ -262,6 +272,9 @@ test("buildBetaWorkspaceRosterReport dedupes repeated real requests by email by 
     launchVisibleByWorkspaceId: new Map([
       ["w1", { scopedFieldCount: 2, readyCount: 0, hasEnoughReadyFields: false }],
     ]),
+    launchVisibleFollowupByWorkspaceId: new Map([
+      ["w1", { missingReadyFieldCount: 2, topBlockers: [{ reason: "vegetation-empty", count: 2 }] }],
+    ]),
     workspaceById: new Map([
       ["w1", { id: "w1", slug: "hope-creek", name: "Hope Creek" }],
     ]),
@@ -272,6 +285,7 @@ test("buildBetaWorkspaceRosterReport dedupes repeated real requests by email by 
   assert.equal(report.excludedDuplicateRequestCount, 1);
   assert.equal(report.rows[0]?.requestId, "r2");
   assert.equal(report.rows[0]?.status, "needs-curation");
+  assert.equal(report.rows[0]?.launchVisibleFollowup?.missingReadyFieldCount, 2);
 });
 
 test("buildBetaWorkspaceRosterReport can include duplicate requests explicitly", () => {
