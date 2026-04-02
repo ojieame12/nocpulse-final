@@ -14521,3 +14521,99 @@ img {
 [data-theme="light"] .welcome-modal__dismiss:hover {
   color: rgba(0, 0, 0, 0.50);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Mobile Responsive — App Shell (< 768px)
+   All rules inside @media queries — desktop is untouched
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 767px) {
+  .app-shell { height: 100dvh; }
+  .app-topbar { height: 48px; padding: 0 max(12px, env(safe-area-inset-left)); }
+  .app-topbar__center { display: none; }
+  .app-topbar__bell-btn, .app-topbar__theme-btn { min-width: 44px; min-height: 44px; }
+
+  .field-strip {
+    position: fixed; bottom: 0; left: 0; right: 0; top: auto;
+    z-index: 150; width: 100%; height: auto; min-height: 56px;
+    border-radius: 0; border-top: 1px solid var(--glass-border, rgba(255,255,255,0.10));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  .field-strip__header { display: none; }
+
+  .fdp {
+    position: fixed !important; top: auto !important; right: 0 !important;
+    bottom: 0 !important; left: 0 !important; width: 100% !important;
+    max-width: 100% !important; min-width: unset !important;
+    height: 75vh; max-height: 75vh; border-radius: 20px 20px 0 0; z-index: 200;
+  }
+  .fdp--expanded { width: 100% !important; min-width: 100% !important; }
+  .fdp::after {
+    content: ""; position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 40px; height: 4px; background: rgba(255,255,255,0.20); border-radius: 2px;
+    z-index: 10; pointer-events: none;
+  }
+  [data-theme="light"] .fdp::after { background: rgba(0,0,0,0.12); }
+  .fdp__header { padding-top: 20px; }
+  .map-area { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+  .field-strip__kebab-menu { max-width: calc(100vw - 16px); }
+
+  /* Panel content reflow */
+  .fdp__body { padding: 6px 12px 12px; }
+  .panel__body { padding: 16px; }
+  .donut-container { flex-direction: column; gap: 16px; height: auto; align-items: center; }
+  .donut-confidence-wrap { width: 100px; height: 100px; }
+  .donut-info { width: 100%; }
+  .panel__section-label, .panel__data-section-label { font-size: 10px; }
+  .panel__data-cell { padding: 10px; min-height: 56px; }
+  .panel__data-cell-label { font-size: 11px; }
+  .outlook-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 6px; width: 100% !important; }
+  .outlook-card { width: auto !important; }
+  .layer-pills { width: 100%; overflow-x: auto; }
+  .alert-card { padding: 12px; }
+  .alert-card__badge { padding: 4px 10px; }
+  .fdp__body--cols-2 { grid-template-columns: 1fr; }
+  .fdp__body--cols-4 { grid-template-columns: repeat(2, 1fr); }
+  .fdp-card { padding: 10px 12px; }
+  .image-viewer__frames { height: 140px; min-height: 140px; }
+  .fdp__footer-item { padding: 10px 8px; min-height: 44px; }
+  .fdp-edit__row-input { max-width: 100%; min-width: 0; }
+  .welcome-modal__card { max-width: calc(100vw - 32px); }
+  .welcome-modal__cta { min-height: 48px; padding: 16px 24px; }
+  .welcome-modal__dismiss { min-height: 44px; padding: 10px 16px; }
+  .welcome-modal__method { padding: 10px 14px; }
+
+  /* iOS input zoom prevention */
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="search"], input[type="tel"], input[type="url"],
+  input[type="date"], textarea, select { font-size: 16px !important; }
+
+  /* Cell inspector: bottom sheet */
+  .cell-inspector {
+    position: fixed !important; top: auto !important; right: 0 !important;
+    bottom: 0 !important; left: 0 !important; width: 100% !important;
+    max-width: 100% !important; max-height: 60vh; border-radius: 20px 20px 0 0; z-index: 210;
+  }
+  .cell-inspector button, .fdp__close { min-width: 44px; min-height: 44px; }
+  .donut-source-tag { font-size: 10px; }
+}
+
+@media (max-width: 479px) {
+  .fdp { height: 100vh; height: 100dvh; max-height: 100vh; border-radius: 0; }
+  .field-strip { min-height: 52px; }
+  .fdp__body--cols-4 { grid-template-columns: 1fr; }
+  .outlook-grid { grid-template-columns: repeat(3, 1fr) !important; }
+  .panel__body { padding: 12px; }
+  .donut-confidence-wrap { width: 90px; height: 90px; }
+}
+
+@media (max-height: 500px) and (max-width: 767px) {
+  .app-topbar { height: 40px; }
+  .field-strip { min-height: 48px; }
+  .fdp { max-height: 70vh; }
+}
+
+/* Disable hover tooltips on touch devices */
+@media (hover: none) {
+  .cell-tooltip-v3 { display: none !important; }
+}
