@@ -1483,14 +1483,10 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
            when only a single field was imported. */
         const refreshFieldId = isPlaceholderFieldId(activeFieldId)
           ? (
-              chooseFirstInsightField({
-                workspaceId: pendingOnboardingWatch.workspaceId ?? workspaceId,
-                preferredFieldId: pendingOnboardingWatch.preferredFieldId ?? null,
-                fieldEntries:
-                  Array.from(pendingOnboardingWatch.dispatchFieldMap.values()).map(
-                    (info) => ({ fieldId: info.fieldId, fieldName: info.fieldLabel }),
-                  ),
-              })
+              pendingOnboardingWatch.preferredFieldId ??
+              (pendingOnboardingWatch.fieldIds.length === 1
+                ? (pendingOnboardingWatch.fieldIds[0] ?? null)
+                : null)
             )
           : activeFieldId;
 
