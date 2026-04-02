@@ -6,6 +6,7 @@ import {
   resolveResolutionTier,
   computeScaleFitPenalty,
   computeAgreement,
+  shouldCapHighConfidence,
 } from "./rebuildFieldMoistureEstimate";
 import { rebuildFieldMoistureEstimate } from "./rebuildFieldMoistureEstimate";
 import type { FieldMoistureSnapshot } from "../contracts/FieldMoistureSnapshot";
@@ -162,6 +163,36 @@ test("computeAgreement: null when either input is null", () => {
   assert.equal(computeAgreement(null, null), null);
 });
 
+test("shouldCapHighConfidence: stale raster plus neutral agreement caps high confidence", () => {
+  assert.equal(
+    shouldCapHighConfidence({
+      rasterAgeHours: 60,
+      agreementFlag: "neutral",
+    }),
+    true,
+  );
+});
+
+test("shouldCapHighConfidence: fresh raster does not cap high confidence", () => {
+  assert.equal(
+    shouldCapHighConfidence({
+      rasterAgeHours: 12,
+      agreementFlag: "neutral",
+    }),
+    false,
+  );
+});
+
+test("shouldCapHighConfidence: stale agreeing raster does not cap high confidence", () => {
+  assert.equal(
+    shouldCapHighConfidence({
+      rasterAgeHours: 60,
+      agreementFlag: "agree",
+    }),
+    false,
+  );
+});
+
 test("agreement bonus in integration: raster+weather close signals", async () => {
   const { repo } = stubRepository();
   // ndmi 0.35 -> rasterSignalToPct = 20 + 0.35*40 = 34
@@ -220,6 +251,38 @@ test("divergent flag in integration: raster+weather far apart", async () => {
   assert.equal(prov.agreementFlag, "divergent");
   assert.ok(prov.agreementDeltaPct! > 15);
   assert.ok(prov.confidenceReason!.includes("signals-divergent"));
+});
+
+test("stale neutral raster-plus-weather samples are capped at medium confidence", async () => {
+  const { repo } = stubRepository();
+  const result = await rebuildFieldMoistureEstimate({
+    repository: repo,
+    estimate: baseEstimate,
+    sources: {
+      estimateTimestamp: "2026-03-28T12:00:00.000Z",
+      rasterObservation: {
+        sourceKey: "sentinel-hub-stats-v1:sentinel-1",
+        observedAt: "2026-03-26T00:39:49.000Z",
+        cells: [{ measurements: { sarWetness: 0.45, sarRatio: 0.52 } }],
+      },
+      weatherObservation: {
+        sourceKey: "open-meteo:hourly-v1",
+        airTemperatureC: 18,
+        precipitationMm: 0.6,
+        relativeHumidityPct: 61,
+        soilMoisturePct: 28.3,
+        evapotranspirationMm: 0.15,
+      },
+    },
+  });
+  assert.equal(result.snapshot.confidence, "medium");
+  assert.equal(result.snapshot.inputs.agreementFlag, "neutral");
+  assert.ok((result.snapshot.inputs.rasterAgeHours ?? 0) > 48);
+  assert.ok(
+    result.snapshot.inputs.confidenceReason?.includes(
+      "confidence-capped-stale-neutral",
+    ),
+  );
 });
 
 // ===========================================================================
