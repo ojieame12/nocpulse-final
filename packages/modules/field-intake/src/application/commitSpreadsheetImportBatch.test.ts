@@ -390,3 +390,119 @@ test("commitSpreadsheetImportBatch updates legal land description only when it c
     "SW-02-010-01-W4",
   );
 });
+
+test("commitSpreadsheetImportBatch replays a committed batch without creating or remarking fields", async () => {
+  let createCalls = 0;
+  let markCommittedCalls = 0;
+  let markBatchCommittedCalls = 0;
+  let getByIdCalls = 0;
+
+  const result = await commitSpreadsheetImportBatch({
+    repository: {
+      async createSpreadsheetImportBatch() {
+        throw new Error("not used in this test");
+      },
+      async getBatchById() {
+        return {
+          id: "batch-1",
+          workspaceId: "workspace-1",
+          sourceType: "spreadsheet",
+          fileName: "import.xlsx",
+          sheetName: "Sheet1",
+          status: "committed",
+          rowCount: 1,
+          validRowCount: 1,
+          fieldCount: 1,
+          issueCount: 0,
+          issues: [],
+          createdBy: "user-1",
+          committedBy: "user-1",
+          committedAt: "2026-04-02T00:01:00.000Z",
+          createdAt: "2026-04-02T00:00:00.000Z",
+          updatedAt: "2026-04-02T00:01:00.000Z",
+        };
+      },
+      async listCandidatesByBatch() {
+        return [
+          {
+            id: "candidate-1",
+            batchId: "batch-1",
+            workspaceId: "workspace-1",
+            ordinal: 1,
+            draft: {
+              name: "Alpha",
+              areaHa: 64.75,
+              boundary,
+            },
+            cropType: "Canola",
+            rowCount: 1,
+            rowNumbers: [2],
+            legalLandDescriptions: ["NW-01-010-01-W4"],
+            splitIndex: 1,
+            splitCount: 1,
+            lldComponentsList: [
+              {
+                quarter: "NW",
+                section: 1,
+                township: 10,
+                range: 1,
+                meridian: 4,
+              },
+            ],
+            status: "committed",
+            committedFieldId: "field-alpha",
+            commitAction: "created",
+            committedAt: "2026-04-02T00:01:00.000Z",
+            createdAt: "2026-04-02T00:00:00.000Z",
+            updatedAt: "2026-04-02T00:01:00.000Z",
+          },
+        ];
+      },
+      async getLatestCommittedCandidateByField() {
+        return null;
+      },
+      async markCandidateCommitted() {
+        markCommittedCalls += 1;
+        throw new Error("not used");
+      },
+      async markBatchCommitted() {
+        markBatchCommittedCalls += 1;
+        throw new Error("not used");
+      },
+    },
+    fieldRepository: {
+      async create() {
+        createCalls += 1;
+        throw new Error("not used");
+      },
+      async getById(workspaceId, fieldId) {
+        getByIdCalls += 1;
+        return {
+          id: fieldId,
+          workspaceId,
+          name: "Alpha",
+          areaHa: 64.75,
+          legalLandDescription: "NW-01-010-01-W4",
+        };
+      },
+      async listOverviewByWorkspace() {
+        return [];
+      },
+      async setLegalLandDescription() {
+        throw new Error("not used");
+      },
+    },
+    actorUserId: "user-1",
+    workspaceId: "workspace-1",
+    batchId: "batch-1",
+  });
+
+  assert.equal(createCalls, 0);
+  assert.equal(markCommittedCalls, 0);
+  assert.equal(markBatchCommittedCalls, 0);
+  assert.equal(getByIdCalls, 1);
+  assert.equal(result.batch.status, "committed");
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0]?.field.id, "field-alpha");
+  assert.equal(result.candidates[0]?.action, "created");
+});
