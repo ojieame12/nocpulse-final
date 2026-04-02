@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 import "../styles/field-detail-panel.css";
+import "../styles/landing.css";
 
 export const metadata: Metadata = {
-  title: "FieldPulse v3",
-  description: "Fresh-slate FieldPulse v3 workspace scaffold",
+  title: "NocPulse — Agricultural Intelligence",
+  description: "Field intelligence for growers. Satellite health scores, explainable alerts, and actionable crop monitoring.",
 };
 
 export default function RootLayout({

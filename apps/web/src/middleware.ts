@@ -68,6 +68,11 @@ async function buildDevelopmentFallbackResponse(
  * errors from their own handlers so they are excluded from this matcher.
  */
 export async function middleware(request: NextRequest) {
+  // Landing page is public — skip auth entirely for exact root
+  if (request.nextUrl.pathname === "/") {
+    return NextResponse.next();
+  }
+
   const hasActiveGuestShareSession =
     request.nextUrl.pathname.startsWith("/preview") &&
     hasActiveGuestShareCookie(

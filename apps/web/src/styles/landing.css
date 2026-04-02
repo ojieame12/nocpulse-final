@@ -1,0 +1,1092 @@
+/* ─── Landing Page Design System Tokens (from Pencil) ─── */
+:root {
+  /* Green palette */
+  --ds-green-50: #F0FDF4;
+  --ds-green-100: #E8F8EC;
+  --ds-green-200: #C2FBB5;
+  --ds-green-300: #B1FAC2;
+  --ds-green-400: #6EE7A0;
+  --ds-green-500: #22C55E;
+  --ds-green-600: #008F4E;
+  --ds-green-700: #006B3A;
+  --ds-green-800: #004726;
+  --ds-green-900: #00372E;
+
+  /* Semantic accents */
+  --ds-red-100: #FEE2E2;
+  --ds-red-500: #EF4444;
+  --ds-red-600: #DC2626;
+  --ds-amber-100: #FEF3C7;
+  --ds-amber-500: #F59E0B;
+  --ds-blue-100: #DBEAFE;
+  --ds-blue-500: #3B82F6;
+
+  /* Surfaces */
+  --ds-surface-dark: #111111;
+  --ds-surface-white: #FFFFFF;
+  --ds-surface-subtle: #F8FAF8;
+  --ds-surface-muted: #F1F3F1;
+
+  /* Borders */
+  --ds-border-light: #EBEBEB;
+  --ds-border-default: #DCDCDC;
+
+  /* Text */
+  --ds-text-primary: #2D2D2D;
+  --ds-text-body: #474C54;
+  --ds-text-muted: #8A8F98;
+  --ds-text-on-dark: #FFFFFF;
+  --ds-text-on-dark-muted: rgba(255, 255, 255, 0.6);
+  --ds-text-on-dark-faint: rgba(255, 255, 255, 0.5);
+  --ds-surface-on-dark-subtle: rgba(255, 255, 255, 0.08);
+  --ds-border-on-dark: rgba(255, 255, 255, 0.12);
+  --ds-divider-on-dark: rgba(255, 255, 255, 0.15);
+
+  /* Shadows */
+  --ds-shadow-btn: #002011;
+  --ds-shadow-light: #DCDCDC;
+
+  /* NDVI health status */
+  --ndvi-healthy: #22C55E;
+  --ndvi-monitor: #EAB308;
+  --ndvi-stressed: #EF4444;
+  --ndvi-nodata: #A1A1AA;
+
+  /* Layout grid line */
+  --grid-line: rgba(0, 71, 38, 0.08);
+
+  /* Workspace type scale */
+  --ws-text-2xs: 9px;
+  --ws-text-xs: 10px;
+  --ws-text-sm: 11px;
+  --ws-text-base: 12px;
+  --ws-text-md: 13px;
+  --ws-text-lg: 14px;
+  --ws-text-xl: 16px;
+
+  /* Workspace spacing scale */
+  --ws-space-1: 4px;
+  --ws-space-2: 6px;
+  --ws-space-3: 8px;
+  --ws-space-4: 10px;
+  --ws-space-5: 12px;
+  --ws-space-6: 16px;
+  --ws-space-8: 20px;
+  --ws-space-10: 24px;
+
+  /* Workspace element scale */
+  --ws-radius-sm: 6px;
+  --ws-radius-md: 10px;
+  --ws-radius-lg: 20px;
+  --ws-radius-pill: 9999px;
+  --ws-icon-sm: 12px;
+  --ws-icon-md: 14px;
+  --ws-icon-lg: 16px;
+  --ws-button-height: 26px;
+  --ws-input-height: 28px;
+  --ws-tab-height: 28px;
+  --ws-badge-height: 16px;
+  --ws-dot-size: 6px;
+
+  /* Unified spacing scale (canonical --ds-* names) */
+  --ds-spacing-4: 4px;
+  --ds-spacing-6: 6px;
+  --ds-spacing-8: 8px;
+  --ds-spacing-10: 10px;
+  --ds-spacing-12: 12px;
+  --ds-spacing-16: 16px;
+  --ds-spacing-20: 20px;
+  --ds-spacing-24: 24px;
+  --ds-spacing-32: 32px;
+  --ds-spacing-40: 40px;
+  --ds-spacing-48: 48px;
+  --ds-spacing-60: 60px;
+  --ds-spacing-80: 80px;
+
+  /* Type scale (canonical --ds-* names) */
+  --ds-type-2xs: 9px;
+  --ds-type-xs: 10px;
+  --ds-type-sm: 11px;
+  --ds-type-base: 12px;
+  --ds-type-md: 13px;
+  --ds-type-lg: 14px;
+  --ds-type-xl: 16px;
+
+  /* Element sizes */
+  --ds-icon-sm: 12px;
+  --ds-icon-md: 14px;
+  --ds-icon-lg: 16px;
+  --ds-button-height: 26px;
+  --ds-input-height: 28px;
+  --ds-badge-height: 16px;
+
+  /* Surface & layout tokens */
+  --ds-panel-bg: rgba(255, 255, 255, 0.88);
+  --ds-panel-blur: 12px;
+  --ds-panel-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  --ds-panel-radius: 20px;
+  --ds-glass-bg: rgba(255, 255, 255, 0.82);
+  --ds-glass-blur: 12px;
+  --ds-card-shadow: 0 8px 40px rgba(0, 0, 0, 0.08);
+  --ds-drawer-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
+  --ds-fab-shadow: 0 4px 12px rgba(0, 0, 0, 0.19);
+  --ds-panel-width: 420px;
+  --ds-panel-width-expanded: 720px;
+  --ds-sidebar-width: 280px;
+  --ds-navbar-height: 44px;
+
+  /* Spring-physics easing curves */
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --ease-spring-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-smooth: cubic-bezier(0.45, 0, 0.55, 1);
+  --ease-snappy: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Navbar backdrop (overridden in dark) */
+  --nav-scrolled-bg: rgba(255, 255, 255, 0.92);
+  --nav-scrolled-border: var(--ds-border-light);
+  --nav-btn-secondary-bg: rgba(255, 255, 255, 0.92);
+  --nav-btn-secondary-border: var(--ds-border-default);
+}
+
+/* ─── Dark Theme Overrides ─── */
+[data-theme="dark"],
+html[data-theme="dark"] {
+  --ds-surface-white: #0c120e;
+  --ds-surface-subtle: #0a0f0c;
+  --ds-surface-muted: #151e17;
+  --ds-surface-dark: #080c09;
+  --ds-green-50: #0d1a12;
+  --ds-green-100: #0f2016;
+  --ds-green-200: rgba(34, 197, 94, 0.12);
+  --ds-green-300: rgba(34, 197, 94, 0.18);
+  --ds-border-light: rgba(255, 255, 255, 0.08);
+  --ds-border-default: rgba(255, 255, 255, 0.12);
+  --ds-text-primary: rgba(255, 255, 255, 0.88);
+  --ds-text-body: rgba(255, 255, 255, 0.60);
+  --ds-text-muted: rgba(255, 255, 255, 0.35);
+  --ds-panel-bg: rgba(16, 22, 18, 0.88);
+  --ds-glass-bg: rgba(16, 22, 18, 0.82);
+  --ds-card-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+  --ds-panel-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  --grid-line: rgba(22, 163, 74, 0.06);
+  --nav-scrolled-bg: rgba(12, 18, 14, 0.92);
+  --nav-scrolled-border: rgba(255, 255, 255, 0.06);
+  --nav-btn-secondary-bg: rgba(255, 255, 255, 0.06);
+  --nav-btn-secondary-border: rgba(255, 255, 255, 0.12);
+  color-scheme: dark;
+}
+
+/* Farm illustration dark treatment */
+[data-theme="dark"] .landing-farm-illustration {
+  filter: brightness(0.7) saturate(1.3) hue-rotate(-5deg);
+  opacity: 0.85;
+}
+
+/* Font aliases — map v1 landing font vars to v3 app font vars */
+:root {
+  --font-mackinac: var(--font-heading, 'P22 Mackinac', Georgia, serif);
+  --font-sintony: var(--font-body, 'Sintony', sans-serif);
+  --font-plex-mono: var(--font-mono, 'IBM Plex Mono', monospace);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--ds-surface-subtle);
+}
+
+body {
+  background: var(--ds-surface-subtle);
+  color: var(--ds-text-primary);
+  font-family: var(--font-sintony), "Helvetica Neue", sans-serif;
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* ─── Surface utilities ─── */
+
+.panel-surface {
+  backdrop-filter: blur(var(--ds-panel-blur));
+  background: var(--ds-panel-bg);
+  border: 1px solid var(--ds-border-light);
+  box-shadow: var(--ds-panel-shadow);
+}
+
+.card-surface {
+  background: var(--ds-surface-white);
+  border: 1px solid var(--ds-border-light);
+}
+
+.card-surface-glow {
+  background: var(--ds-surface-white);
+  border: 1px solid var(--ds-border-light);
+  position: relative;
+  overflow: hidden;
+}
+
+.card-surface-glow::before {
+  content: "";
+  position: absolute;
+  top: -40px;
+  right: -20px;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, var(--ds-green-200) 0%, transparent 70%);
+  opacity: 0.5;
+  pointer-events: none;
+  animation: breathe 4s var(--ease-in-out-smooth) infinite;
+}
+
+.map-surface {
+  background: var(--ds-surface-muted);
+}
+
+/* ─── Workspace layout ─── */
+
+.workspace-shell {
+  display: grid;
+  grid-template-rows: 1fr;
+  height: calc(100vh - 44px); /* below navbar */
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .workspace-shell {
+    grid-template-columns: 280px 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .workspace-shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Legacy .panel-drawer class — drawer is now inline-styled in panel-drawer.tsx */
+.panel-drawer-legacy {
+  display: none;
+}
+
+.panel-drawer.open {
+  transform: translateX(0);
+}
+
+/* Panel drawer responsive: show bottom sheet on mobile, slide-in drawer on desktop */
+.panel-drawer-mobile-only {
+  display: none;
+}
+.panel-drawer-desktop-only {
+  display: contents;
+}
+
+@media (max-width: 767px) {
+  .panel-drawer-mobile-only {
+    display: contents;
+  }
+  .panel-drawer-desktop-only {
+    display: none;
+  }
+}
+
+.field-strip {
+  overflow-y: auto;
+  border-right: 1px solid var(--ds-border-light);
+  background: var(--ds-surface-white);
+}
+
+@media (max-width: 767px) {
+  .field-strip {
+    display: none;
+  }
+}
+
+/* Hide centered nav items on mobile */
+.nav-center {
+  display: flex;
+}
+
+@media (max-width: 767px) {
+  .nav-center {
+    display: none;
+  }
+}
+
+/* Billing banner mobile compact */
+@media (max-width: 767px) {
+  .billing-banner {
+    font-size: var(--ws-text-xs) !important;
+    padding: var(--ws-space-1) var(--ws-space-3) !important;
+  }
+}
+
+/* ─── Glass bars (background blur) ─── */
+
+.glass-bar {
+  backdrop-filter: blur(var(--ds-glass-blur));
+  background: var(--ds-glass-bg);
+}
+
+.glass-bar-sm {
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+/* ─── Health status badges ─── */
+
+.status-healthy {
+  background: var(--ds-green-100);
+  color: var(--ds-green-800);
+}
+
+.status-monitor {
+  background: var(--ds-amber-100);
+  color: var(--ds-amber-500);
+}
+
+.status-stressed {
+  background: var(--ds-red-100);
+  color: var(--ds-red-500);
+}
+
+.status-unknown {
+  background: var(--ds-surface-muted);
+  color: var(--ds-text-muted);
+}
+
+/* ─── Shadows ─── */
+
+.shadow-card {
+  box-shadow: var(--ds-card-shadow);
+}
+
+.shadow-drawer {
+  box-shadow: var(--ds-drawer-shadow);
+}
+
+.shadow-topbar {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.shadow-fab {
+  box-shadow: var(--ds-fab-shadow);
+}
+
+/* ─── Button shadows (no blur, y:4) ─── */
+
+.shadow-btn-primary {
+  box-shadow: 0 4px 0 #002A15;
+}
+
+.shadow-btn-secondary {
+  box-shadow: 0 4px 0 #C8C8C8;
+}
+
+.shadow-btn-ghost {
+  box-shadow: 0 4px 0 #D4D4D4;
+}
+
+.shadow-btn-destructive {
+  box-shadow: 0 4px 0 #B91C1C;
+}
+
+.shadow-btn-outline {
+  box-shadow: 0 4px 0 #004726;
+}
+
+/* ─── Sketch grid ─── */
+
+.field-grid {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ─── Entrance animations (enhanced with spring physics) ─── */
+
+@keyframes fadeSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes zoomFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes growUp {
+  from {
+    transform: scaleY(0);
+    transform-origin: bottom;
+  }
+  to {
+    transform: scaleY(1);
+    transform-origin: bottom;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ─── New spring-physics keyframes ─── */
+
+@keyframes springIn {
+  0% { opacity: 0; transform: scale(0.6); }
+  60% { opacity: 1; transform: scale(1.06); }
+  80% { transform: scale(0.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes springOut {
+  0% { opacity: 1; transform: scale(1); }
+  20% { transform: scale(1.04); }
+  100% { opacity: 0; transform: scale(0.6); }
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.03); opacity: 0.7; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes slideUpSpring {
+  0% { opacity: 0; transform: translateY(24px); }
+  60% { opacity: 1; transform: translateY(-3px); }
+  80% { transform: translateY(1px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDownSpring {
+  0% { opacity: 0; transform: translateY(-24px); }
+  60% { opacity: 1; transform: translateY(3px); }
+  80% { transform: translateY(-1px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleSpring {
+  0% { transform: scale(0.8); opacity: 0; }
+  50% { transform: scale(1.05); opacity: 1; }
+  75% { transform: scale(0.98); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes revealMask {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes slideLeftSpring {
+  0% { opacity: 0; transform: translateX(24px); }
+  60% { opacity: 1; transform: translateX(-2px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes badgePop {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); opacity: 1; }
+  75% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ─── Motion utility classes ─── */
+
+.motion-fade-up { animation: slideUpSpring 0.5s var(--ease-spring-out) both; }
+.motion-scale-in { animation: scaleSpring 0.5s var(--ease-spring) both; }
+.motion-slide-left { animation: slideLeftSpring 0.5s var(--ease-spring-out) both; }
+.motion-spring { animation: springIn 0.5s var(--ease-spring) both; }
+.motion-reveal-mask { animation: revealMask 0.6s var(--ease-out-expo) both; }
+
+.motion-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s var(--ease-in-out-smooth) infinite;
+}
+
+/* Stagger delay variants (d1–d8) */
+.motion-fade-up-d1 { animation: slideUpSpring 0.5s var(--ease-spring-out) 60ms both; }
+.motion-fade-up-d2 { animation: slideUpSpring 0.5s var(--ease-spring-out) 120ms both; }
+.motion-fade-up-d3 { animation: slideUpSpring 0.5s var(--ease-spring-out) 180ms both; }
+.motion-fade-up-d4 { animation: slideUpSpring 0.5s var(--ease-spring-out) 240ms both; }
+.motion-fade-up-d5 { animation: slideUpSpring 0.5s var(--ease-spring-out) 300ms both; }
+.motion-fade-up-d6 { animation: slideUpSpring 0.5s var(--ease-spring-out) 360ms both; }
+.motion-fade-up-d7 { animation: slideUpSpring 0.5s var(--ease-spring-out) 420ms both; }
+.motion-fade-up-d8 { animation: slideUpSpring 0.5s var(--ease-spring-out) 480ms both; }
+
+.motion-scale-in-d1 { animation: scaleSpring 0.5s var(--ease-spring) 60ms both; }
+.motion-scale-in-d2 { animation: scaleSpring 0.5s var(--ease-spring) 120ms both; }
+.motion-scale-in-d3 { animation: scaleSpring 0.5s var(--ease-spring) 180ms both; }
+.motion-scale-in-d4 { animation: scaleSpring 0.5s var(--ease-spring) 240ms both; }
+.motion-scale-in-d5 { animation: scaleSpring 0.5s var(--ease-spring) 300ms both; }
+.motion-scale-in-d6 { animation: scaleSpring 0.5s var(--ease-spring) 360ms both; }
+.motion-scale-in-d7 { animation: scaleSpring 0.5s var(--ease-spring) 420ms both; }
+.motion-scale-in-d8 { animation: scaleSpring 0.5s var(--ease-spring) 480ms both; }
+
+.motion-slide-left-d1 { animation: slideLeftSpring 0.5s var(--ease-spring-out) 60ms both; }
+.motion-slide-left-d2 { animation: slideLeftSpring 0.5s var(--ease-spring-out) 120ms both; }
+.motion-slide-left-d3 { animation: slideLeftSpring 0.5s var(--ease-spring-out) 180ms both; }
+.motion-slide-left-d4 { animation: slideLeftSpring 0.5s var(--ease-spring-out) 240ms both; }
+.motion-slide-left-d5 { animation: slideLeftSpring 0.5s var(--ease-spring-out) 300ms both; }
+.motion-slide-left-d6 { animation: slideLeftSpring 0.5s var(--ease-spring-out) 360ms both; }
+.motion-slide-left-d7 { animation: slideLeftSpring 0.5s var(--ease-spring-out) 420ms both; }
+.motion-slide-left-d8 { animation: slideLeftSpring 0.5s var(--ease-spring-out) 480ms both; }
+
+.motion-spring-d1 { animation: springIn 0.5s var(--ease-spring) 60ms both; }
+.motion-spring-d2 { animation: springIn 0.5s var(--ease-spring) 120ms both; }
+.motion-spring-d3 { animation: springIn 0.5s var(--ease-spring) 180ms both; }
+.motion-spring-d4 { animation: springIn 0.5s var(--ease-spring) 240ms both; }
+.motion-spring-d5 { animation: springIn 0.5s var(--ease-spring) 300ms both; }
+.motion-spring-d6 { animation: springIn 0.5s var(--ease-spring) 360ms both; }
+.motion-spring-d7 { animation: springIn 0.5s var(--ease-spring) 420ms both; }
+.motion-spring-d8 { animation: springIn 0.5s var(--ease-spring) 480ms both; }
+
+/* ─── Intersection reveal (works with useIntersectionReveal hook) ─── */
+
+.motion-reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.5s var(--ease-spring-out), transform 0.5s var(--ease-spring-out);
+}
+.motion-reveal.is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.motion-reveal-scale {
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.5s var(--ease-spring), transform 0.5s var(--ease-spring);
+}
+.motion-reveal-scale.is-revealed {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ─── Onboarding entrance utilities (preserved, upgraded to spring curves) ─── */
+
+.onb-fade-up {
+  animation: fadeSlideUp 0.7s var(--ease-spring-out) both;
+}
+
+.onb-fade-up-d1 {
+  animation: fadeSlideUp 0.7s var(--ease-spring-out) 0.15s both;
+}
+
+.onb-fade-up-d2 {
+  animation: fadeSlideUp 0.7s var(--ease-spring-out) 0.3s both;
+}
+
+.onb-fade-up-d3 {
+  animation: fadeSlideUp 0.7s var(--ease-spring-out) 0.45s both;
+}
+
+.onb-fade-up-d4 {
+  animation: fadeSlideUp 0.7s var(--ease-spring-out) 0.6s both;
+}
+
+.onb-zoom-in {
+  animation: zoomFadeIn 0.5s var(--ease-spring) both;
+}
+
+.onb-slide-left {
+  animation: slideInLeft 0.5s var(--ease-spring-out) both;
+}
+
+.onb-fade-in {
+  animation: fadeIn 0.5s var(--ease-spring-out) both;
+}
+
+.onb-fade-in-d3 {
+  animation: fadeIn 0.5s var(--ease-spring-out) 0.35s both;
+}
+
+.onb-fade-in-d5 {
+  animation: fadeIn 0.5s var(--ease-spring-out) 0.55s both;
+}
+
+/* ─── View transition animations ─── */
+
+@keyframes viewSlideInRight {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes viewSlideOutLeft {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-30px); }
+}
+@keyframes viewSlideInLeft {
+  from { opacity: 0; transform: translateX(-30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes viewSlideOutRight {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(30px); }
+}
+@keyframes viewFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes viewFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.vt-enter-right {
+  animation: viewSlideInRight 300ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+.vt-exit-left {
+  animation: viewSlideOutLeft 300ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+.vt-enter-left {
+  animation: viewSlideInLeft 300ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+.vt-exit-right {
+  animation: viewSlideOutRight 300ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+.vt-fade-in {
+  animation: viewFadeIn 250ms ease-out both;
+}
+.vt-fade-out {
+  animation: viewFadeOut 250ms ease-out both;
+}
+
+/* Staggered child entrance */
+.stagger-child {
+  opacity: 0;
+  animation: fadeSlideUp 400ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .vt-enter-right,
+  .vt-exit-left,
+  .vt-enter-left,
+  .vt-exit-right,
+  .vt-fade-in,
+  .vt-fade-out,
+  .stagger-child {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ─── Scroll Reveal System ─── */
+
+[data-reveal] {
+  opacity: 0;
+  transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+[data-reveal="up"] { transform: translateY(24px); }
+[data-reveal="down"] { transform: translateY(-24px); }
+[data-reveal="left"] { transform: translateX(24px); }
+[data-reveal="right"] { transform: translateX(-24px); }
+[data-reveal="scale"] { transform: scale(0.92); }
+
+[data-revealed="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* ─── Hotspot pin pulse (map inspection targets) ─── */
+
+@keyframes hotspotPulse {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.3); }
+}
+
+/* ─── Landing page cinematic animations ─── */
+
+:root {
+  --spring-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Hero gradient blob breathing */
+@keyframes blobBreathe {
+  0%, 100% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  50% {
+    transform: translate(-50%, 0) scale(1.08);
+  }
+}
+
+/* Navbar slide down */
+@keyframes navSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Spring scale in */
+@keyframes springScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Subtle rotate in */
+@keyframes rotateIn {
+  from {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+/* Connecting line grow */
+@keyframes lineGrow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* CTA gradient drift */
+@keyframes gradientDrift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Glow pulse for Open App button */
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 4px 0 #002A15;
+  }
+  50% {
+    box-shadow: 0 4px 0 #002A15, 0 0 20px 4px rgba(0, 71, 38, 0.3);
+  }
+}
+
+/* Word reveal */
+@keyframes wordReveal {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* ─── Landing card hover lift (spring physics) ─── */
+.landing-card-hover {
+  transition: transform 0.35s var(--spring-bounce), opacity 0.6s var(--spring-ease);
+}
+.landing-card-hover:hover {
+  transform: translateY(-6px);
+}
+
+/* ─── Landing page mobile responsive ─── */
+
+/* Navbar: hide nav links on mobile */
+.landing-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+@media (max-width: 767px) {
+  .landing-nav-links > a {
+    display: none;
+  }
+}
+
+/* How It Works: single column on mobile */
+.landing-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 40px;
+}
+@media (max-width: 767px) {
+  .landing-steps-grid {
+    grid-template-columns: 1fr !important;
+    gap: 32px !important;
+  }
+}
+
+/* Hero CTA buttons: stack on mobile */
+.landing-hero-cta {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+@media (max-width: 480px) {
+  .landing-hero-cta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .landing-hero-cta a {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+/* CTA section buttons: stack on mobile */
+.landing-cta-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+@media (max-width: 480px) {
+  .landing-cta-buttons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .landing-cta-buttons a {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+/* Footer: stack vertically on mobile */
+.landing-footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+@media (max-width: 767px) {
+  .landing-footer-inner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+}
+
+/* Features grid: ensure single col on very small screens */
+.landing-features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1px;
+}
+@media (max-width: 400px) {
+  .landing-features-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ─── Decision Intelligence: 2×2 grid ─── */
+.landing-decision-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+@media (max-width: 767px) {
+  .landing-decision-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* ─── One Action: 3-col alert cards ─── */
+.landing-alerts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+@media (max-width: 767px) {
+  .landing-alerts-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* ─── Prairie Crops: 4-col grid ─── */
+.landing-crop-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 767px) {
+  .landing-crop-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 400px) {
+  .landing-crop-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Market Intelligence: price row ─── */
+.landing-price-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 32px;
+}
+@media (max-width: 480px) {
+  .landing-price-row {
+    flex-direction: column;
+    gap: 24px;
+  }
+  .landing-price-row > div:nth-child(2) {
+    width: 48px;
+    height: 1px;
+  }
+}
+
+/* ─── NocPulse Map Controls — Mobile Responsive ─── */
+
+@media (max-width: 767px) {
+  /* Layer switcher — smaller pills, top-center */
+  .map-layer-switcher {
+    left: 50% !important;
+    top: 12px !important;
+    transform: translateX(-50%);
+    padding: 4px 6px !important;
+  }
+
+  .map-layer-pill {
+    font-size: 10px !important;
+    padding: 4px 8px !important;
+  }
+
+  /* Hide field count label on mobile */
+  .map-field-count {
+    display: none !important;
+  }
+
+  /* Summary/moisture card — full width at bottom */
+  .map-summary-card {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: 64px !important;
+    width: auto !important;
+  }
+
+  .map-summary-preview {
+    height: 80px !important;
+  }
+
+  .map-summary-body {
+    padding: 8px 10px !important;
+  }
+
+  .map-summary-primary {
+    font-size: 18px !important;
+    margin-top: 6px !important;
+  }
+
+  /* Bigger zoom controls for touch */
+  .mapboxgl-ctrl-group button {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .mapboxgl-ctrl-group button .mapboxgl-ctrl-icon {
+    width: 40px !important;
+    height: 40px !important;
+  }
+}
+
+/* ─── Tab content cross-fade ─── */
+
+@keyframes tabContentEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Field card press spring ─── */
+
+.field-card-press {
+  transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.field-card-press:active {
+  transform: scale(0.97);
+}
+
+/* ─── Reduced motion (global fallback) ─── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
