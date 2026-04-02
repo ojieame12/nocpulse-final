@@ -208,6 +208,29 @@ async function main() {
   const batchId = saveJson.result.batch.id as string;
   assertPresent("Saved batch id", batchId);
 
+  const repeatedSaveResponse = await saveBatch(
+    new Request("http://localhost/api/field-intake/spreadsheet/batches", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...actorHeaders,
+      },
+      body: JSON.stringify({
+        preview: previewJson.result,
+      }),
+    }),
+  );
+  const repeatedSaveJson = await repeatedSaveResponse.json();
+  assertRouteStatus("Spreadsheet batch save replay", repeatedSaveResponse.status, 201);
+  const repeatedBatchId = repeatedSaveJson.result.batch.id as string;
+  assertPresent("Repeated saved batch id", repeatedBatchId);
+
+  if (repeatedBatchId !== batchId) {
+    throw new Error(
+      `Spreadsheet batch save replay created ${repeatedBatchId} instead of reusing ${batchId}`,
+    );
+  }
+
   const commitResponse = await commitBatch(
     new Request(
       `http://localhost/api/field-intake/spreadsheet/batches/${batchId}/commit`,
@@ -262,6 +285,48 @@ async function main() {
     throw new Error("Spreadsheet batch commit did not queue any onboarding dispatches");
   }
 
+  const repeatedCommitResponse = await commitBatch(
+    new Request(
+      `http://localhost/api/field-intake/spreadsheet/batches/${batchId}/commit`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...actorHeaders,
+        },
+        body: JSON.stringify({
+          onboardingDryRun: false,
+        }),
+      },
+    ),
+    {
+      params: Promise.resolve({
+        batchId,
+      }),
+    },
+  );
+  const repeatedCommitJson = await repeatedCommitResponse.json();
+  assertRouteStatus("Spreadsheet batch commit replay", repeatedCommitResponse.status, 200);
+
+  const repeatedCommitFieldIds =
+    repeatedCommitJson.result?.candidates?.map(
+      (entry: { field: { id: string } }) => entry.field.id,
+    ) ?? [];
+
+  if (repeatedCommitJson.result?.batch?.status !== "committed") {
+    throw new Error(
+      `Spreadsheet batch replay ended in unexpected status ${String(repeatedCommitJson.result?.batch?.status)}`,
+    );
+  }
+
+  if (
+    JSON.stringify(repeatedCommitFieldIds) !== JSON.stringify(committedFieldIds)
+  ) {
+    throw new Error(
+      `Spreadsheet batch replay returned different field ids: ${JSON.stringify(repeatedCommitFieldIds)} vs ${JSON.stringify(committedFieldIds)}`,
+    );
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -280,9 +345,14 @@ async function main() {
         previewFieldCount: previewJson.result?.fieldCount,
         saveStatus: saveResponse.status,
         savedBatchId: batchId,
+        repeatedSaveStatus: repeatedSaveResponse.status,
+        repeatedSavedBatchId: repeatedBatchId,
         commitStatus: commitResponse.status,
         commitBatchStatus: commitJson.result?.batch?.status,
         commitFieldIds: committedFieldIds,
+        repeatedCommitStatus: repeatedCommitResponse.status,
+        repeatedCommitBatchStatus: repeatedCommitJson.result?.batch?.status,
+        repeatedCommitFieldIds,
         queueDispatchIds: onboardingDispatchIds,
       },
       null,
