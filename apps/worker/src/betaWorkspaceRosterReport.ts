@@ -37,10 +37,13 @@ export type BetaWorkspaceRosterStatus =
   | "needs-intake"
   | "needs-grant";
 
+export type BetaWorkspaceRosterRequestKind = "real" | "test";
+
 export type BetaWorkspaceRosterRow = {
   requestId: string;
   email: string;
   farmName: string;
+  requestKind: BetaWorkspaceRosterRequestKind;
   workspaceId: string | null;
   workspaceSlug: string | null;
   workspaceName: string | null;
@@ -55,22 +58,35 @@ export type BetaWorkspaceRosterRow = {
 export type BetaWorkspaceRosterReport = {
   generatedAt: string;
   requestCount: number;
+  includedRequestCount: number;
+  excludedTestRequestCount: number;
   rowCount: number;
   statusCounts: Record<BetaWorkspaceRosterStatus, number>;
   rows: BetaWorkspaceRosterRow[];
 };
+
+function classifyRequestKind(email: string): BetaWorkspaceRosterRequestKind {
+  const normalized = email.trim().toLowerCase();
+  if (normalized.endsWith("@example.com") || normalized.endsWith("@example.invalid")) {
+    return "test";
+  }
+
+  return "real";
+}
 
 export function buildBetaWorkspaceRosterReport(input: {
   generatedAt?: string;
   funnel: ReturnType<typeof buildFirstInsightFunnelReport>;
   launchVisibleByWorkspaceId: ReadonlyMap<string, LaunchVisibleSnapshot>;
   workspaceById?: ReadonlyMap<string, WorkspaceSummary>;
+  includeTestRequests?: boolean;
 }): BetaWorkspaceRosterReport {
-  const rows: BetaWorkspaceRosterRow[] = input.funnel.rows.map((row) => {
+  const allRows: BetaWorkspaceRosterRow[] = input.funnel.rows.map((row) => {
     const launchVisible =
       row.workspaceId != null ? input.launchVisibleByWorkspaceId.get(row.workspaceId) ?? null : null;
     const workspace =
       row.workspaceId != null ? input.workspaceById?.get(row.workspaceId) ?? null : null;
+    const requestKind = classifyRequestKind(row.email);
 
     let status: BetaWorkspaceRosterStatus;
     let nextAction: string;
@@ -96,6 +112,7 @@ export function buildBetaWorkspaceRosterReport(input: {
       requestId: row.requestId,
       email: row.email,
       farmName: row.farmName,
+      requestKind,
       workspaceId: row.workspaceId,
       workspaceSlug: workspace?.slug ?? null,
       workspaceName: workspace?.name ?? null,
@@ -107,6 +124,11 @@ export function buildBetaWorkspaceRosterReport(input: {
       nextAction,
     };
   });
+
+  const includeTestRequests = input.includeTestRequests === true;
+  const rows = includeTestRequests
+    ? allRows
+    : allRows.filter((row) => row.requestKind === "real");
 
   const statusCounts: BetaWorkspaceRosterReport["statusCounts"] = {
     "ready-for-outreach": 0,
@@ -138,7 +160,9 @@ export function buildBetaWorkspaceRosterReport(input: {
 
   return {
     generatedAt: input.generatedAt ?? new Date().toISOString(),
-    requestCount: input.funnel.requestCount,
+    requestCount: allRows.length,
+    includedRequestCount: rows.length,
+    excludedTestRequestCount: allRows.length - rows.length,
     rowCount: rows.length,
     statusCounts,
     rows,
@@ -150,6 +174,7 @@ async function main() {
   const runtime = createServerRuntime(process.env);
   const args = parseCliArgs();
   const asJson = readBooleanFlag(args, "json");
+  const includeTestRequests = readBooleanFlag(args, "include-test");
   const days = readNumberFlag(args, "days") ?? 30;
   const limit = readNumberFlag(args, "limit") ?? 50;
 
@@ -301,6 +326,7 @@ async function main() {
     funnel,
     launchVisibleByWorkspaceId,
     workspaceById,
+    includeTestRequests,
   });
 
   if (asJson) {
@@ -312,6 +338,8 @@ async function main() {
     [
       `Generated: ${report.generatedAt}`,
       `Requests scanned: ${report.requestCount}`,
+      `Included requests: ${report.includedRequestCount}`,
+      `Excluded test requests: ${report.excludedTestRequestCount}`,
       `Workspace rows: ${report.rowCount}`,
     ].join("\n"),
   );
@@ -320,6 +348,7 @@ async function main() {
     report.rows.map((row) => ({
       email: row.email,
       farm: row.farmName,
+      requestKind: row.requestKind,
       workspace: row.workspaceName ?? row.workspaceSlug ?? "",
       workspaceId: row.workspaceId ?? "",
       status: row.status,
