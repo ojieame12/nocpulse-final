@@ -6,7 +6,7 @@
  * typical for the same time of year.
  */
 
-import type { HistoricalSoilMoistureResult } from "../infrastructure/createOpenMeteoHistoricalClient";
+import type { HistoricalSoilMoistureResult } from "../contracts/HistoricalSoilMoistureResult";
 import { resolveRootZoneMoisture } from "../domain/depthTranslation";
 
 // ---------------------------------------------------------------------------

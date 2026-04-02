@@ -1,6 +1,6 @@
 import type { GrainPriceSnapshot } from "../contracts/GrainPriceSnapshot";
+import type { GrainPriceSnapshotRepository } from "../contracts/GrainPriceSnapshotRepository";
 import type { UpsertGrainPriceSnapshotInput } from "../contracts/UpsertGrainPriceSnapshotInput";
-import type { GrainPriceSnapshotRepository } from "../infrastructure/GrainPriceSnapshotRepository";
 
 export type UpsertGrainPriceSnapshotUseCaseInput = {
   repository: GrainPriceSnapshotRepository;

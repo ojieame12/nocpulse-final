@@ -57,6 +57,7 @@ export {
 export {
   type UpsertFieldIntelligenceZoneInput,
 } from "./contracts/UpsertFieldIntelligenceZoneInput";
+export { type FieldIntelligenceZoneRepository } from "./contracts/FieldIntelligenceZoneRepository";
 export {
   type BuildAlertFromIntelligenceFindingInput,
 } from "./contracts/BuildAlertFromIntelligenceFindingInput";
@@ -129,7 +130,6 @@ export { buildTrackedZoneReferences } from "./domain/zones/buildTrackedZoneRefer
 export { prairieDefaultRulePack } from "./domain/rulePacks/prairieDefaultRulePack";
 export { type CropIntelligenceRunRepository } from "./infrastructure/CropIntelligenceRunRepository";
 export { type FieldIntelligenceFindingRepository } from "./infrastructure/FieldIntelligenceFindingRepository";
-export { type FieldIntelligenceZoneRepository } from "./infrastructure/FieldIntelligenceZoneRepository";
 export { createSupabaseCropIntelligenceRunRepository } from "./infrastructure/createSupabaseCropIntelligenceRunRepository";
 export { createSupabaseFieldIntelligenceFindingRepository } from "./infrastructure/createSupabaseFieldIntelligenceFindingRepository";
 export { createSupabaseFieldIntelligenceZoneRepository } from "./infrastructure/createSupabaseFieldIntelligenceZoneRepository";

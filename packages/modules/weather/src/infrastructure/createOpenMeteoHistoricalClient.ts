@@ -8,18 +8,13 @@
  * API docs: https://open-meteo.com/en/docs/historical-weather-api
  */
 
+import type { HistoricalSoilMoistureResult } from "../contracts/HistoricalSoilMoistureResult";
+
+export type { HistoricalSoilMoistureResult } from "../contracts/HistoricalSoilMoistureResult";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-export type HistoricalSoilMoistureResult = {
-  dailyValues: Array<{
-    date: string; // YYYY-MM-DD
-    layers: Record<string, number | null>; // soil moisture layer values
-  }>;
-  latitude: number;
-  longitude: number;
-};
 
 export type CreateOpenMeteoHistoricalClientOptions = {
   /** Override archive API base URL (scheme + host). */

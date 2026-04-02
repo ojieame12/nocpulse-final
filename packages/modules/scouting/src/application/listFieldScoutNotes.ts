@@ -1,6 +1,6 @@
 import type { WorkspaceId } from "@fieldpulse/platform-db";
 import type { ScoutNote } from "../contracts/ScoutNote";
-import type { ScoutNoteRepository } from "../infrastructure/ScoutNoteRepository";
+import type { ScoutNoteRepository } from "../contracts/ScoutNoteRepository";
 
 export type ListFieldScoutNotesInput = {
   repository: ScoutNoteRepository;
