@@ -771,6 +771,12 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       ? 'Offline'
       : 'Offline · cached'
     : null;
+  const addFieldDisabledReason = isOffline
+    ? 'Adding fields requires an online connection.'
+    : null;
+  const offlineFieldMutationNotice = isOffline
+    ? 'Field edits and lifecycle actions require an online connection.'
+    : null;
   const guestBadgeLabel = guestSession
     ? `Guest · ${formatGuestRemaining(guestSession.expiresAt, guestNow)}`
     : null;
@@ -2398,6 +2404,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             viewer={viewer}
             fieldId={fieldData.fieldId}
             fieldName={fieldData.fieldName}
+            isOffline={isOffline}
             onArchivedFieldRestored={handleArchivedFieldRestored}
             onClose={() => switchPanel('detail')}
           />
@@ -2416,12 +2423,13 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             growthStageSource={fieldData.cropContext?.growthStageSource ?? null}
             growthStageLabel={fieldData.cropPanel?.thresholdStageLabel ?? null}
             accumulatedGdd={fieldData.cropPanel?.accumulatedGddLabel ?? null}
+            mutationNotice={offlineFieldMutationNotice}
             onClose={() => switchPanel('detail')}
-            onRename={handleFieldRename}
-            onUpdateLld={handleFieldLldUpdate}
-            onUpdateCrop={handleFieldCropUpdate}
-            onArchive={handleFieldArchive}
-            onDeletePermanently={handleFieldDeletePermanently}
+            onRename={isOffline ? undefined : handleFieldRename}
+            onUpdateLld={isOffline ? undefined : handleFieldLldUpdate}
+            onUpdateCrop={isOffline ? undefined : handleFieldCropUpdate}
+            onArchive={isOffline ? undefined : handleFieldArchive}
+            onDeletePermanently={isOffline ? undefined : handleFieldDeletePermanently}
           />
         ) : (
           renderCanonicalDetailPanel()
@@ -2517,6 +2525,8 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             setWelcomeDismissed(true);
             switchPanel('add-field');
           }}
+          addFieldDisabled={isOffline}
+          addFieldDisabledReason={addFieldDisabledReason}
           onDismiss={() => setWelcomeDismissed(true)}
         />
       )}
@@ -2525,6 +2535,8 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         onNavChange={handleNavChange}
         onAlertsBell={() => switchPanel(activePanel === 'alerts' ? 'detail' : 'alerts')}
         onAddField={() => switchPanel(activePanel === 'add-field' ? 'detail' : 'add-field')}
+        addFieldDisabled={isOffline}
+        addFieldDisabledReason={addFieldDisabledReason}
         theme={theme}
         onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
         showSettingsNav={!isGuestSession}
@@ -2591,11 +2603,17 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
                   ? undefined
                   : () => switchPanel(activePanel === 'add-field' ? 'detail' : 'add-field')
               }
+              addFieldDisabled={isOffline}
+              addFieldDisabledReason={addFieldDisabledReason}
               onSearchOpen={isGuestSession ? undefined : () => setPaletteOpen(true)}
               onboardingProgress={fieldOnboardingProgress}
-              onFieldRename={canManageFieldMutations ? handleFieldRename : undefined}
-              onFieldArchive={canManageFieldMutations ? handleFieldArchive : undefined}
-              onFieldEdit={canManageFieldMutations ? ((fieldId) => {
+              onFieldRename={
+                canManageFieldMutations && !isOffline ? handleFieldRename : undefined
+              }
+              onFieldArchive={
+                canManageFieldMutations && !isOffline ? handleFieldArchive : undefined
+              }
+              onFieldEdit={canManageFieldMutations && !isOffline ? ((fieldId) => {
                 handleFieldSelect(fieldId);
                 switchPanel('edit-field');
               }) : undefined}

@@ -68,3 +68,16 @@ test("EditFieldPanel renders archive and permanent delete guidance in the danger
   assert.match(markup, /Delete permanently/);
   assert.match(markup, /detaches import batch history/);
 });
+
+test("EditFieldPanel shows an offline mutation notice without changing the layout structure", () => {
+  const markup = renderToStaticMarkup(
+    <EditFieldPanel
+      {...createBaseProps()}
+      mutationNotice="Field edits and lifecycle actions require an online connection."
+    />,
+  );
+
+  assert.match(markup, /Field edits and lifecycle actions require an online connection/);
+  assert.match(markup, /Field Details/);
+  assert.match(markup, /Crop Context/);
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentPropsWithoutRef, CSSProperties } from "react";
+import React, { type ComponentPropsWithoutRef, type CSSProperties } from "react";
 import { Bell, Moon, Plus, SunMedium } from "lucide-react";
 import type { AppTheme } from "./WorkspaceShell";
 
@@ -11,6 +11,8 @@ interface TopBarProps {
   onNavChange?: (nav: string) => void;
   onAlertsBell?: () => void;
   onAddField?: () => void;
+  addFieldDisabled?: boolean;
+  addFieldDisabledReason?: string | null;
   theme?: AppTheme;
   onThemeToggle?: () => void;
   showSettingsNav?: boolean;
@@ -46,6 +48,8 @@ export function TopBar({
   onNavChange,
   onAlertsBell,
   onAddField,
+  addFieldDisabled = false,
+  addFieldDisabledReason = null,
   theme,
   onThemeToggle,
   showSettingsNav = true,
@@ -179,6 +183,9 @@ export function TopBar({
             className="app-topbar__add-field-btn"
             onClick={onAddField}
             aria-label="Add field"
+            disabled={addFieldDisabled}
+            title={addFieldDisabledReason ?? undefined}
+            aria-disabled={addFieldDisabled}
           >
             <Plus size={14} strokeWidth={2.5} />
             <span>Add Field</span>
