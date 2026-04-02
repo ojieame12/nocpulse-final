@@ -11,10 +11,10 @@ type MetricLayerSwitcherProps = {
 const METRIC_SHORT_LABELS: Record<FieldAgronomicSurfaceMetricKey, string> = {
   "root-zone-moisture-pct": "Moisture",
   "surface-moisture-pct": "Surface",
-  ndvi: "NDVI",
-  ndre: "NDRE",
-  ndmi: "NDMI",
-  "radar-wetness": "Radar",
+  ndvi: "Crop Health",
+  ndre: "Canopy Vigor",
+  ndmi: "Leaf Moisture",
+  "radar-wetness": "Radar Wetness",
 };
 
 export function MetricLayerSwitcher({

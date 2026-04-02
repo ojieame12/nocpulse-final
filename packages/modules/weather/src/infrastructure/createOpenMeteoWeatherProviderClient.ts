@@ -31,7 +31,7 @@ type CreateOpenMeteoWeatherProviderClientOptions = {
   weatherModel?: string;
 };
 
-const DEFAULT_FORECAST_HOURS = 48;
+const DEFAULT_FORECAST_HOURS = 168;
 const DEFAULT_TIMEOUT_MS = 8_000;
 const DEFAULT_RETRIES = 2;
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);

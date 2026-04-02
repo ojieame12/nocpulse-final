@@ -19,7 +19,7 @@ export function SpotInspectorPanel({ onClose }: SpotInspectorPanelProps) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '6px 16px 16px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, alignContent: 'start' }}>
         {!hasSelection ? (
           <div style={{ gridColumn: '1 / -1' }}>
-            <PanelEmptyState icon={Crosshair} title="No spot selected" description="Tap any point on the map to inspect soil moisture, vegetation indices, and change history at that location." />
+            <PanelEmptyState icon={Crosshair} title="No spot selected" description="Tap any point on the map to inspect soil moisture, crop-health signals, and change history at that location." />
           </div>
         ) : (
           <>
@@ -32,7 +32,7 @@ export function SpotInspectorPanel({ onClose }: SpotInspectorPanelProps) {
             </div>
             <div className="fdp-card"><div className="fdp-lbl">ROOT MOISTURE</div><div className="fdp-big fdp-big--22" style={{ color: ok }}>38.4%</div><div className="fdp-sub">Adequate</div></div>
             <div className="fdp-card"><div className="fdp-lbl">SURFACE</div><div className="fdp-big fdp-big--22" style={{ color: txt }}>22.1%</div><div className="fdp-sub">Below average</div></div>
-            <div className="fdp-card"><div className="fdp-lbl">NDVI</div><div className="fdp-big fdp-big--22" style={{ color: ok }}>0.72</div></div>
+            <div className="fdp-card"><div className="fdp-lbl">CROP HEALTH</div><div className="fdp-big fdp-big--22" style={{ color: ok }}>0.72</div></div>
             <div className="fdp-card"><div className="fdp-lbl">CONFIDENCE</div><div className="fdp-big fdp-big--18" style={{ color: txt }}>High</div></div>
           </>
         )}

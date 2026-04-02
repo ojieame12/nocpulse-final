@@ -125,10 +125,10 @@ function resolveFooterBadge(
 
 const MODES: { k: ModeKey; l: string; icon: LucideIcon }[] = [
   { k: "moisture", l: "Moisture", icon: Droplets },
-  { k: "ndvi", l: "NDVI", icon: Leaf },
-  { k: "ndre", l: "NDRE", icon: FlaskConical },
-  { k: "ndmi", l: "NDMI", icon: CloudRain },
-  { k: "radarWetness", l: "Radar Wetness", icon: CloudRain },
+  { k: "ndvi", l: "Crop Health", icon: Leaf },
+  { k: "ndre", l: "Canopy Vigor", icon: FlaskConical },
+  { k: "ndmi", l: "Leaf Moisture", icon: CloudRain },
+  { k: "radarWetness", l: "Surface Wetness", icon: CloudRain },
 ];
 
 function resolveModeLabel(
@@ -261,7 +261,7 @@ function SubPageView({
   const cropSignalSub =
     crop?.healthIndex.subLabel ??
     crop?.healthIndexTitle ??
-    "No canopy index available";
+    "Awaiting first usable optical pass";
   const moistureBalanceSub =
     crop?.moistureBalance.subLabel ??
     crop?.moistureBalanceTitle ??
@@ -1090,7 +1090,9 @@ export function FieldDetailPanel({
   const waterBalanceTile = findContextTile(market, "WATER BALANCE");
   const activeSignalsTile = findContextTile(market, "ACTIVE SIGNALS");
   const frostRiskTile = findCropFieldTile(crop, "FROST RISK");
-  const atmosphericDemandTile = findCropFieldTile(crop, "ATMOSPHERIC DEMAND");
+  const atmosphericDemandTile =
+    findCropFieldTile(crop, "CROP WATER DEMAND") ??
+    findCropFieldTile(crop, "ATMOSPHERIC DEMAND");
   const cropWaterBalanceTile = findCropFieldTile(crop, "WATER BALANCE");
   const gdd72hTile = findCropFieldTile(crop, "GDD 72H");
   const providerLabel = findCropProvenanceValue(crop, "Provider");
@@ -1209,7 +1211,7 @@ export function FieldDetailPanel({
   const cropSignalSub =
     crop?.healthIndex.subLabel ??
     crop?.healthIndexTitle ??
-    "No canopy index available";
+    "Awaiting first usable optical pass";
   const moistureBalanceSub =
     crop?.moistureBalance.subLabel ??
     crop?.moistureBalanceTitle ??
@@ -1296,9 +1298,9 @@ export function FieldDetailPanel({
       }
     : hasDisplayValue(atmosphericDemandTile?.value)
       ? {
-          label: atmosphericDemandTile?.label ?? "Atmospheric Demand",
+          label: atmosphericDemandTile?.label ?? "Crop Water Demand",
           value: atmosphericDemandTile?.value ?? "—",
-          sub: atmosphericDemandTile?.sub ?? "No VPD signal available",
+          sub: atmosphericDemandTile?.sub ?? "No crop water demand signal available",
         }
       : {
           label: "Wind",
@@ -1336,7 +1338,7 @@ export function FieldDetailPanel({
     ),
   );
   const summaryAlerts = summary?.alerts ?? [];
-  const outlookDays = (summary?.outlook ?? []).slice(0, 4);
+  const outlookDays = (summary?.outlook ?? []).slice(0, 7);
   const dangerAlertCount =
     summary?.alerts.filter((alert) => alert.severity === "danger").length ?? 0;
   const warningAlertCount =

@@ -120,7 +120,7 @@ export function buildCropProps(rm: any): FieldCropProps {
 
   const thresholdRows: FieldCropProps["thresholds"] = [
     {
-      param: "Soil Moisture (%)",
+      param: "Root-Zone Moisture (%)",
       min: `${resolvedRules.moistureStress.rootZoneCriticalPct}`,
       optimal: `${resolvedRules.moistureStress.rootZoneMonitorPct}–70`,
       optimalColor: "#16a34a",
@@ -216,7 +216,7 @@ export function buildCropProps(rm: any): FieldCropProps {
               : "#16a34a44",
     },
     {
-      param: "Peak VPD (kPa)",
+      param: "Crop Water Demand (kPa)",
       min: "0",
       optimal: `<${resolvedRules.weatherRisk.atmosphericDemand.elevatedVpdKpa.toFixed(1)}`,
       optimalColor: "#16a34a",
@@ -224,11 +224,11 @@ export function buildCropProps(rm: any): FieldCropProps {
       actual: peakVpd != null ? `${peakVpd.toFixed(2)} kPa` : "—",
       notes:
         peakVpd == null
-          ? "No VPD forecast available"
+          ? "No crop water demand forecast available"
           : peakVpd >= resolvedRules.weatherRisk.atmosphericDemand.severeVpdKpa
             ? "Severe atmospheric demand — high transpiration stress"
             : peakVpd >= resolvedRules.weatherRisk.atmosphericDemand.elevatedVpdKpa
-              ? "Elevated VPD — monitor crop water demand"
+              ? "Elevated crop water demand — monitor moisture closely"
               : "Atmospheric demand within normal range",
       status:
         peakVpd == null
@@ -493,12 +493,12 @@ export function buildCropProps(rm: any): FieldCropProps {
         ...frostTone,
       },
       {
-        label: "ATMOSPHERIC DEMAND",
+        label: "CROP WATER DEMAND",
         value: peakVpd == null ? "No forecast" : peakVpd.toFixed(1),
         sub:
           peakVpd == null
-            ? "No VPD signal available"
-            : `Peak VPD next 24h`,
+            ? "No crop water demand signal available"
+            : "Peak next 24h",
         ...vpdTone,
       },
       {

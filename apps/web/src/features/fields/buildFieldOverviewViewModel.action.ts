@@ -392,14 +392,14 @@ function buildWatchlistSummary(input: {
       dueDate: "Within 48h",
       recommendation:
         "Inspect lighter-ground and exposed areas for fast drying before changing field operations uniformly.",
-      explanation: `No confirmed finding is active yet. Peak forecast VPD is ${peakVpd.toFixed(1)} kPa${typeof waterBalance72h === "number" ? ` with a 72-hour water balance of ${waterBalance72h.toFixed(1)} mm` : ""}, so this recommendation is advisory and based on atmospheric-demand heuristics.`,
-      whyNow: `Peak forecast VPD reaches ${peakVpd.toFixed(1)} kPa${typeof waterBalance72h === "number" ? ` and the 72-hour water balance is ${waterBalance72h.toFixed(1)} mm` : ""}.`,
+      explanation: `No confirmed finding is active yet. Peak forecast crop water demand (VPD) is ${peakVpd.toFixed(1)} kPa${typeof waterBalance72h === "number" ? ` with a 72-hour water balance of ${waterBalance72h.toFixed(1)} mm` : ""}, so this recommendation is advisory and based on atmospheric-demand heuristics.`,
+      whyNow: `Peak forecast crop water demand (VPD) reaches ${peakVpd.toFixed(1)} kPa${typeof waterBalance72h === "number" ? ` and the 72-hour water balance is ${waterBalance72h.toFixed(1)} mm` : ""}.`,
       inspectFirst:
         "Start with lighter-ground pockets and exposed edges where atmospheric demand usually hits first, then compare against the latest moisture refresh.",
       confidence: "Heuristic watchlist · weather-backed",
       signals: [
         {
-          label: `VPD ${peakVpd.toFixed(1)} kPa`,
+          label: `Water demand ${peakVpd.toFixed(1)} kPa`,
           color: severity === "high" ? "red" : "yellow",
           detail: [
             typeof waterBalance72h === "number"
@@ -650,7 +650,7 @@ export function buildActionProps(
             key: "metric:ndvi",
             score: 35,
             group: "optical",
-            label: `NDVI ${opticalNdviAvg.toFixed(2)}`,
+            label: `Crop health ${opticalNdviAvg.toFixed(2)}`,
             color: signalColorFromAverage(opticalNdviAvg, {
               warningFloor: 0.45,
               healthyFloor: 0.65,
@@ -670,7 +670,7 @@ export function buildActionProps(
             key: "metric:ndre",
             score: 34,
             group: "optical",
-            label: `NDRE ${opticalNdreAvg.toFixed(2)}`,
+            label: `Canopy vigor ${opticalNdreAvg.toFixed(2)}`,
             color: signalColorFromAverage(opticalNdreAvg, {
               warningFloor: 0.18,
               healthyFloor: 0.3,
@@ -727,7 +727,7 @@ export function buildActionProps(
                   ? 50
                   : 20,
             group: "weather",
-            label: `VPD ${weatherSignals.peakForecastVpdKpa24h.toFixed(1)} kPa`,
+            label: `Water demand ${weatherSignals.peakForecastVpdKpa24h.toFixed(1)} kPa`,
             color:
               weatherSignals.peakForecastVpdKpa24h >= 2
                 ? "red"
@@ -780,7 +780,7 @@ export function buildActionProps(
             ? `Minimum forecast temperature is ${weatherSignals.frostRiskMinTempC.toFixed(1)}°C.`
             : null,
           weatherSignals?.peakForecastVpdKpa24h != null
-            ? `Peak forecast VPD over 24h is ${weatherSignals.peakForecastVpdKpa24h.toFixed(1)} kPa.`
+            ? `Peak forecast crop water demand (VPD) over 24h is ${weatherSignals.peakForecastVpdKpa24h.toFixed(1)} kPa.`
             : null,
           cropContext
             ? cropStagePresentation.displayStageLabel === "Stage unverified"

@@ -44,7 +44,7 @@ export interface AlertsPanelProps {
 const DEMO_ALERTS: AlertItem[] = [
   { id: 'demo-1', title: 'Root Zone Moisture Below Threshold', severity: 'critical', subtitle: 'NW quadrant drying faster than canola stress threshold. Root zone at 18% — action within 48h.', time: '2h ago', trackedZoneIds: [] },
   { id: 'demo-2', title: 'Frost Risk — Overnight Low −3°C', severity: 'warning', subtitle: 'Forecast models show sub-zero overnight temps. East-facing slopes most exposed. Monitor canopy damage.', time: '6h ago', trackedZoneIds: [] },
-  { id: 'demo-3', title: 'NDVI Decline Detected', severity: 'warning', subtitle: 'Vegetation index dropped 4.2% since last pass. Concentrated in cells R12-C04 through R12-C07.', time: '1d ago', trackedZoneIds: [] },
+  { id: 'demo-3', title: 'Crop-Health Decline Detected', severity: 'warning', subtitle: 'Crop-health index dropped 4.2% since last pass. Concentrated in cells R12-C04 through R12-C07.', time: '1d ago', trackedZoneIds: [] },
   { id: 'demo-4', title: 'Blackleg Disease Pressure Rising', severity: 'medium', subtitle: 'Warm + humid conditions favorable for Leptosphaeria. Risk elevated in dense canopy zones.', time: '2d ago', trackedZoneIds: [] },
 ];
 const DEMO_RESOLVED: ResolvedAlertItem[] = [

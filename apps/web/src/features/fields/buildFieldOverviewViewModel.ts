@@ -877,7 +877,7 @@ export async function buildFieldOverviewViewModel(
       ? currentMoistureBaseline - previousMoistureBaseline
       : null;
   const latestObservation = readModel.weather.profile.latestObservation;
-  const forecast = readModel.weather.profile.forecasts.slice(0, 4);
+  const forecast = readModel.weather.profile.forecasts.slice(0, 7);
   const weatherDataAvailability = readModel.weather.profile.dataAvailability ?? {
     latestObservation: true,
     forecasts: true,

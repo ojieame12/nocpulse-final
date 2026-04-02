@@ -29,9 +29,11 @@ const READING_ICON_FALLBACK = { Icon: Gauge, color: "var(--text-muted)" };
 /* ── Icon map for crop parameter rows ── */
 
 const CROP_PARAM_ICONS: Record<string, { Icon: LucideIcon; color: string }> = {
+  "root-zone moisture": { Icon: Droplets,      color: "#3b82f6" },
   "root moisture":     { Icon: Droplets,      color: "#3b82f6" },
   "surface moisture":  { Icon: Droplets,      color: "#0ea5e9" },
   "frost min":         { Icon: Snowflake,     color: "#818cf8" },
+  "crop water demand": { Icon: Gauge,         color: "#3b82f6" },
   "water balance 72h": { Icon: CloudDrizzle,  color: "#06b6d4" },
   "water balance":     { Icon: CloudDrizzle,  color: "#06b6d4" },
   "ndvi":              { Icon: Leaf,          color: "#16a34a" },
@@ -368,10 +370,10 @@ export function ReportSubPage({
           <Sub>{vegetationChart ? vegetationRange.start : mc.spatialColumns[0].label}</Sub>
           <Sub>
             {vegetationChart
-              ? [
-                  `NDVI ${vegetationChart.series[0] ? findLatestReportChartPointValue(vegetationChart, 0)?.toFixed(2) ?? "—" : "—"}`,
+                ? [
+                  `Crop health ${vegetationChart.series[0] ? findLatestReportChartPointValue(vegetationChart, 0)?.toFixed(2) ?? "—" : "—"}`,
                   vegetationChart.series[1]
-                    ? `NDRE ${findLatestReportChartPointValue(vegetationChart, 1)?.toFixed(2) ?? "—"}`
+                    ? `Canopy vigor ${findLatestReportChartPointValue(vegetationChart, 1)?.toFixed(2) ?? "—"}`
                     : null,
                   contextOnlyOptical ? "Informational only" : null,
                 ]

@@ -332,24 +332,24 @@ export function buildFieldDetailModeData({
     ],
     ndvi: preseasonOpticalContext
       ? [
-          { label: "NDVI", value: ndviValue },
+          { label: "Crop Health", value: ndviValue },
           { label: "Stage", value: resolveStageLabel(summary, crop) },
           { label: "Moisture", value: summary?.rootMoisture ?? "—" },
         ]
       : [
-          { label: "NDVI", value: ndviValue },
-          { label: "NDRE", value: ndreValue },
+          { label: "Crop Health", value: ndviValue },
+          { label: "Canopy Vigor", value: ndreValue },
           { label: "Moisture", value: summary?.rootMoisture ?? "—" },
         ],
     ndre: preseasonOpticalContext
       ? [
-          { label: "NDRE", value: ndreValue },
+          { label: "Canopy Vigor", value: ndreValue },
           { label: "Stage", value: resolveStageLabel(summary, crop) },
           { label: "Moisture", value: summary?.rootMoisture ?? "—" },
         ]
       : [
-          { label: "NDRE", value: ndreValue },
-          { label: "NDVI", value: ndviValue },
+          { label: "Canopy Vigor", value: ndreValue },
+          { label: "Crop Health", value: ndviValue },
           { label: "Disease", value: topDiseaseRisk, sev: topDiseaseRisk === "HIGH" || topDiseaseRisk === "MED" },
         ],
     ndmi: preseasonOpticalContext
@@ -443,11 +443,11 @@ export function buildFieldDetailModeData({
   const subByMode: Record<ModeKey, string> = {
     moisture: `${summary?.rootMoisture ?? "—"} soil moisture · ${summary?.surfaceMoisture ?? "—"} surface · ${sourceSummary}`,
     ndvi: preseasonOpticalContext
-      ? `${ndviValue} NDVI · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`
-      : `${ndviValue} NDVI · ${ndreValue} NDRE · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`,
+      ? `${ndviValue} crop health · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`
+      : `${ndviValue} crop health · ${ndreValue} canopy vigor · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`,
     ndre: preseasonOpticalContext
-      ? `${ndreValue} NDRE · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`
-      : `${ndreValue} NDRE · ${ndviValue} NDVI · ${topDiseaseRisk} disease watch · ${sourceSummary}`,
+      ? `${ndreValue} canopy vigor · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`
+      : `${ndreValue} canopy vigor · ${ndviValue} crop health · ${topDiseaseRisk} disease watch · ${sourceSummary}`,
     ndmi: preseasonOpticalContext
       ? `${ndmiValue} ${ndmiLabel} · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`
       : `${ndmiValue} ${ndmiLabel} · ${summary?.rootMoisture ?? "—"} soil moisture · ${waterBalanceTile?.value ?? "—"} balance · ${sourceSummary}`,
@@ -475,7 +475,7 @@ export function buildFieldDetailModeData({
       : `${crop?.healthIndexTitle ?? "Canopy signal"} · ${healthMetric}. ${crop?.healthIndex.subLabel ?? "Field-average vigor context"}`,
     ndre: preseasonOpticalContext
       ? `${crop?.healthIndex.subLabel ?? "Preseason optical context"}. Red-edge values are informational only until crop stage and season GDD are verified.`
-      : `${crop?.alerts[0]?.title ?? "No active crop alert"}. ${crop?.alerts[0]?.desc ?? contract.valueMeaning} ${ndreValue !== "—" ? `Current NDRE ${ndreValue}.` : ""}`.trim(),
+      : `${crop?.alerts[0]?.title ?? "No active crop alert"}. ${crop?.alerts[0]?.desc ?? contract.valueMeaning} ${ndreValue !== "—" ? `Current canopy vigor ${ndreValue}.` : ""}`.trim(),
     ndmi: preseasonOpticalContext
       ? `${crop?.moistureBalance.subLabel ?? crop?.healthIndex.subLabel ?? "Preseason optical context"}. Use moisture and ${radarWetnessLabel} for current field decisions until crop stage and season GDD are verified.`
       : `${moistureMetric}. ${waterBalanceTile?.sub ?? "72h forecast water balance context"} ${ndmiValue !== "—" ? `Current ${ndmiLabel} ${ndmiValue}.` : ""}`.trim(),

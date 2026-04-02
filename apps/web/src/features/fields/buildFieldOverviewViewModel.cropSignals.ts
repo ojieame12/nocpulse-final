@@ -80,8 +80,8 @@ export function resolveCropStagePresentation(input: {
       : `${titleCaseStage(ruleStage)} default stage`
     : "Stage unavailable";
   const gddUnitLabel = hasCredibleAccumulatedGdd
-    ? `GDD accumulated (base ${input.gddBaseC}°C)`
-    : `Season GDD unavailable (base ${input.gddBaseC}°C)`;
+    ? `Heat units accumulated (base ${input.gddBaseC}°C)`
+    : `Season heat units unavailable (base ${input.gddBaseC}°C)`;
 
   let stageSourceLabel = "Stage unavailable";
   if (hasManualStage) {
@@ -195,14 +195,14 @@ export function resolveCanopySignalPresentation(input: {
 
   if (!input.hasOpticalRaster) {
     return {
-      cropTitle: "CANOPY SIGNAL INDEX",
-      cropValue: "No optical signal",
-      cropSubLabel: "No optical canopy raster",
-      reportHealthStatus: "Optical Pending",
-      reportVegetationSubtitle: "No optical canopy raster",
+      cropTitle: "CROP HEALTH INDEX",
+      cropValue: "Awaiting imagery",
+      cropSubLabel: "Awaiting first usable optical pass",
+      reportHealthStatus: "Imagery Pending",
+      reportVegetationSubtitle: "Optical imagery pending",
       diseaseClearDescription:
-        "No optical canopy raster is available yet, so disease and vigor interpretation is waiting on a provider-backed optical pass.",
-      actionConfidenceLabel: "Optical pending",
+        "No usable optical pass is available yet, so crop-health and vigor interpretation is waiting on a clear provider-backed image.",
+      actionConfidenceLabel: "Imagery pending",
     };
   }
 
