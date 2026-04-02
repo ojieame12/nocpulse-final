@@ -832,6 +832,65 @@ function resolveFieldMeta({
   return [cropLabel, stageLabel, areaLabel].filter(Boolean).join(" · ");
 }
 
+function resolveFirstInsightCard(
+  summary: FieldSummaryProps | null,
+  action: FieldActionProps | null,
+) {
+  const dataQuality = summary?.dataQuality ?? null;
+  const confidenceLevel = summary?.moistureConfidenceLevel ?? "unknown";
+
+  if (!summary || !dataQuality) {
+    return null;
+  }
+
+  const confidenceStrong = confidenceLevel === "high" || confidenceLevel === "medium";
+  const shouldShow =
+    dataQuality.label === "Ready" ||
+    (dataQuality.label === "Limited" && confidenceStrong);
+
+  if (!shouldShow) {
+    return null;
+  }
+
+  const trendValue = parseNumericValue(summary.trend);
+  const trendClause =
+    trendValue == null
+      ? null
+      : trendValue > 0
+        ? `Recent moisture is building by ${summary.trend}.`
+        : trendValue < 0
+          ? `Recent moisture is slipping by ${summary.trend}.`
+          : "Recent moisture is broadly holding steady.";
+
+  const meaningBase =
+    summary.fieldState === "Dry"
+      ? `Root-zone moisture is ${summary.rootMoisture}, so this field is currently on the dry side.`
+      : summary.fieldState === "Wet"
+        ? `Root-zone moisture is ${summary.rootMoisture}, so this field is currently on the wet side.`
+        : summary.fieldState === "Adequate"
+          ? `Root-zone moisture is ${summary.rootMoisture}, which keeps this field in an adequate range right now.`
+          : `Current field state is ${summary.fieldState || "still forming"}.`;
+
+  const trust =
+    dataQuality.label === "Ready"
+      ? `${dataQuality.label} data quality · ${summary.confidence} moisture confidence. ${dataQuality.summary}`
+      : `${dataQuality.label} data quality · ${summary.confidence} moisture confidence. ${dataQuality.summary}`;
+
+  const next =
+    action?.recommendation?.trim()
+      ? action.recommendation.trim()
+      : dataQuality.label === "Limited"
+        ? "Use current moisture as context, but wait for more vegetation depth before leaning on trend-heavy interpretation."
+        : "Open Actions or Zones next to confirm where this signal is concentrated before making a whole-field decision.";
+
+  return {
+    tone: dataQuality.tone,
+    meaning: [meaningBase, trendClause].filter(Boolean).join(" "),
+    trust,
+    next,
+  };
+}
+
 function buildFieldExportUrl(input: {
   fieldId: string;
   workspaceId?: string;
@@ -1279,6 +1338,15 @@ export function FieldDetailPanel({
     summary?.alerts.filter((alert) => alert.severity === "danger").length ?? 0;
   const warningAlertCount =
     summary?.alerts.filter((alert) => alert.severity === "warning").length ?? 0;
+  const firstInsightCard = resolveFirstInsightCard(summary, action);
+  const firstInsightAccent =
+    firstInsightCard?.tone === "positive"
+      ? "#16a34a"
+      : firstInsightCard?.tone === "warning"
+        ? "#f59e0b"
+        : firstInsightCard?.tone === "danger"
+          ? "#ef4444"
+          : "var(--text-secondary)";
 
   return (
     <div className="fdp">
@@ -1419,6 +1487,81 @@ export function FieldDetailPanel({
               <p className="fdp__hero-sub">{liveModeData.sub}</p>
             </div>
           </div>
+
+          {firstInsightCard ? (
+            <Card span={2} style={{ border: "1px solid var(--border-light)" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <div
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    background: `${firstInsightAccent}14`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <ShieldCheck size={14} color={firstInsightAccent} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Lbl color={firstInsightAccent}>First Insight</Lbl>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 12,
+                      marginTop: 6,
+                    }}
+                  >
+                    <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                      <LblM>What this field is telling me</LblM>
+                      <p
+                        style={{
+                          fontFamily: "var(--font-body)",
+                          fontSize: 12,
+                          color: "var(--text-primary)",
+                          margin: "4px 0 0",
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {firstInsightCard.meaning}
+                      </p>
+                    </div>
+                    <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+                      <LblM>How much I should trust it</LblM>
+                      <p
+                        style={{
+                          fontFamily: "var(--font-body)",
+                          fontSize: 12,
+                          color: "var(--text-primary)",
+                          margin: "4px 0 0",
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {firstInsightCard.trust}
+                      </p>
+                    </div>
+                    <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                      <LblM>What I should look at next</LblM>
+                      <p
+                        style={{
+                          fontFamily: "var(--font-body)",
+                          fontSize: 12,
+                          color: "var(--text-primary)",
+                          margin: "4px 0 0",
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {firstInsightCard.next}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ) : null}
 
           {/* ━━ VITALS ━━ */}
           <div className="fdp__vitals-grid">
