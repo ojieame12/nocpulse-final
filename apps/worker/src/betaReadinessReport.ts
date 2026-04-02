@@ -5,6 +5,10 @@ import {
   type DatabaseSchema,
 } from "@fieldpulse/platform-db";
 import { pathToFileURL } from "node:url";
+import {
+  summarizeActionBriefReviewAlerts,
+  type ActionBriefReviewAggregate,
+} from "./actionBriefReviewReport";
 import { runFieldQualityAudit, type FieldQualityAuditReport } from "./fieldQualityAudit";
 import {
   buildPreviewFirstInsightReport,
@@ -53,6 +57,7 @@ export type BetaReadinessGate = {
   key:
     | "queue-health"
     | "action-brief"
+    | "action-brief-review"
     | "source-integrity"
     | "field-quality"
     | "first-insight";
@@ -72,6 +77,7 @@ export type BetaReadinessReport = {
   nextActions: string[];
   queueHealth: Awaited<ReturnType<ReturnType<typeof createWorkerJobQueue>["getQueueHealth"]>>;
   actionBrief: ActionBriefStatusSummary;
+  actionBriefReview: ActionBriefReviewAggregate;
   sourceIntegrity: SourceIntegritySummary;
   fieldQuality: FieldQualityAuditReport["summary"];
   firstInsight: Pick<
@@ -210,6 +216,7 @@ function worstStatus(current: GateStatus, next: GateStatus): GateStatus {
 export function buildBetaReadinessAssessment(input: {
   queueHealth: BetaReadinessReport["queueHealth"];
   actionBrief: ActionBriefStatusSummary;
+  actionBriefReview: ActionBriefReviewAggregate;
   sourceIntegrity: SourceIntegritySummary;
   fieldQuality: FieldQualityAuditReport["summary"];
   firstInsight: BetaReadinessReport["firstInsight"];
@@ -259,6 +266,34 @@ export function buildBetaReadinessAssessment(input: {
   });
   if (actionBriefStatus !== "GO") {
     nextActions.push("Verify action-brief cadence execution and review recent failed or missing dispatches.");
+  }
+
+  const dismissalRate = input.actionBriefReview.dismissalRate ?? 0;
+  const actionBriefReviewStatus: GateStatus =
+    input.actionBrief.completedCount === 0
+      ? "WARN"
+      : input.actionBriefReview.alertCount === 0
+        ? "WARN"
+        : input.actionBriefReview.unacknowledgedActiveCount === 0 && dismissalRate <= 0.5
+          ? "GO"
+          : input.actionBriefReview.unacknowledgedActiveCount >= 5 || dismissalRate >= 0.8
+            ? "NO-GO"
+            : "WARN";
+  gates.push({
+    key: "action-brief-review",
+    label: "Action-brief trust",
+    status: actionBriefReviewStatus,
+    summary:
+      actionBriefReviewStatus === "GO"
+        ? `${input.actionBriefReview.alertCount} action-brief alert(s) have review evidence with ${input.actionBriefReview.unacknowledgedActiveCount} unacknowledged active.`
+        : input.actionBriefReview.alertCount === 0
+          ? "Action-brief alerts are running, but there is no review/dismissal evidence yet."
+          : actionBriefReviewStatus === "WARN"
+            ? `Action-brief review evidence is mixed (${input.actionBriefReview.unacknowledgedActiveCount} unacknowledged active, ${formatPercent(dismissalRate)} dismissed).`
+            : `Action-brief trust is weak (${input.actionBriefReview.unacknowledgedActiveCount} unacknowledged active, ${formatPercent(dismissalRate)} dismissed).`,
+  });
+  if (actionBriefReviewStatus !== "GO") {
+    nextActions.push("Inspect action-brief review behavior and tune thresholds or copy if alerts are piling up or getting dismissed.");
   }
 
   const sourceRiskCount =
@@ -429,6 +464,31 @@ async function buildFirstInsightEvidence(input: {
   });
 }
 
+async function buildActionBriefReviewEvidence(input: {
+  client: ReturnType<typeof createSupabaseDatabaseClient>;
+  workspaceId: string | null;
+  lookbackDays: number;
+}) {
+  const lookbackIso = isoDaysAgo(input.lookbackDays);
+  let alertsQuery = input.client
+    .from("field_alerts")
+    .select("workspace_id,field_id,status,started_at,acknowledged_at,resolved_at,created_at,title")
+    .eq("family", "action_brief")
+    .gte("created_at", lookbackIso)
+    .order("created_at", { ascending: false });
+
+  if (input.workspaceId) {
+    alertsQuery = alertsQuery.eq("workspace_id", input.workspaceId);
+  }
+
+  const alerts = requireSupabaseData(
+    await alertsQuery,
+    "betaReadinessReport.actionBriefAlerts",
+  ) as Parameters<typeof summarizeActionBriefReviewAlerts>[0];
+
+  return summarizeActionBriefReviewAlerts(alerts);
+}
+
 async function main() {
   loadWorkerEnv();
   const args = parseCliArgs();
@@ -457,7 +517,7 @@ async function main() {
   const resolvedWorkspaceSlug = workspace?.slug ?? workspaceSlug ?? null;
   const resolvedWorkspaceName = workspace?.name ?? null;
 
-  const [fieldQualityAudit, queueHealth, actionBriefRows, firstInsightReport] =
+  const [fieldQualityAudit, queueHealth, actionBriefRows, actionBriefReview, firstInsightReport] =
     await Promise.all([
       runFieldQualityAudit({
         client,
@@ -474,6 +534,11 @@ async function main() {
         ],
         limit: 20,
       }),
+      buildActionBriefReviewEvidence({
+        client,
+        workspaceId: resolvedWorkspaceId,
+        lookbackDays,
+      }),
       buildFirstInsightEvidence({
         client,
         workspaceId: resolvedWorkspaceId,
@@ -488,6 +553,7 @@ async function main() {
   const assessment = buildBetaReadinessAssessment({
     queueHealth,
     actionBrief,
+    actionBriefReview,
     sourceIntegrity,
     fieldQuality: fieldQualityAudit.summary,
     firstInsight: {
@@ -512,6 +578,7 @@ async function main() {
     nextActions: assessment.nextActions,
     queueHealth,
     actionBrief,
+    actionBriefReview,
     sourceIntegrity,
     fieldQuality: fieldQualityAudit.summary,
     firstInsight: {
@@ -561,6 +628,9 @@ async function main() {
     staleRunningJobs: report.queueHealth.staleRunningCount,
     actionBriefCompleted: report.actionBrief.completedCount,
     actionBriefFailed: report.actionBrief.failedCount,
+    actionBriefAlerts: report.actionBriefReview.alertCount,
+    actionBriefDismissed: report.actionBriefReview.dismissedCount,
+    actionBriefUnacknowledgedActive: report.actionBriefReview.unacknowledgedActiveCount,
     firstInsightEvents: report.firstInsight.eventCount,
     firstInsightActors: report.firstInsight.uniqueActorCount,
   }]);
