@@ -4,7 +4,10 @@ import {
 } from "@fieldpulse/module-crop-intelligence";
 import { isLiveMarketFeedCropSymbol } from "@fieldpulse/module-market";
 import type { FieldMarketProps, MarketBarDatum } from "../../components/panels/MarketTab";
-import { formatHistoryLabel } from "./buildFieldOverviewViewModel.shared";
+import {
+  filterFieldQualityDependentAlertRecords,
+  formatHistoryLabel,
+} from "./buildFieldOverviewViewModel.shared";
 import { resolveCropStagePresentation } from "./buildFieldOverviewViewModel.cropSignals";
 
 function shortSourceLabel(value: string | null | undefined) {
@@ -289,8 +292,22 @@ export function buildMarketProps(
   const liveFeedSupported = isLiveMarketFeedCropSymbol(marketCropSymbol);
   const moisture = rm.moisture?.latestSnapshot ?? null;
   const weatherSignals = rm.weather?.signals ?? null;
-  const alertsCount = rm.summary?.activeAlertCount ?? 0;
-  const findingsCount = rm.summary?.activeFindingCount ?? 0;
+  const dataQualityLabel = rm.summary?.dataQuality?.label ?? null;
+  const presentedAlerts = filterFieldQualityDependentAlertRecords(
+    rm.alerts ?? [],
+    dataQualityLabel,
+  );
+  const presentedFindings = filterFieldQualityDependentAlertRecords(
+    rm.findings ?? [],
+    dataQualityLabel,
+  );
+  const alertsCount = presentedAlerts.length;
+  const findingsCount = presentedFindings.length;
+  const hiddenSignalsCount =
+    (rm.alerts?.length ?? 0) +
+    (rm.findings?.length ?? 0) -
+    alertsCount -
+    findingsCount;
   const generatedAtLabel = new Date(rm.generatedAt).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -674,9 +691,20 @@ export function buildMarketProps(
       {
         label: "ACTIVE SIGNALS",
         value: `${alertsCount + findingsCount}`,
-        valueColor: alertsCount + findingsCount > 0 ? "#f59e0b" : "#16a34a",
-        sub: `${alertsCount} alerts · ${findingsCount} findings · ${cropStage}`,
-        bg: alertsCount + findingsCount > 0 ? "rgba(245,158,11,0.10)" : "rgba(22,163,74,0.12)",
+        valueColor:
+          alertsCount + findingsCount > 0 || hiddenSignalsCount > 0
+            ? "#f59e0b"
+            : "#16a34a",
+        sub:
+          hiddenSignalsCount > 0
+            ? alertsCount + findingsCount > 0
+              ? `${alertsCount} visible · ${hiddenSignalsCount} held back · ${cropStage}`
+              : `Field-dependent signals held back · ${cropStage}`
+            : `${alertsCount} alerts · ${findingsCount} findings · ${cropStage}`,
+        bg:
+          alertsCount + findingsCount > 0 || hiddenSignalsCount > 0
+            ? "rgba(245,158,11,0.10)"
+            : "rgba(22,163,74,0.12)",
       },
     ],
     disclaimerText:

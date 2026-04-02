@@ -348,6 +348,53 @@ test("buildMarketProps marks stored yield without quote as provisional", () => {
   assert.equal(props.provisionalRevenueSubLabel, "Yield only");
 });
 
+test("buildMarketProps holds back field-dependent active signals on limited fields", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    summary: {
+      ...createBaseReadModel().summary,
+      dataQuality: {
+        label: "Limited",
+      },
+    },
+    alerts: [
+      {
+        id: "alert-1",
+        family: "moisture_stress",
+        severity: "medium",
+        title: "Moisture stress building",
+        summary: "Drying is starting to spread.",
+      },
+    ],
+    findings: [
+      {
+        id: "finding-1",
+        family: "disease_risk",
+        severity: "medium",
+        title: "Blackleg watch",
+        summary: "Humidity is supporting disease pressure.",
+      },
+    ],
+  };
+
+  const props = buildMarketProps(
+    readModel,
+    "field-123",
+    "North Quarter Demo",
+    64.2,
+    null,
+    [],
+    null,
+    null,
+  );
+
+  const activeSignalsTile = props.contextTiles[2];
+  assert.equal(activeSignalsTile?.label, "ACTIVE SIGNALS");
+  assert.equal(activeSignalsTile?.value, "0");
+  assert.match(activeSignalsTile?.sub ?? "", /held back/i);
+  assert.match(activeSignalsTile?.sub ?? "", /Flowering/i);
+});
+
 test("buildEffectiveMoistureSummary derives real moisture values from raster cells before falling back to synthetic preview", () => {
   const summary = buildEffectiveMoistureSummary({
     moisture: {
