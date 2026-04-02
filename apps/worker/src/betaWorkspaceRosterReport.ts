@@ -44,6 +44,7 @@ export type BetaWorkspaceRosterRow = {
   email: string;
   farmName: string;
   requestKind: BetaWorkspaceRosterRequestKind;
+  submittedAt: string;
   workspaceId: string | null;
   workspaceSlug: string | null;
   workspaceName: string | null;
@@ -60,6 +61,7 @@ export type BetaWorkspaceRosterReport = {
   requestCount: number;
   includedRequestCount: number;
   excludedTestRequestCount: number;
+  excludedDuplicateRequestCount: number;
   rowCount: number;
   statusCounts: Record<BetaWorkspaceRosterStatus, number>;
   rows: BetaWorkspaceRosterRow[];
@@ -74,12 +76,57 @@ function classifyRequestKind(email: string): BetaWorkspaceRosterRequestKind {
   return "real";
 }
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function representativeRank(status: BetaWorkspaceRosterStatus) {
+  switch (status) {
+    case "ready-for-outreach":
+      return 4;
+    case "needs-walkthrough":
+    case "needs-curation":
+      return 3;
+    case "needs-intake":
+      return 2;
+    case "needs-grant":
+      return 1;
+  }
+}
+
+function dedupeRowsByEmail(rows: readonly BetaWorkspaceRosterRow[]) {
+  const sorted = [...rows].sort((left, right) => {
+    const rankDelta = representativeRank(right.status) - representativeRank(left.status);
+    if (rankDelta !== 0) {
+      return rankDelta;
+    }
+
+    const workspaceDelta = Number(Boolean(right.workspaceId)) - Number(Boolean(left.workspaceId));
+    if (workspaceDelta !== 0) {
+      return workspaceDelta;
+    }
+
+    return right.submittedAt.localeCompare(left.submittedAt);
+  });
+
+  const deduped = new Map<string, BetaWorkspaceRosterRow>();
+  for (const row of sorted) {
+    const key = normalizeEmail(row.email);
+    if (!deduped.has(key)) {
+      deduped.set(key, row);
+    }
+  }
+
+  return [...deduped.values()];
+}
+
 export function buildBetaWorkspaceRosterReport(input: {
   generatedAt?: string;
   funnel: ReturnType<typeof buildFirstInsightFunnelReport>;
   launchVisibleByWorkspaceId: ReadonlyMap<string, LaunchVisibleSnapshot>;
   workspaceById?: ReadonlyMap<string, WorkspaceSummary>;
   includeTestRequests?: boolean;
+  includeDuplicates?: boolean;
 }): BetaWorkspaceRosterReport {
   const allRows: BetaWorkspaceRosterRow[] = input.funnel.rows.map((row) => {
     const launchVisible =
@@ -113,6 +160,7 @@ export function buildBetaWorkspaceRosterReport(input: {
       email: row.email,
       farmName: row.farmName,
       requestKind,
+      submittedAt: row.submittedAt,
       workspaceId: row.workspaceId,
       workspaceSlug: workspace?.slug ?? null,
       workspaceName: workspace?.name ?? null,
@@ -126,9 +174,11 @@ export function buildBetaWorkspaceRosterReport(input: {
   });
 
   const includeTestRequests = input.includeTestRequests === true;
-  const rows = includeTestRequests
+  const nonTestRows = includeTestRequests
     ? allRows
     : allRows.filter((row) => row.requestKind === "real");
+  const includeDuplicates = input.includeDuplicates === true;
+  const rows = includeDuplicates ? nonTestRows : dedupeRowsByEmail(nonTestRows);
 
   const statusCounts: BetaWorkspaceRosterReport["statusCounts"] = {
     "ready-for-outreach": 0,
@@ -162,7 +212,8 @@ export function buildBetaWorkspaceRosterReport(input: {
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     requestCount: allRows.length,
     includedRequestCount: rows.length,
-    excludedTestRequestCount: allRows.length - rows.length,
+    excludedTestRequestCount: allRows.length - nonTestRows.length,
+    excludedDuplicateRequestCount: nonTestRows.length - rows.length,
     rowCount: rows.length,
     statusCounts,
     rows,
@@ -175,6 +226,7 @@ async function main() {
   const args = parseCliArgs();
   const asJson = readBooleanFlag(args, "json");
   const includeTestRequests = readBooleanFlag(args, "include-test");
+  const includeDuplicates = readBooleanFlag(args, "include-duplicates");
   const days = readNumberFlag(args, "days") ?? 30;
   const limit = readNumberFlag(args, "limit") ?? 50;
 
@@ -327,6 +379,7 @@ async function main() {
     launchVisibleByWorkspaceId,
     workspaceById,
     includeTestRequests,
+    includeDuplicates,
   });
 
   if (asJson) {
@@ -340,6 +393,7 @@ async function main() {
       `Requests scanned: ${report.requestCount}`,
       `Included requests: ${report.includedRequestCount}`,
       `Excluded test requests: ${report.excludedTestRequestCount}`,
+      `Excluded duplicate requests: ${report.excludedDuplicateRequestCount}`,
       `Workspace rows: ${report.rowCount}`,
     ].join("\n"),
   );
@@ -349,6 +403,7 @@ async function main() {
       email: row.email,
       farm: row.farmName,
       requestKind: row.requestKind,
+      submittedAt: row.submittedAt,
       workspace: row.workspaceName ?? row.workspaceSlug ?? "",
       workspaceId: row.workspaceId ?? "",
       status: row.status,
