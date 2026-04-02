@@ -1523,7 +1523,6 @@ export function FieldPageShell({
 
         return next;
       });
-
       setPrebuiltStagesByField((prev) => {
         const next = new Map(prev);
 

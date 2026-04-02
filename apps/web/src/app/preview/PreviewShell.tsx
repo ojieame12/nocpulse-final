@@ -50,11 +50,16 @@ import {
   chooseFirstInsightField,
   type FirstInsightFieldEntry,
 } from '../../features/fields/firstInsightChooser';
+import { resolvePreviewPostOnboardingFieldId } from './resolvePreviewPostOnboardingFieldId';
 import {
   buildWorkspaceFirstInsightSummary,
   type WorkspaceFirstInsightFieldSnapshot,
 } from '../../features/fields/workspaceFirstInsightSummary';
 import type { FieldCropProps as LiveCropPanelProps } from '../../features/fields/tabs/CropTab';
+import {
+  buildPreviewFirstInsightAuditPayload,
+  buildPreviewFirstInsightSessionKey,
+} from './previewFirstInsightTracking';
 
 /* ── Types ── */
 
@@ -646,6 +651,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     [initial.fieldId, initial],
   ]));
   const inflightRequestsRef = useRef(new Map<string, Promise<FieldViewModel | null>>());
+  const firstInsightTrackingInFlightRef = useRef(new Set<string>());
   const failedRequestsRef = useRef(
     new Map<string, { retryAfter: number; summary: string }>(),
   );
@@ -661,6 +667,11 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
   /** Pre-built stage arrays from the commit response, keyed by fieldId. */
   const [prebuiltStagesByField, setPrebuiltStagesByField] = useState<
     ReadonlyMap<string, CommitFieldHydrationSummary["stages"]>
+  >(new Map());
+
+  /** Commit-time moisture confidence/provenance data, keyed by fieldId. */
+  const [hydrationConfidenceByField, setHydrationConfidenceByField] = useState<
+    ReadonlyMap<string, CommitFieldHydrationSummary["moistureConfidence"]>
   >(new Map());
 
   /** Derived per-field progress for the field strip */
@@ -1487,7 +1498,6 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         }
         return next;
       });
-
       /* Store pre-built stage arrays so HydrationStageTracker can use
          authoritative backend data instead of substring-parsing progressMessages. */
       setPrebuiltStagesByField((prev) => {
@@ -1495,6 +1505,17 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         for (const summary of result.fieldHydrationSummaries!) {
           if (summary.stages && summary.stages.length > 0) {
             next.set(summary.fieldId, summary.stages);
+          }
+        }
+        return next;
+      });
+
+      /* Store commit-time moisture confidence for provenance display. */
+      setHydrationConfidenceByField((prev) => {
+        const next = new Map(prev);
+        for (const summary of result.fieldHydrationSummaries!) {
+          if (summary.moistureConfidence) {
+            next.set(summary.fieldId, summary.moistureConfidence);
           }
         }
         return next;
@@ -1573,14 +1594,10 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
            Re-run the chooser so that hydration summaries collected during
            polling are considered and thin/broken fields stay excluded even
            when only a single field was imported. */
-        const refreshFieldId = isPlaceholderFieldId(activeFieldId)
-          ? (
-              pendingOnboardingWatch.preferredFieldId ??
-              (pendingOnboardingWatch.fieldIds.length === 1
-                ? (pendingOnboardingWatch.fieldIds[0] ?? null)
-                : null)
-            )
-          : activeFieldId;
+        const refreshFieldId = resolvePreviewPostOnboardingFieldId({
+          activeFieldId,
+          preferredFieldId: pendingOnboardingWatch.preferredFieldId ?? null,
+        });
 
         if (!refreshFieldId) {
           setPendingOnboardingWatch(null);
@@ -1889,6 +1906,51 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     });
   }, [activeFieldId, fieldCacheRevision, fieldData, sidebarFields, workspaceId]);
 
+  const firstInsightAuditPayload = useMemo(
+    () =>
+      buildPreviewFirstInsightAuditPayload({
+        workspaceId,
+        fieldData,
+        workspaceFirstInsightSummary,
+      }),
+    [fieldData, workspaceFirstInsightSummary, workspaceId],
+  );
+
+  useEffect(() => {
+    if (!firstInsightAuditPayload || typeof window === 'undefined') {
+      return;
+    }
+
+    const sessionKey = buildPreviewFirstInsightSessionKey(firstInsightAuditPayload);
+    if (window.sessionStorage.getItem(sessionKey) === '1') {
+      return;
+    }
+
+    if (firstInsightTrackingInFlightRef.current.has(sessionKey)) {
+      return;
+    }
+
+    firstInsightTrackingInFlightRef.current.add(sessionKey);
+
+    void fetch('/api/preview/first-insight', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(firstInsightAuditPayload),
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`first-insight tracking failed: ${response.status}`);
+        }
+
+        window.sessionStorage.setItem(sessionKey, '1');
+      })
+      .catch(() => {
+        firstInsightTrackingInFlightRef.current.delete(sessionKey);
+      });
+  }, [firstInsightAuditPayload]);
+
   /* ── Global ⌘K shortcut ── */
   useEffect(() => {
     function handleGlobalKey(e: KeyboardEvent) {
@@ -1984,6 +2046,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       progressMessage={fieldOnboardingProgress.get(fieldData.fieldId)?.phaseLabel ?? null}
       prebuiltStages={prebuiltStagesByField.get(fieldData.fieldId) ?? null}
       workspaceFirstInsightSummary={workspaceFirstInsightSummary}
+      hydrationConfidence={hydrationConfidenceByField.get(fieldData.fieldId) ?? null}
     />
   );
 

@@ -93,7 +93,6 @@ export type CommitHydrationCoverage = {
   hasRasterObservation: boolean;
   hasMoistureSnapshot: boolean;
 };
-
 /** Mirrors FieldHydrationSummary from ServerServices (subset used by frontend). */
 export type CommitFieldHydrationSummary = {
   fieldId: string;

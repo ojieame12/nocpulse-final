@@ -3,15 +3,11 @@ import type { FieldBoundaryPreviewRenderModel } from "@fieldpulse/map/server";
 import { RequestContextError } from "../../server/runtime/resolveRequestContext";
 import { getWebServerRuntime } from "../../server/runtime/getWebServerRuntime";
 import { resolveServerComponentActorContext } from "../../server/runtime/resolveServerComponentActorContext";
-
-type PreviewWorkspaceSelection = {
-  id: string;
-  slug: string;
-};
-
-type PreviewFieldSelection = {
-  id: string;
-};
+import {
+  resolvePreferredPreviewWorkspaceId,
+  resolvePreviewFieldId,
+  type PreviewFieldSelection,
+} from "./resolvePreviewFieldId";
 
 type PreviewFieldSelectionResult =
   | { status: "no-runtime" }
@@ -111,6 +107,7 @@ export async function resolvePreviewFieldSelection(
 
   const selectedFieldId = resolvePreviewFieldId(
     fields,
+    preferredWorkspaceId,
     primaryField.id,
     requestedFieldId,
   );
@@ -121,21 +118,4 @@ export async function resolvePreviewFieldSelection(
     selectedFieldId,
     workspaceFieldFeatures,
   };
-}
-
-export function resolvePreferredPreviewWorkspaceId(
-  workspaces: readonly PreviewWorkspaceSelection[],
-  fallbackWorkspaceId: string,
-) {
-  return fallbackWorkspaceId;
-}
-
-export function resolvePreviewFieldId(
-  fields: readonly PreviewFieldSelection[],
-  primaryFieldId: string,
-  requestedFieldId?: string,
-) {
-  return fields.some((field) => field.id === requestedFieldId)
-    ? requestedFieldId!
-    : primaryFieldId;
 }
