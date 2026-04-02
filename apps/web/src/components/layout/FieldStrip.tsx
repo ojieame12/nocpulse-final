@@ -278,7 +278,7 @@ export interface FieldStripProps {
   onSearchOpen?: () => void;
   onboardingProgress?: ReadonlyMap<string, FieldOnboardingStatus>;
   onFieldRename?: (fieldId: string, newName: string) => void;
-  onFieldDelete?: (fieldId: string) => void;
+  onFieldArchive?: (fieldId: string) => void;
   onFieldEdit?: (fieldId: string) => void;
   /** Base URL for report export, e.g. "/api/fields". fieldId is appended. */
   exportBaseUrl?: string;
@@ -296,7 +296,7 @@ export function FieldStrip({
   onSearchOpen,
   onboardingProgress,
   onFieldRename,
-  onFieldDelete,
+  onFieldArchive,
   onFieldEdit,
   exportBaseUrl = "/api/fields",
   workspaceId,
@@ -1066,13 +1066,13 @@ export function FieldStrip({
           >
             {deleteConfirmFieldId === menuField.id ? (
               <div className="field-strip__kebab-confirm">
-                <span className="field-strip__kebab-confirm-text">Delete this field?</span>
+                <span className="field-strip__kebab-confirm-text">Archive this field?</span>
                 <div className="field-strip__kebab-confirm-actions">
                   <button
                     type="button"
                     className="field-strip__kebab-confirm-btn field-strip__kebab-confirm-btn--danger"
-                    onClick={() => { onFieldDelete?.(menuField.id); setKebabFieldId(null); setKebabPos(null); setDeleteConfirmFieldId(null); }}
-                  >Delete</button>
+                    onClick={() => { onFieldArchive?.(menuField.id); setKebabFieldId(null); setKebabPos(null); setDeleteConfirmFieldId(null); }}
+                  >Archive</button>
                   <button
                     type="button"
                     className="field-strip__kebab-confirm-btn"
@@ -1104,7 +1104,7 @@ export function FieldStrip({
                 <div className="field-strip__kebab-separator" />
                 <button type="button" className="field-strip__kebab-item field-strip__kebab-item--danger" onClick={() => setDeleteConfirmFieldId(menuField.id)}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                  Delete
+                  Archive
                 </button>
               </>
             )}

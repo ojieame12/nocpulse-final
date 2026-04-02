@@ -57,7 +57,8 @@ export interface EditFieldPanelProps {
     fieldId: string,
     crop: { cropName: string; variety?: string; seedingDate?: string; growthStage?: string | null },
   ) => Promise<boolean> | boolean | void;
-  onDelete?: (fieldId: string) => void;
+  onArchive?: (fieldId: string) => void;
+  onDeletePermanently?: (fieldId: string) => void;
 }
 
 /* ── Inline editable field ── */
@@ -167,9 +168,10 @@ export function EditFieldPanel({
   onRename,
   onUpdateLld,
   onUpdateCrop,
-  onDelete,
+  onArchive,
+  onDeletePermanently,
 }: EditFieldPanelProps) {
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [dangerIntent, setDangerIntent] = useState<"archive" | "delete" | null>(null);
   const [localName, setLocalName] = useState(fieldName);
   const normalizedGrowthStage = normalizeGrowthStageValue(growthStageKey);
   const [selectedSeedingDate, setSelectedSeedingDate] = useState(seedingDate ?? "");
@@ -184,7 +186,7 @@ export function EditFieldPanel({
 
   useEffect(() => {
     setLocalName(fieldName);
-    setDeleteConfirm(false);
+    setDangerIntent(null);
   }, [fieldId, fieldName]);
 
   useEffect(() => {
@@ -376,44 +378,87 @@ export function EditFieldPanel({
         </div>
 
         {/* ── Danger zone ── */}
-        {onDelete && (
+        {(onArchive || onDeletePermanently) && (
           <div className="fdp-card fdp-card--span-full fdp-edit__danger-card">
             <div className="fdp-edit__card-header fdp-edit__card-header--danger">
               <Trash2 size={13} strokeWidth={2.2} />
               <span className="fdp-lbl" style={{ letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: 10.5 }}>Danger Zone</span>
             </div>
-            {deleteConfirm ? (
+            <div className="fdp-edit__danger-summary">
+              <p className="fdp-edit__danger-text">
+                Archive removes <strong>{localName}</strong> from the active workspace view without immediately wiping the underlying record.
+              </p>
+              <ul className="fdp-edit__danger-list">
+                <li>The field disappears from the strip, map, reports, alerts, and notes.</li>
+                <li>Archive keeps the field row and linked agronomic history in the database.</li>
+                <li>Permanent delete also removes the field record and detaches import batch history.</li>
+              </ul>
+            </div>
+            {dangerIntent ? (
               <div className="fdp-edit__danger-confirm">
                 <p className="fdp-edit__danger-text">
-                  Permanently remove <strong>{localName}</strong> and all associated data. This cannot be undone.
+                  {dangerIntent === "archive" ? (
+                    <>
+                      Archive <strong>{localName}</strong> and remove it from the active workspace flow.
+                    </>
+                  ) : (
+                    <>
+                      Permanently remove <strong>{localName}</strong> and all associated data. This cannot be undone.
+                    </>
+                  )}
                 </p>
                 <div className="fdp-edit__danger-btns">
-                  <button
-                    type="button"
-                    className="fdp-edit__danger-btn fdp-edit__danger-btn--confirm"
-                    onClick={() => onDelete(fieldId)}
-                  >
-                    <Trash2 size={11} />
-                    Delete permanently
-                  </button>
+                  {dangerIntent === "archive" ? (
+                    <button
+                      type="button"
+                      className="fdp-edit__danger-btn fdp-edit__danger-btn--archive"
+                      onClick={() => onArchive?.(fieldId)}
+                    >
+                      <Trash2 size={11} />
+                      Archive field
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="fdp-edit__danger-btn fdp-edit__danger-btn--confirm"
+                      onClick={() => onDeletePermanently?.(fieldId)}
+                    >
+                      <Trash2 size={11} />
+                      Delete permanently
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="fdp-edit__danger-btn fdp-edit__danger-btn--cancel"
-                    onClick={() => setDeleteConfirm(false)}
+                    onClick={() => setDangerIntent(null)}
                   >
                     Cancel
                   </button>
                 </div>
               </div>
             ) : (
-              <button
-                type="button"
-                className="fdp-edit__danger-btn fdp-edit__danger-btn--trigger"
-                onClick={() => setDeleteConfirm(true)}
-              >
-                <Trash2 size={11} />
-                Delete this field…
-              </button>
+              <div className="fdp-edit__danger-btns">
+                {onArchive && (
+                  <button
+                    type="button"
+                    className="fdp-edit__danger-btn fdp-edit__danger-btn--archive-trigger"
+                    onClick={() => setDangerIntent("archive")}
+                  >
+                    <Trash2 size={11} />
+                    Archive this field…
+                  </button>
+                )}
+                {onDeletePermanently && (
+                  <button
+                    type="button"
+                    className="fdp-edit__danger-btn fdp-edit__danger-btn--trigger"
+                    onClick={() => setDangerIntent("delete")}
+                  >
+                    <Trash2 size={11} />
+                    Delete permanently…
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

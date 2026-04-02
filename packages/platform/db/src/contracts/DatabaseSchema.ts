@@ -248,6 +248,8 @@ export type DatabaseSchema = {
           boundary: JsonValue;
           label_point: JsonValue;
           created_by: string;
+          archived_at: string | null;
+          archived_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -259,6 +261,8 @@ export type DatabaseSchema = {
           legal_land_description?: string | null;
           boundary: JsonValue;
           created_by: string;
+          archived_at?: string | null;
+          archived_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -268,6 +272,8 @@ export type DatabaseSchema = {
           legal_land_description: string | null;
           boundary: JsonValue;
           created_by: string;
+          archived_at: string | null;
+          archived_by: string | null;
           created_at: string;
           updated_at: string;
         }>;

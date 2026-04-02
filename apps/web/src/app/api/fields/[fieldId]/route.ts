@@ -171,6 +171,14 @@ export async function DELETE(
     if (!canManageWorkspace(actor.role)) {
       return jsonError(403, "Manager access is required to delete fields.");
     }
+    const url = new URL(request.url);
+    const rawMode = url.searchParams.get("mode");
+    const mode = rawMode ?? "archive";
+
+    if (mode !== "archive" && mode !== "permanent") {
+      return jsonError(400, "Delete mode must be archive or permanent.");
+    }
+
     const { fieldId } = await context.params;
     const rateLimitResponse = await enforceRouteRateLimits({
       runtime,
@@ -196,6 +204,25 @@ export async function DELETE(
       return rateLimitResponse;
     }
 
+    if (mode === "archive") {
+      await runtime.services.fields.archiveField({
+        workspaceId: actor.workspaceId,
+        fieldId,
+        actorUserId: actor.userId,
+      });
+      await logAuditEvent({
+        runtime,
+        action: "field.archived",
+        actorUserId: actor.userId,
+        workspaceId: actor.workspaceId,
+        resourceType: "field",
+        resourceId: fieldId,
+        route: "/api/fields/[fieldId]",
+      });
+
+      return jsonOk({ archived: true, mode });
+    }
+
     await runtime.services.fields.deleteField({
       workspaceId: actor.workspaceId,
       fieldId,
@@ -210,7 +237,7 @@ export async function DELETE(
       route: "/api/fields/[fieldId]",
     });
 
-    return jsonOk({ deleted: true });
+    return jsonOk({ deleted: true, mode });
   } catch (error) {
     if (error instanceof RequestContextError) {
       return jsonError(error.status, error.message);
