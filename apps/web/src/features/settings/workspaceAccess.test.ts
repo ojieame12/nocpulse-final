@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  canManageWorkspace,
   canChangeWorkspaceMemberRole,
   canRemoveWorkspaceMember,
   formatWorkspaceRoleLabel,
@@ -47,6 +48,13 @@ test("isValidWorkspaceAccessEmail rejects malformed addresses", () => {
 test("formatWorkspaceRoleLabel returns a readable label", () => {
   assert.equal(formatWorkspaceRoleLabel("viewer"), "Viewer");
   assert.equal(formatWorkspaceRoleLabel("owner"), "Owner");
+});
+
+test("canManageWorkspace returns true only for owner and manager roles", () => {
+  assert.equal(canManageWorkspace("owner"), true);
+  assert.equal(canManageWorkspace("manager"), true);
+  assert.equal(canManageWorkspace("member"), false);
+  assert.equal(canManageWorkspace("viewer"), false);
 });
 
 test("owners can change any non-owner member role", () => {

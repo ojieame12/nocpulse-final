@@ -55,6 +55,7 @@ import {
   buildWorkspaceFirstInsightSummary,
   type WorkspaceFirstInsightFieldSnapshot,
 } from '../../features/fields/workspaceFirstInsightSummary';
+import { canManageWorkspace } from '../../features/settings/workspaceAccess';
 import type { FieldCropProps as LiveCropPanelProps } from '../../features/fields/tabs/CropTab';
 import {
   buildPreviewFirstInsightAuditPayload,
@@ -96,9 +97,21 @@ export type PreviewShellViewer = {
   displayName: string;
   email: string | null;
   initials: string;
+  workspaceRole: "owner" | "manager" | "member" | "viewer";
   workspaceRoleLabel: string;
   workspaceName: string | null;
 };
+
+export function canManagePreviewFieldMutations(
+  viewer: PreviewShellViewer | null | undefined,
+  isGuestSession: boolean,
+) {
+  if (isGuestSession || !viewer) {
+    return false;
+  }
+
+  return canManageWorkspace(viewer.workspaceRole);
+}
 
 export type PreviewShellProps = {
   initial: FieldViewModel;
@@ -724,6 +737,10 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     initial.mapPreview.agronomicSurface ?? null,
   );
   const isGuestSession = guestSession != null;
+  const canManageFieldMutations = canManagePreviewFieldMutations(
+    viewer,
+    isGuestSession,
+  );
   const guestBadgeLabel = guestSession
     ? `Guest · ${formatGuestRemaining(guestSession.expiresAt, guestNow)}`
     : null;
@@ -2182,7 +2199,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
           />
         );
       case 'edit-field':
-        return (
+        return canManageFieldMutations ? (
           <EditFieldPanel
             fieldId={activeFieldId}
             fieldName={fieldData.fieldName}
@@ -2201,6 +2218,8 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             onUpdateCrop={handleFieldCropUpdate}
             onDelete={handleFieldDelete}
           />
+        ) : (
+          renderCanonicalDetailPanel()
         );
       case 'scout':
         return <ScoutReportPanel onClose={() => switchPanel('detail')} />;
@@ -2368,12 +2387,12 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
               }
               onSearchOpen={isGuestSession ? undefined : () => setPaletteOpen(true)}
               onboardingProgress={fieldOnboardingProgress}
-              onFieldRename={handleFieldRename}
-              onFieldDelete={handleFieldDelete}
-              onFieldEdit={(fieldId) => {
+              onFieldRename={canManageFieldMutations ? handleFieldRename : undefined}
+              onFieldDelete={canManageFieldMutations ? handleFieldDelete : undefined}
+              onFieldEdit={canManageFieldMutations ? ((fieldId) => {
                 handleFieldSelect(fieldId);
                 switchPanel('edit-field');
-              }}
+              }) : undefined}
               workspaceId={fieldData.workspaceId}
             />
 
