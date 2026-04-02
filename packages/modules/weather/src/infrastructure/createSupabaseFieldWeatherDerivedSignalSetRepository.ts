@@ -35,10 +35,28 @@ function toProvenance(value: JsonValue): FieldWeatherDerivedSignalSetProvenance 
       typeof value.forecastSampleCount72h === "number"
         ? value.forecastSampleCount72h
         : undefined,
+    forecastSampleCount168h:
+      typeof value.forecastSampleCount168h === "number"
+        ? value.forecastSampleCount168h
+        : undefined,
+    observationSampleCount72h:
+      typeof value.observationSampleCount72h === "number"
+        ? value.observationSampleCount72h
+        : undefined,
+    observationSampleCount168h:
+      typeof value.observationSampleCount168h === "number"
+        ? value.observationSampleCount168h
+        : undefined,
+    soilTempThresholdC:
+      typeof value.soilTempThresholdC === "number"
+        ? value.soilTempThresholdC
+        : undefined,
     windowHours24:
       typeof value.windowHours24 === "number" ? value.windowHours24 : undefined,
     windowHours72:
       typeof value.windowHours72 === "number" ? value.windowHours72 : undefined,
+    windowHours168:
+      typeof value.windowHours168 === "number" ? value.windowHours168 : undefined,
   };
 }
 
@@ -75,6 +93,30 @@ function mapSignalSet(
       row.frost_risk_min_temp_c == null
         ? null
         : coerceNumber(row.frost_risk_min_temp_c),
+    frostRiskMinTempC7d:
+      row.frost_risk_min_temp_c_7d == null
+        ? null
+        : coerceNumber(row.frost_risk_min_temp_c_7d),
+    frostRiskNights7d:
+      row.frost_risk_nights_7d == null
+        ? null
+        : coerceNumber(row.frost_risk_nights_7d),
+    recentPrecipTotal72hMm:
+      row.recent_precip_total_72h_mm == null
+        ? null
+        : coerceNumber(row.recent_precip_total_72h_mm),
+    freezeThawCycles7d:
+      row.freeze_thaw_cycles_7d == null
+        ? null
+        : coerceNumber(row.freeze_thaw_cycles_7d),
+    soilTemp6cmCurrentC:
+      row.soil_temp_6cm_current_c == null
+        ? null
+        : coerceNumber(row.soil_temp_6cm_current_c),
+    soilTemp6cmSustainedDays:
+      row.soil_temp_6cm_sustained_days == null
+        ? null
+        : coerceNumber(row.soil_temp_6cm_sustained_days),
     gdd24h: row.gdd_24h == null ? null : coerceNumber(row.gdd_24h),
     gdd72h: row.gdd_72h == null ? null : coerceNumber(row.gdd_72h),
     gddBaseC: coerceNumber(row.gdd_base_c),
@@ -126,6 +168,12 @@ export function createSupabaseFieldWeatherDerivedSignalSetRepository(
             leaf_wet_hours_24h: input.leafWetHours24h ?? 0,
             spray_window_count_24h: input.sprayWindowCount24h ?? 0,
             frost_risk_min_temp_c: input.frostRiskMinTempC ?? null,
+            frost_risk_min_temp_c_7d: input.frostRiskMinTempC7d ?? null,
+            frost_risk_nights_7d: input.frostRiskNights7d ?? null,
+            recent_precip_total_72h_mm: input.recentPrecipTotal72hMm ?? null,
+            freeze_thaw_cycles_7d: input.freezeThawCycles7d ?? null,
+            soil_temp_6cm_current_c: input.soilTemp6cmCurrentC ?? null,
+            soil_temp_6cm_sustained_days: input.soilTemp6cmSustainedDays ?? null,
             gdd_24h: input.gdd24h ?? null,
             gdd_72h: input.gdd72h ?? null,
             gdd_base_c: input.gddBaseC ?? 5,

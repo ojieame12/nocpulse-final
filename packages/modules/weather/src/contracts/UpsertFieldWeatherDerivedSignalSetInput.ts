@@ -17,6 +17,12 @@ export type UpsertFieldWeatherDerivedSignalSetInput = WorkspaceScoped & {
   leafWetHours24h?: number;
   sprayWindowCount24h?: number;
   frostRiskMinTempC?: number | null;
+  frostRiskMinTempC7d?: number | null;
+  frostRiskNights7d?: number | null;
+  recentPrecipTotal72hMm?: number | null;
+  freezeThawCycles7d?: number | null;
+  soilTemp6cmCurrentC?: number | null;
+  soilTemp6cmSustainedDays?: number | null;
   gdd24h?: number | null;
   gdd72h?: number | null;
   gddBaseC?: number;

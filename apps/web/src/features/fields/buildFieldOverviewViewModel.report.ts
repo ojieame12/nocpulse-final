@@ -29,6 +29,10 @@ import {
   resolveCropStagePresentation,
   resolveOpticalSeasonality,
 } from "./buildFieldOverviewViewModel.cropSignals";
+import {
+  isSpringSeedingContext,
+  resolveSoilTempPresentation,
+} from "./buildFieldOverviewViewModel.spring";
 
 function formatSignedMillimetres(value: number | null | undefined) {
   if (value == null) {
@@ -175,7 +179,26 @@ export function buildReportProps(
   );
   const rootMoistureAvg = moisture?.rootZoneAvgPct ?? null;
   const surfaceMoistureAvg = moisture?.surfaceAvgPct ?? null;
-  const frostMinTemp = weatherSignals?.frostRiskMinTempC ?? null;
+  const frostMinTemp =
+    weatherSignals?.frostRiskMinTempC7d ??
+    weatherSignals?.frostRiskMinTempC ??
+    null;
+  const frostRiskNights7d = weatherSignals?.frostRiskNights7d ?? null;
+  const frostLabel =
+    weatherSignals?.frostRiskMinTempC7d != null
+      ? frostRiskNights7d != null && frostRiskNights7d > 0
+        ? `Frost Min 7d (${frostRiskNights7d}n)`
+        : "Frost Min 7d"
+      : "Frost Min";
+  const springSeedingContext = isSpringSeedingContext(cropStagePresentation);
+  const soilTempPresentation = resolveSoilTempPresentation({
+    soilTemp6cmCurrentC:
+      weatherSignals?.soilTemp6cmCurrentC ??
+      obs?.soilTemperature6cmC ??
+      null,
+    soilTemp6cmSustainedDays: weatherSignals?.soilTemp6cmSustainedDays ?? null,
+    thresholdC: weatherSignals?.provenance?.soilTempThresholdC ?? null,
+  });
   const peakVpd = weatherSignals?.peakForecastVpdKpa24h ?? null;
   const waterBalance72h = weatherSignals?.netWaterBalance72hMm ?? null;
 
@@ -211,8 +234,16 @@ export function buildReportProps(
     },
     {
       iconKey: "soil-moisture" as ReadingIconKey,
-      label: "Surface Moisture",
-      value: obs?.soilMoisturePct != null ? `${obs.soilMoisturePct.toFixed(1)}%` : "—",
+      label:
+        springSeedingContext && soilTempPresentation != null
+          ? "Soil @ 6 cm"
+          : "Surface Moisture",
+      value:
+        springSeedingContext && soilTempPresentation != null
+          ? soilTempPresentation.value
+          : obs?.soilMoisturePct != null
+            ? `${obs.soilMoisturePct.toFixed(1)}%`
+            : "—",
       sourceTag: weatherSourceTag,
     },
     {
@@ -421,7 +452,7 @@ export function buildReportProps(
           : 0,
     },
     {
-      label: "Frost Min",
+      label: frostLabel,
       value: frostMinTemp != null ? `${frostMinTemp.toFixed(1)}°C` : "—",
       rangeLow: `${resolvedRules.weatherRisk.frost.killTempC}°C`,
       rangeHigh: `>${resolvedRules.weatherRisk.frost.damageTempC}°C`,

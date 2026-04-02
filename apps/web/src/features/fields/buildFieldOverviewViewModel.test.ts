@@ -769,6 +769,46 @@ test("buildActionProps returns watchlist state for heuristic-only dryness signal
   assert.equal(action.signalCount, 1);
 });
 
+test("buildActionProps prefers 7-day frost signals when they are available", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    summary: {
+      ...createBaseReadModel().summary,
+      activeAlertCount: 0,
+      activeFindingCount: 0,
+      activeTrackedZoneCount: 0,
+    },
+    findings: [],
+    alerts: [],
+    zones: {
+      zones: [],
+      newZoneCount: 0,
+      persistentZoneCount: 0,
+      recoveringZoneCount: 0,
+    },
+    weather: {
+      signals: {
+        frostRiskMinTempC: 5.4,
+        frostRiskMinTempC7d: -1.8,
+        frostRiskNights7d: 2,
+        updatedAt: "2026-03-29T10:15:00.000Z",
+        sourceKey: "open-meteo:derived",
+      },
+    },
+  };
+
+  const action = buildActionProps(readModel, "North Quarter Demo");
+
+  assert.equal(action.intelligenceState, "watchlist");
+  assert.equal(action.topRiskTitle, "Frost watch next 7d");
+  assert.equal(action.urgency, "Watch");
+  assert.match(action.recommendation, /low-lying and exposed parts of the field/i);
+  assert.equal(action.signalCount, 1);
+  assert.match(action.signals[0]?.label ?? "", /Frost min -1.8°C/);
+  assert.match(action.signals[0]?.detail ?? "", /2 frost-risk nights next 7d/i);
+  assert.match(action.questions[1]?.answer ?? "", /2 frost-risk nights/i);
+});
+
 test("buildActionProps deduplicates active signals while preserving active intelligence counts", () => {
   const readModel = {
     ...createBaseReadModel(),

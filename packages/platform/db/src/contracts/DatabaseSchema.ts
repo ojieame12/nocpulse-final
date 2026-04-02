@@ -372,6 +372,7 @@ export type DatabaseSchema = {
           wind_speed_kph: number | string;
           relative_humidity_pct: number | string | null;
           soil_moisture_pct: number | string | null;
+          soil_temperature_6cm_c: number | string | null;
           evapotranspiration_mm: number | string | null;
           provenance: JsonValue;
           created_at: string;
@@ -389,6 +390,7 @@ export type DatabaseSchema = {
           wind_speed_kph?: number | string;
           relative_humidity_pct?: number | string | null;
           soil_moisture_pct?: number | string | null;
+          soil_temperature_6cm_c?: number | string | null;
           evapotranspiration_mm?: number | string | null;
           provenance?: JsonValue;
           created_at?: string;
@@ -403,6 +405,7 @@ export type DatabaseSchema = {
           wind_speed_kph: number | string;
           relative_humidity_pct: number | string | null;
           soil_moisture_pct: number | string | null;
+          soil_temperature_6cm_c: number | string | null;
           evapotranspiration_mm: number | string | null;
           provenance: JsonValue;
           created_at: string;
@@ -482,6 +485,12 @@ export type DatabaseSchema = {
           leaf_wet_hours_24h: number;
           spray_window_count_24h: number;
           frost_risk_min_temp_c: number | string | null;
+          frost_risk_min_temp_c_7d: number | string | null;
+          frost_risk_nights_7d: number | string | null;
+          recent_precip_total_72h_mm: number | string | null;
+          freeze_thaw_cycles_7d: number | string | null;
+          soil_temp_6cm_current_c: number | string | null;
+          soil_temp_6cm_sustained_days: number | string | null;
           gdd_24h: number | string | null;
           gdd_72h: number | string | null;
           gdd_base_c: number | string;
@@ -506,6 +515,12 @@ export type DatabaseSchema = {
           leaf_wet_hours_24h?: number;
           spray_window_count_24h?: number;
           frost_risk_min_temp_c?: number | string | null;
+          frost_risk_min_temp_c_7d?: number | string | null;
+          frost_risk_nights_7d?: number | string | null;
+          recent_precip_total_72h_mm?: number | string | null;
+          freeze_thaw_cycles_7d?: number | string | null;
+          soil_temp_6cm_current_c?: number | string | null;
+          soil_temp_6cm_sustained_days?: number | string | null;
           gdd_24h?: number | string | null;
           gdd_72h?: number | string | null;
           gdd_base_c?: number | string;
@@ -527,6 +542,12 @@ export type DatabaseSchema = {
           leaf_wet_hours_24h: number;
           spray_window_count_24h: number;
           frost_risk_min_temp_c: number | string | null;
+          frost_risk_min_temp_c_7d: number | string | null;
+          frost_risk_nights_7d: number | string | null;
+          recent_precip_total_72h_mm: number | string | null;
+          freeze_thaw_cycles_7d: number | string | null;
+          soil_temp_6cm_current_c: number | string | null;
+          soil_temp_6cm_sustained_days: number | string | null;
           gdd_24h: number | string | null;
           gdd_72h: number | string | null;
           gdd_base_c: number | string;

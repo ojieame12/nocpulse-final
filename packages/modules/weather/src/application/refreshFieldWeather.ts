@@ -15,6 +15,11 @@ import type { WeatherProviderClient } from "../contracts/WeatherProviderClient";
 import { deriveWeatherSignalSet } from "./deriveWeatherSignalSet";
 
 type RefreshFieldWeatherObservationRepository = {
+  listRecentByField(
+    workspaceId: string,
+    fieldId: string,
+    limit?: number,
+  ): Promise<readonly FieldWeatherObservation[]>;
   upsertObservation(
     input: UpsertFieldWeatherObservationInput,
   ): Promise<FieldWeatherObservation>;
@@ -61,9 +66,15 @@ export async function refreshFieldWeather(
     windSpeedKph: fetched.observation.windSpeedKph,
     relativeHumidityPct: fetched.observation.relativeHumidityPct ?? null,
     soilMoisturePct: fetched.observation.soilMoisturePct ?? null,
+    soilTemperature6cmC: fetched.observation.soilTemperature6cmC ?? null,
     evapotranspirationMm: fetched.observation.evapotranspirationMm ?? null,
     provenance: fetched.observation.provenance,
   });
+  const recentObservations = await input.observationRepository.listRecentByField(
+    input.weather.workspaceId,
+    input.weather.fieldId,
+    168,
+  );
   const forecasts = await input.forecastRepository.replaceForecastSet({
     workspaceId: input.weather.workspaceId,
     fieldId: input.weather.fieldId,
@@ -77,8 +88,10 @@ export async function refreshFieldWeather(
       workspaceId: input.weather.workspaceId,
       fieldId: input.weather.fieldId,
       observation,
+      recentObservations,
       forecasts,
       gddBaseC: input.weather.gddBaseC,
+      soilTempThresholdC: input.weather.soilTempThresholdC,
     }),
   );
 

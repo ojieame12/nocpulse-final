@@ -12,6 +12,11 @@ import {
   resolveOpticalSeasonality,
   titleCaseStage,
 } from "./buildFieldOverviewViewModel.cropSignals";
+import {
+  isSpringSeedingContext,
+  resolveFieldAccessPresentation,
+  resolveSoilTempPresentation,
+} from "./buildFieldOverviewViewModel.spring";
 
 function metricTone(input: "danger" | "warning" | "positive" | "info") {
   switch (input) {
@@ -47,6 +52,7 @@ export function buildCropProps(rm: any): FieldCropProps {
   const cropContext = rm.cropContext ?? null;
   const moisture = rm.moisture ?? null;
   const weatherSignals = rm.weather?.signals ?? null;
+  const latestObservation = rm.weather?.profile?.latestObservation ?? null;
   const latestOpticalRaster = rm.imagery?.latestOpticalRasterObservation ?? null;
   const latestOpticalRasterCells = latestOpticalRaster?.cells ?? [];
   const latestOpticalCapture = rm.imagery?.latestOpticalCapture ?? null;
@@ -113,7 +119,27 @@ export function buildCropProps(rm: any): FieldCropProps {
     ndreAvg,
     hasOpticalRaster: latestOpticalRaster != null,
   });
-  const frostMinTemp = weatherSignals?.frostRiskMinTempC ?? null;
+  const frostMinTemp =
+    weatherSignals?.frostRiskMinTempC7d ??
+    weatherSignals?.frostRiskMinTempC ??
+    null;
+  const frostRiskNights7d = weatherSignals?.frostRiskNights7d ?? null;
+  const frostHorizonLabel =
+    weatherSignals?.frostRiskMinTempC7d != null ? "next 7d" : "next 24h";
+  const soilTempPresentation = resolveSoilTempPresentation({
+    soilTemp6cmCurrentC:
+      weatherSignals?.soilTemp6cmCurrentC ??
+      latestObservation?.soilTemperature6cmC ??
+      null,
+    soilTemp6cmSustainedDays: weatherSignals?.soilTemp6cmSustainedDays ?? null,
+    thresholdC: weatherSignals?.provenance?.soilTempThresholdC ?? null,
+  });
+  const fieldAccessPresentation = resolveFieldAccessPresentation({
+    surfaceMoisturePct: latestObservation?.soilMoisturePct ?? null,
+    recentPrecipTotal72hMm: weatherSignals?.recentPrecipTotal72hMm ?? null,
+    freezeThawCycles7d: weatherSignals?.freezeThawCycles7d ?? null,
+  });
+  const springSeedingContext = isSpringSeedingContext(cropStagePresentation);
   const peakVpd = weatherSignals?.peakForecastVpdKpa24h ?? null;
   const waterBalance24h = weatherSignals?.netWaterBalance24hMm ?? null;
   const waterBalance72h = weatherSignals?.netWaterBalance72hMm ?? null;
@@ -194,10 +220,12 @@ export function buildCropProps(rm: any): FieldCropProps {
         frostMinTemp == null
           ? "No forecast data available"
           : frostMinTemp <= resolvedRules.weatherRisk.frost.killTempC
-            ? "Kill temperature forecast — protect crop immediately"
+            ? `Kill temperature forecast ${frostHorizonLabel} — protect crop immediately`
             : frostMinTemp <= resolvedRules.weatherRisk.frost.damageTempC
-              ? "Damage risk — monitor overnight lows"
-              : "Above frost damage threshold",
+              ? frostRiskNights7d != null && frostRiskNights7d > 0
+                ? `${frostRiskNights7d} frost night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel} — monitor lows closely`
+                : `Damage risk ${frostHorizonLabel} — monitor overnight lows`
+              : `Above frost damage threshold ${frostHorizonLabel}`,
       status:
         frostMinTemp == null
           ? "warn"
@@ -489,7 +517,9 @@ export function buildCropProps(rm: any): FieldCropProps {
         sub:
           frostMinTemp == null
             ? "No frost signal available"
-            : `Min temp ${frostMinTemp.toFixed(1)}°C`,
+            : frostRiskNights7d != null && frostRiskNights7d > 0
+              ? `Min ${frostMinTemp.toFixed(1)}°C · ${frostRiskNights7d} night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}`
+              : `Min ${frostMinTemp.toFixed(1)}°C ${frostHorizonLabel}`,
         ...frostTone,
       },
       {
@@ -502,22 +532,46 @@ export function buildCropProps(rm: any): FieldCropProps {
         ...vpdTone,
       },
       {
-        label: "GDD 72H",
-        value: weatherSignals?.gdd72h != null ? weatherSignals.gdd72h.toFixed(1) : "No forecast",
+        label:
+          springSeedingContext && soilTempPresentation != null
+            ? soilTempPresentation.label
+            : "GDD 72H",
+        value:
+          springSeedingContext && soilTempPresentation != null
+            ? soilTempPresentation.value
+            : weatherSignals?.gdd72h != null
+              ? weatherSignals.gdd72h.toFixed(1)
+              : "No forecast",
         sub:
-          weatherSignals?.gdd72h != null
-            ? `Base ${resolvedRules.crop.gddBaseC}°C`
-            : "Weather still initializing",
-        ...gddTone,
+          springSeedingContext && soilTempPresentation != null
+            ? soilTempPresentation.sub
+            : weatherSignals?.gdd72h != null
+              ? `Base ${resolvedRules.crop.gddBaseC}°C`
+              : "Weather still initializing",
+        ...(springSeedingContext && soilTempPresentation != null
+          ? metricTone(soilTempPresentation.tone)
+          : gddTone),
       },
       {
-        label: "WATER BALANCE",
-        value: waterBalance72h != null ? `${waterBalance72h.toFixed(1)}mm` : "No forecast",
+        label:
+          springSeedingContext && fieldAccessPresentation != null
+            ? fieldAccessPresentation.label
+            : "WATER BALANCE",
+        value:
+          springSeedingContext && fieldAccessPresentation != null
+            ? fieldAccessPresentation.value
+            : waterBalance72h != null
+              ? `${waterBalance72h.toFixed(1)}mm`
+              : "No forecast",
         sub:
-          waterBalance72h != null
-            ? "72h forecast balance"
-            : "No forecast water balance yet",
-        ...waterTone,
+          springSeedingContext && fieldAccessPresentation != null
+            ? fieldAccessPresentation.sub
+            : waterBalance72h != null
+              ? "72h forecast balance"
+              : "No forecast water balance yet",
+        ...(springSeedingContext && fieldAccessPresentation != null
+          ? metricTone(fieldAccessPresentation.tone)
+          : waterTone),
       },
     ],
     diseaseRisks,

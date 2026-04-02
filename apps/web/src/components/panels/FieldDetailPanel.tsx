@@ -1093,8 +1093,12 @@ export function FieldDetailPanel({
   const atmosphericDemandTile =
     findCropFieldTile(crop, "CROP WATER DEMAND") ??
     findCropFieldTile(crop, "ATMOSPHERIC DEMAND");
-  const cropWaterBalanceTile = findCropFieldTile(crop, "WATER BALANCE");
-  const gdd72hTile = findCropFieldTile(crop, "GDD 72H");
+  const cropWaterBalanceTile =
+    findCropFieldTile(crop, "WATER BALANCE") ??
+    findCropFieldTile(crop, "FIELD ACCESS");
+  const gdd72hTile =
+    findCropFieldTile(crop, "GDD 72H") ??
+    findCropFieldTile(crop, "SOIL @ 6 CM");
   const providerLabel = findCropProvenanceValue(crop, "Provider");
   const lastCaptureLabel = findCropProvenanceValue(crop, "Last Capture");
   const cloudCoverLabel = findCropProvenanceValue(crop, "Cloud Cover");

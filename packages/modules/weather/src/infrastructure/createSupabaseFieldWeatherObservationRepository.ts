@@ -27,6 +27,8 @@ function toProvenance(value: JsonValue): FieldWeatherObservationProvenance {
   return {
     forecastModel:
       typeof value.forecastModel === "string" ? value.forecastModel : undefined,
+    weatherModel:
+      typeof value.weatherModel === "string" ? value.weatherModel : undefined,
     radarDataset:
       typeof value.radarDataset === "string" ? value.radarDataset : undefined,
     soilDataset:
@@ -55,6 +57,10 @@ function mapFieldWeatherObservation(
         : coerceNumber(row.relative_humidity_pct),
     soilMoisturePct:
       row.soil_moisture_pct == null ? null : coerceNumber(row.soil_moisture_pct),
+    soilTemperature6cmC:
+      row.soil_temperature_6cm_c == null
+        ? null
+        : coerceNumber(row.soil_temperature_6cm_c),
     evapotranspirationMm:
       row.evapotranspiration_mm == null
         ? null
@@ -102,6 +108,7 @@ export function createSupabaseFieldWeatherObservationRepository(
             wind_speed_kph: input.windSpeedKph,
             relative_humidity_pct: input.relativeHumidityPct ?? null,
             soil_moisture_pct: input.soilMoisturePct ?? null,
+            soil_temperature_6cm_c: input.soilTemperature6cmC ?? null,
             evapotranspiration_mm: input.evapotranspirationMm ?? null,
             provenance: input.provenance ?? {},
           },

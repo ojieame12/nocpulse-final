@@ -61,6 +61,7 @@ test("loadFieldWeatherProfile preserves the latest observation when forecast loo
           windSpeedKph: 14,
           relativeHumidityPct: 58,
           soilMoisturePct: 33,
+          soilTemperature6cmC: null,
           evapotranspirationMm: 0.5,
           provenance: {},
           createdAt: "2026-03-29T06:05:00.000Z",

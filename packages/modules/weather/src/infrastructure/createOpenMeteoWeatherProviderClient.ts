@@ -12,6 +12,7 @@ type OpenMeteoHourlyPayload = {
   precipitation_probability?: Array<number | null>;
   wind_speed_10m?: Array<number | null>;
   et0_fao_evapotranspiration?: Array<number | null>;
+  soil_temperature_6cm?: Array<number | null>;
   soil_moisture_3_to_9cm?: Array<number | null>;
   soil_moisture_9_to_27cm?: Array<number | null>;
   soil_moisture_27_to_81cm?: Array<number | null>;
@@ -42,6 +43,7 @@ const HOURLY_FIELDS = [
   "precipitation",
   "wind_speed_10m",
   "et0_fao_evapotranspiration",
+  "soil_temperature_6cm",
   "soil_moisture_3_to_9cm",
   "soil_moisture_9_to_27cm",
   "soil_moisture_27_to_81cm",
@@ -250,6 +252,7 @@ function toFieldWeatherResult(
     ),
     relativeHumidityPct: numberAt(hourly.relative_humidity_2m, observationIndex),
     soilMoisturePct: weightedSoilMoisturePct(hourly, observationIndex),
+    soilTemperature6cmC: numberAt(hourly.soil_temperature_6cm, observationIndex),
     evapotranspirationMm: numberAt(
       hourly.et0_fao_evapotranspiration,
       observationIndex,

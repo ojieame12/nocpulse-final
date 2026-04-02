@@ -19,6 +19,7 @@ function makePayload() {
       precipitation_probability: [10],
       wind_speed_10m: [8.3],
       et0_fao_evapotranspiration: [3.1],
+      soil_temperature_6cm: [11.4],
       soil_moisture_3_to_9cm: [0.25],
       soil_moisture_9_to_27cm: [0.22],
       soil_moisture_27_to_81cm: [0.18],
@@ -101,6 +102,18 @@ test("weatherModel stored in observation provenance when specified", async () =>
   );
 
   assert.equal(result.observation.provenance?.weatherModel, "era5_land");
+});
+
+test("observation includes soil temperature at 6 cm when Open-Meteo provides it", async () => {
+  const client = createOpenMeteoWeatherProviderClient();
+
+  const { capturedUrl, result } = await withMockFetch(makePayload(), () =>
+    client.fetchFieldWeather(INPUT),
+  );
+
+  const url = new URL(capturedUrl);
+  assert.match(url.searchParams.get("hourly") ?? "", /soil_temperature_6cm/);
+  assert.equal(result.observation.soilTemperature6cmC, 11.4);
 });
 
 test("provenance defaults weatherModel to 'best_match' when not specified", async () => {
