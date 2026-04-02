@@ -53,6 +53,7 @@
     "report:first-insight": "tsx src/previewFirstInsightReport.ts",
     "report:first-insight-funnel": "tsx src/firstInsightFunnelReport.ts",
     "report:first-insight-followup": "tsx src/firstInsightFollowupReport.ts",
+    "report:launch-visible-followup": "tsx src/launchVisibleFollowupReport.ts",
     "report:launch-visible": "tsx src/launchVisibleReadinessReport.ts",
     "hail:cadence": "tsx src/hailRefreshCadence.ts",
     "hail:report": "tsx src/hailRefreshReport.ts",

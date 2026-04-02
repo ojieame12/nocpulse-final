@@ -20,6 +20,7 @@
     "ops:field-quality": "corepack pnpm ops:env-sync >/dev/null && corepack pnpm -C ./apps/worker run report:quality",
     "ops:first-insight-funnel": "corepack pnpm ops:env-sync >/dev/null && corepack pnpm -C ./apps/worker run report:first-insight-funnel",
     "ops:first-insight-followup": "corepack pnpm ops:env-sync >/dev/null && corepack pnpm -C ./apps/worker run report:first-insight-followup",
+    "ops:launch-visible-followup": "corepack pnpm ops:env-sync >/dev/null && corepack pnpm -C ./apps/worker run report:launch-visible-followup",
     "ops:launch-visible": "corepack pnpm ops:env-sync >/dev/null && corepack pnpm -C ./apps/worker run report:launch-visible",
     "ops:readiness": "corepack pnpm ops:env-sync >/dev/null && corepack pnpm -C ./apps/worker run report:readiness",
     "ops:source-utilization": "corepack pnpm ops:env-sync >/dev/null && corepack pnpm -C ./apps/worker run sources:utilization",
