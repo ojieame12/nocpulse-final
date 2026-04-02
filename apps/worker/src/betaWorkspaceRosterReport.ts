@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import { createSupabaseDatabaseClient, type DatabaseSchema } from "@fieldpulse/platform-db";
 import { createServerRuntime } from "@fieldpulse/platform-runtime";
 import { buildFirstInsightFunnelReport } from "./firstInsightFunnelReport.shared";
+import { buildLaunchVisibleFollowupReport } from "./launchVisibleFollowupReport";
 import { buildLaunchVisibleReadinessReport } from "./launchVisibleReadinessReport";
 import { runFieldQualityAudit } from "./fieldQualityAudit";
 import { loadWorkerEnv } from "./runtime/loadEnv";
@@ -30,6 +31,14 @@ type WorkspaceSummary = {
   name: string | null;
 };
 
+type LaunchVisibleFollowupSummary = {
+  missingReadyFieldCount: number;
+  topBlockers: Array<{
+    reason: string;
+    count: number;
+  }>;
+};
+
 export type BetaWorkspaceRosterStatus =
   | "ready-for-outreach"
   | "needs-curation"
@@ -52,6 +61,7 @@ export type BetaWorkspaceRosterRow = {
   firstFieldActivityAt: string | null;
   firstInsightAt: string | null;
   launchVisible: LaunchVisibleSnapshot | null;
+  launchVisibleFollowup: LaunchVisibleFollowupSummary | null;
   status: BetaWorkspaceRosterStatus;
   nextAction: string;
 };
@@ -124,6 +134,7 @@ export function buildBetaWorkspaceRosterReport(input: {
   generatedAt?: string;
   funnel: ReturnType<typeof buildFirstInsightFunnelReport>;
   launchVisibleByWorkspaceId: ReadonlyMap<string, LaunchVisibleSnapshot>;
+  launchVisibleFollowupByWorkspaceId?: ReadonlyMap<string, LaunchVisibleFollowupSummary>;
   workspaceById?: ReadonlyMap<string, WorkspaceSummary>;
   includeTestRequests?: boolean;
   includeDuplicates?: boolean;
@@ -131,6 +142,10 @@ export function buildBetaWorkspaceRosterReport(input: {
   const allRows: BetaWorkspaceRosterRow[] = input.funnel.rows.map((row) => {
     const launchVisible =
       row.workspaceId != null ? input.launchVisibleByWorkspaceId.get(row.workspaceId) ?? null : null;
+    const launchVisibleFollowup =
+      row.workspaceId != null
+        ? input.launchVisibleFollowupByWorkspaceId?.get(row.workspaceId) ?? null
+        : null;
     const workspace =
       row.workspaceId != null ? input.workspaceById?.get(row.workspaceId) ?? null : null;
     const requestKind = classifyRequestKind(row.email);
@@ -168,6 +183,7 @@ export function buildBetaWorkspaceRosterReport(input: {
       firstFieldActivityAt: row.firstFieldActivityAt,
       firstInsightAt: row.firstInsightAt,
       launchVisible,
+      launchVisibleFollowup,
       status,
       nextAction,
     };
@@ -348,6 +364,7 @@ async function main() {
   ];
 
   const launchVisibleByWorkspaceId = new Map<string, LaunchVisibleSnapshot>();
+  const launchVisibleFollowupByWorkspaceId = new Map<string, LaunchVisibleFollowupSummary>();
   const workspaceById = new Map<string, WorkspaceSummary>();
   for (const workspaceId of workspaceIds) {
     const audit = await runFieldQualityAudit({
@@ -366,10 +383,15 @@ async function main() {
       workspaceName: audit.fields[0]?.workspaceName ?? null,
       fields: audit.fields,
     });
+    const followup = buildLaunchVisibleFollowupReport({ readiness: report });
     launchVisibleByWorkspaceId.set(workspaceId, {
       scopedFieldCount: report.scopedFieldCount,
       readyCount: report.readyCount,
       hasEnoughReadyFields: report.hasEnoughReadyFields,
+    });
+    launchVisibleFollowupByWorkspaceId.set(workspaceId, {
+      missingReadyFieldCount: followup.missingReadyFieldCount,
+      topBlockers: followup.topBlockers.slice(0, 3),
     });
   }
 
@@ -377,6 +399,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     funnel,
     launchVisibleByWorkspaceId,
+    launchVisibleFollowupByWorkspaceId,
     workspaceById,
     includeTestRequests,
     includeDuplicates,
@@ -408,6 +431,8 @@ async function main() {
       workspaceId: row.workspaceId ?? "",
       status: row.status,
       launchVisibleReady: row.launchVisible ? `${row.launchVisible.readyCount}/${row.launchVisible.scopedFieldCount}` : "",
+      missingReady: row.launchVisibleFollowup?.missingReadyFieldCount ?? "",
+      blockers: row.launchVisibleFollowup?.topBlockers.map((blocker) => blocker.reason).join(", ") ?? "",
       nextAction: row.nextAction,
     })),
   );
