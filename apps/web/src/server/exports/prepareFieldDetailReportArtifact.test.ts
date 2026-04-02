@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { prepareFieldDetailReportArtifact } from "./prepareFieldDetailReportArtifact";
 import type { FieldActionProps } from "../../components/panels/ActionTab";
+import type { FieldNotesProps } from "../../components/panels/NotesTab";
 import type { FieldReportProps } from "../../components/panels/ReportTab";
 import type { FieldSummaryProps } from "../../components/panels/SummaryTab";
 
@@ -105,10 +106,33 @@ function makeMinimalAction(overrides?: Partial<FieldActionProps>): FieldActionPr
   };
 }
 
+function makeMinimalNotes(overrides?: Partial<FieldNotesProps>): FieldNotesProps {
+  return {
+    workspaceId: "workspace-test",
+    fieldId: "field-test",
+    name: "Test Field",
+    lld: "NE-01-001-01-W4",
+    inspectionTarget: null,
+    entries: [
+      {
+        id: "note-1",
+        date: "2026-04-01T11:00:00.000Z",
+        text: "South edge is drying faster than the center of the field.",
+        status: "monitor",
+        zoneId: "zone-1",
+        cellKey: "C-14",
+      },
+    ],
+    submitUrl: "/api/fields/field-test/notes",
+    ...overrides,
+  };
+}
+
 function generatePdf(
   reportOverrides?: Partial<FieldReportProps> | null,
   summaryOverrides?: Partial<FieldSummaryProps> | null,
   actionOverrides?: Partial<FieldActionProps> | null,
+  notesOverrides?: Partial<FieldNotesProps> | null,
 ) {
   return prepareFieldDetailReportArtifact({
     fieldId: "field-test",
@@ -120,6 +144,10 @@ function generatePdf(
       actionOverrides === undefined || actionOverrides === null
         ? null
         : makeMinimalAction(actionOverrides),
+    notes:
+      notesOverrides === undefined || notesOverrides === null
+        ? null
+        : makeMinimalNotes(notesOverrides),
     generatedAt: "2026-04-01T12:00:00.000Z",
   });
 }
@@ -300,6 +328,7 @@ describe("full report integration", () => {
     report,
     summary,
     action: null,
+    notes: null,
     generatedAt: "2026-03-30T07:30:00.000Z",
   });
 
@@ -459,6 +488,36 @@ describe("truth and action sections", () => {
     assert.match(pdfText, /Inspect low-moisture zones before tomorrow morning/i);
     assert.match(pdfText, /Urgent today/i);
     assert.match(pdfText, /Moisture stress watch/i);
+  });
+
+  it("renders recent field notes when notes context is provided", () => {
+    const prepared = generatePdf(
+      undefined,
+      undefined,
+      null,
+      {
+        entries: [
+          {
+            id: "note-1",
+            date: "2026-04-02T09:30:00.000Z",
+            text: "Confirmed wilting in the southwest corner after the last warm spell.",
+            status: "confirmed",
+            zoneId: "zone-7",
+            cellKey: "A-12",
+          },
+          {
+            id: "note-2",
+            date: "2026-04-01T08:00:00.000Z",
+            text: "Low patch recovered after irrigation and no new stress is visible.",
+            status: "resolved",
+          },
+        ],
+      },
+    );
+    const pdfText = Buffer.from(prepared.bytes).toString("utf8");
+    assert.match(pdfText, /RECENT FIELD NOTES/i);
+    assert.match(pdfText, /Confirmed wilting in the southwest corner/i);
+    assert.match(pdfText, /Resolved/i);
   });
 });
 
@@ -756,6 +815,7 @@ describe("output metadata", () => {
       report: makeMinimalReport(),
       summary: makeMinimalSummary(),
       action: null,
+      notes: null,
       generatedAt: "2026-04-01T12:00:00.000Z",
     });
     assert.equal(prepared.contentType, "application/pdf");
@@ -770,6 +830,7 @@ describe("output metadata", () => {
       report: makeMinimalReport(),
       summary: makeMinimalSummary(),
       action: null,
+      notes: null,
       generatedAt: "2026-04-01T00:00:00.000Z",
     });
     assert.match(prepared.metadata.artifactKey, /detail-reports\//);

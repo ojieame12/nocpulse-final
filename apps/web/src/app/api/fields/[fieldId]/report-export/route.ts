@@ -33,6 +33,7 @@ export async function GET(
       summary: viewModel.summary,
       report: panels.reportPanel,
       action: panels.actionPanel,
+      notes: panels.notesPanel,
     });
 
     return new Response(Buffer.from(prepared.bytes), {

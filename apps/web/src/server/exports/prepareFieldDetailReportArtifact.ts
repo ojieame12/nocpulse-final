@@ -6,6 +6,7 @@ import type {
   ReportFindingItem,
 } from "../../components/panels/ReportTab";
 import type { FieldActionProps } from "../../components/panels/ActionTab";
+import type { FieldNotesProps } from "../../components/panels/NotesTab";
 import type { FieldSummaryProps } from "../../components/panels/SummaryTab";
 import { loadPdfBrandLogo } from "./loadPdfBrandLogo";
 
@@ -175,6 +176,50 @@ function actionNextStep(action: FieldActionProps): string | undefined {
   return undefined;
 }
 
+function noteSeverity(status: FieldNotesProps["entries"][number]["status"]): "critical" | "warning" | "info" {
+  switch (status) {
+    case "confirmed":
+      return "critical";
+    case "monitor":
+      return "warning";
+    default:
+      return "info";
+  }
+}
+
+function noteStatusLabel(status: FieldNotesProps["entries"][number]["status"]): string {
+  switch (status) {
+    case "confirmed":
+      return "Confirmed";
+    case "not_confirmed":
+      return "Not Confirmed";
+    case "resolved":
+      return "Resolved";
+    case "monitor":
+      return "Monitor";
+    default:
+      return status;
+  }
+}
+
+function noteDateLabel(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function noteContextText(note: FieldNotesProps["entries"][number]): string | undefined {
+  return joinParts([
+    note.findingId ? "Linked to finding" : undefined,
+    note.zoneId ? "Linked to tracked zone" : undefined,
+    note.cellKey ? `Cell ${note.cellKey}` : undefined,
+  ]);
+}
+
 /** Determine row accent color from forecast data. */
 function forecastRowColor(temp: string, precip: string): RGB | undefined {
   // Parse lowest temperature from strings like "-3°C / 5°C" or "Low: -2°C"
@@ -212,6 +257,7 @@ export type PrepareFieldDetailReportArtifactInput = {
   report: FieldReportProps | null;
   summary: FieldSummaryProps | null;
   action: FieldActionProps | null;
+  notes: FieldNotesProps | null;
   generatedAt?: string;
 };
 
@@ -237,6 +283,7 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
   const r = input.report;
   const s = input.summary;
   const a = input.action;
+  const n = input.notes;
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const reportDate = r?.updatedDate ?? generatedAt.slice(0, 10);
 
@@ -852,6 +899,38 @@ function buildBlocks(input: PrepareFieldDetailReportArtifactInput): PdfBlock[] {
         kind: "text",
         style: "caption",
         text: `+ ${r.zones.length - 12} additional zone${r.zones.length - 12 > 1 ? "s" : ""} not shown.`,
+      });
+    }
+  }
+
+  /* ── Recent field notes ── */
+
+  if (n && n.entries.length > 0) {
+    const recentNotes = [...n.entries]
+      .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
+      .slice(0, 5);
+
+    blocks.push({ kind: "spacer", height: 6 });
+    blocks.push({
+      kind: "section-header",
+      label: "Recent Field Notes",
+      meta: `${recentNotes.length} of ${n.entries.length}`,
+      accentColor: GREEN,
+    });
+    blocks.push({
+      kind: "text",
+      style: "caption",
+      text: "Latest scout notes captured for this field. Use these as field-grounding context alongside the model signals above.",
+    });
+
+    for (const note of recentNotes) {
+      blocks.push({
+        kind: "severity-card",
+        severity: noteSeverity(note.status),
+        title: `${noteStatusLabel(note.status)} · ${noteDateLabel(note.date)}`,
+        detail: noteContextText(note),
+        body: note.text,
+        marginTop: 6,
       });
     }
   }
