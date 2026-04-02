@@ -36,6 +36,7 @@
   "scripts": {
     "build": "tsup --config tsup.config.ts",
     "attempts": "tsx src/attempts.ts",
+    "action-brief:cadence": "tsx src/actionBriefCadence.ts",
     "boot": "node dist/main.js",
     "cancel": "tsx src/cancel.ts",
     "dev": "tsx watch src/run.ts",

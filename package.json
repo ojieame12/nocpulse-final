@@ -31,7 +31,7 @@
     "test:web-field-intake-manual": "corepack pnpm --filter @fieldpulse/web exec node --import tsx --test src/server/fields/manualFieldDraft.test.ts",
     "test:worker-jobs-registry": "node --import tsx --test apps/worker/src/jobsRegistry.test.ts",
     "test:worker-imagery-cadence": "node --import tsx --test apps/worker/src/imageryCadence.test.ts",
-    "test:worker-intelligence-cadence": "node --import tsx --test apps/worker/src/weatherRiskCadence.test.ts apps/worker/src/moistureStressCadence.test.ts",
+    "test:worker-intelligence-cadence": "node --import tsx --test apps/worker/src/weatherRiskCadence.test.ts apps/worker/src/moistureStressCadence.test.ts apps/worker/src/actionBriefCadence.test.ts",
     "test:worker-market-basis": "node --import tsx --test apps/worker/src/marketUpsertBasis.test.ts",
     "test:worker-market-price": "node --import tsx --test apps/worker/src/marketUpsertPrice.test.ts",
     "test:worker-market-refresh": "node --import tsx --test apps/worker/src/marketRefreshQuotes.test.ts",

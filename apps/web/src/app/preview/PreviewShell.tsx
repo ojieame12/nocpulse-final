@@ -2066,9 +2066,21 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         return renderCanonicalDetailPanel();
       case 'alerts':
         return fieldData.alertsPanel ? (
-          <AlertsPanel {...fieldData.alertsPanel} onClose={() => switchPanel('detail')} />
+          <AlertsPanel
+            {...fieldData.alertsPanel}
+            actionsEnabled={!isGuestSession}
+            onClose={() => switchPanel('detail')}
+          />
         ) : (
-          <AlertsPanel activeAlerts={[]} resolvedAlerts={[]} activeCount={0} criticalCount={0} weekCount={0} onClose={() => switchPanel('detail')} />
+          <AlertsPanel
+            activeAlerts={[]}
+            resolvedAlerts={[]}
+            activeCount={0}
+            criticalCount={0}
+            weekCount={0}
+            actionsEnabled={!isGuestSession}
+            onClose={() => switchPanel('detail')}
+          />
         );
       case 'settings':
         return isGuestSession ? (

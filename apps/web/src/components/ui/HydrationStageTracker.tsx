@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 /* ── Stage definitions ── */
 
@@ -219,18 +219,25 @@ export function HydrationStageTracker({
   useEffect(() => {
     const prev = prevStatusRef.current;
     prevStatusRef.current = onboardingStatus?.status;
+    let holdTimer: ReturnType<typeof setTimeout> | null = null;
+    let dismissTimer: ReturnType<typeof setTimeout> | null = null;
 
     if (prev != null && prev !== 'completed' && onboardingStatus?.status === 'completed') {
       setShowFarewell(true);
-      // Hold completed state for 500ms, then fade out
-      const holdTimer = setTimeout(() => {
+      holdTimer = setTimeout(() => {
         setShowFarewell(false);
-        // After fade-out animation (400ms), dismiss entirely
-        const dismissTimer = setTimeout(() => setDismissed(true), 450);
-        return () => clearTimeout(dismissTimer);
+        dismissTimer = setTimeout(() => setDismissed(true), 450);
       }, 500);
-      return () => clearTimeout(holdTimer);
     }
+
+    return () => {
+      if (holdTimer) {
+        clearTimeout(holdTimer);
+      }
+      if (dismissTimer) {
+        clearTimeout(dismissTimer);
+      }
+    };
   }, [onboardingStatus?.status]);
 
   // Reset dismissed state when a new field starts onboarding

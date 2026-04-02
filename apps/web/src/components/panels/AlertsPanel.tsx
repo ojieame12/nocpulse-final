@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BellOff, X, AlertTriangle, Droplets, Thermometer, Bug, Wind, TrendingDown, Zap, Clock } from 'lucide-react';
 import { Card, Lbl, LblM, Big, Sub, Mono } from './fieldDetailCardPrimitives';
 import { PanelEmptyState } from '../ui/PanelEmptyState';
@@ -14,6 +14,7 @@ export interface AlertItem {
   subtitle: string;
   time: string;
   trackedZoneIds: readonly string[];
+  acknowledgedAt?: string | null;
 }
 
 export interface ResolvedAlertItem {
@@ -22,6 +23,7 @@ export interface ResolvedAlertItem {
   subtitle: string;
   time: string;
   trackedZoneIds: readonly string[];
+  status?: 'resolved' | 'dismissed';
 }
 
 export interface AlertsPanelProps {
@@ -35,6 +37,7 @@ export interface AlertsPanelProps {
   emptyStateDescription?: string;
   focusedZoneId?: string | null;
   demoFallback?: boolean;
+  actionsEnabled?: boolean;
   onAlertSelect?: (zoneId: string | null) => void;
   onClose?: () => void;
 }
@@ -92,14 +95,15 @@ function urgencyLabel(s: string): string {
 export function AlertsPanel({
   activeAlerts: rawActive,
   resolvedAlerts: rawResolved,
-  activeCount: rawActiveCount,
-  criticalCount: rawCriticalCount,
-  weekCount: rawWeekCount,
+  activeCount: _rawActiveCount,
+  criticalCount: _rawCriticalCount,
+  weekCount: _rawWeekCount,
   contextLabel,
   emptyStateTitle,
   emptyStateDescription,
   focusedZoneId,
   demoFallback = false,
+  actionsEnabled = true,
   onAlertSelect,
   onClose,
 }: AlertsPanelProps) {
@@ -110,26 +114,95 @@ export function AlertsPanel({
     !emptyStateTitle;
   const activeAlerts = useDemoData ? DEMO_ALERTS : rawActive;
   const resolvedAlerts = useDemoData ? DEMO_RESOLVED : rawResolved;
-  const activeCount = useDemoData ? DEMO_ALERTS.length : rawActiveCount;
-  const criticalCount = useDemoData
-    ? DEMO_ALERTS.filter((alert) => alert.severity === 'critical').length
-    : rawCriticalCount;
-  const weekCount = useDemoData
-    ? DEMO_ALERTS.length + DEMO_RESOLVED.length
-    : rawWeekCount;
-
   const [filter, setFilter] = useState<FilterKey>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [activeItems, setActiveItems] = useState<AlertItem[]>(activeAlerts);
+  const [resolvedItemsState, setResolvedItemsState] =
+    useState<ResolvedAlertItem[]>(resolvedAlerts);
+  const [pendingAlertId, setPendingAlertId] = useState<string | null>(null);
 
-  const isEmpty = activeAlerts.length === 0 && resolvedAlerts.length === 0;
+  useEffect(() => {
+    setActiveItems(activeAlerts);
+  }, [activeAlerts]);
+
+  useEffect(() => {
+    setResolvedItemsState(resolvedAlerts);
+  }, [resolvedAlerts]);
+
+  const activeCount = useDemoData ? DEMO_ALERTS.length : activeItems.length;
+  const criticalCount = useDemoData
+    ? DEMO_ALERTS.filter((alert) => alert.severity === 'critical').length
+    : activeItems.filter((alert) => alert.severity === 'critical').length;
+  const weekCount = useDemoData
+    ? DEMO_ALERTS.length + DEMO_RESOLVED.length
+    : activeItems.length + resolvedItemsState.length;
+
+  const isEmpty = activeItems.length === 0 && resolvedItemsState.length === 0;
 
   const filtered = filter === 'critical'
-    ? activeAlerts.filter(a => a.severity === 'critical')
+    ? activeItems.filter(a => a.severity === 'critical')
     : filter === 'warning'
-      ? activeAlerts.filter(a => a.severity === 'warning' || a.severity === 'medium')
-      : filter === 'resolved' ? [] : activeAlerts;
+      ? activeItems.filter(a => a.severity === 'warning' || a.severity === 'medium')
+      : filter === 'resolved' ? [] : activeItems;
 
   const showResolved = filter === 'all' || filter === 'resolved';
+
+  async function mutateAlert(alertId: string, action: 'acknowledge' | 'dismiss') {
+    if (!actionsEnabled || useDemoData) {
+      return;
+    }
+
+    setPendingAlertId(alertId);
+
+    try {
+      const response = await fetch(`/api/alerts/${alertId}`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ action }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          typeof payload?.error === 'string' ? payload.error : 'Alert update failed.',
+        );
+      }
+
+      if (action === 'acknowledge') {
+        setActiveItems((items) =>
+          items.map((item) =>
+            item.id === alertId
+              ? { ...item, acknowledgedAt: new Date().toISOString() }
+              : item,
+          ),
+        );
+        return;
+      }
+
+      const dismissedAlert = activeItems.find((item) => item.id === alertId) ?? null;
+      setActiveItems((items) => items.filter((item) => item.id !== alertId));
+
+      if (dismissedAlert) {
+        setResolvedItemsState((items) => [
+          {
+            id: dismissedAlert.id,
+            title: dismissedAlert.title,
+            subtitle: dismissedAlert.subtitle,
+            time: 'just now',
+            trackedZoneIds: dismissedAlert.trackedZoneIds,
+            status: 'dismissed',
+          },
+          ...items,
+        ]);
+      }
+    } catch (error) {
+      console.error('[alerts-panel] failed to update alert', error);
+    } finally {
+      setPendingAlertId((current) => (current === alertId ? null : current));
+    }
+  }
 
   return (
     <div className="fdp" style={{ position: 'absolute', top: 'var(--space-lg)', right: 'var(--space-lg)', bottom: 'var(--space-xl)' }}>
@@ -195,7 +268,7 @@ export function AlertsPanel({
             <Card>
               <LblM>Resolved</LblM>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <Big size={28} color={resolvedAlerts.length > 0 ? '#16a34a' : undefined}>{resolvedAlerts.length}</Big>
+                <Big size={28} color={resolvedItemsState.length > 0 ? '#16a34a' : undefined}>{resolvedItemsState.length}</Big>
                 <Sub>cleared</Sub>
               </div>
             </Card>
@@ -270,6 +343,13 @@ export function AlertsPanel({
                           textTransform: 'uppercase', flexShrink: 0,
                           background: sevBg(alert.severity), color,
                         }}>{alert.severity}</span>
+                        {alert.acknowledgedAt ? (
+                          <span className="fdp-mono" style={{
+                            fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                            textTransform: 'uppercase', flexShrink: 0,
+                            background: 'rgba(22, 163, 74, 0.12)', color: '#16a34a',
+                          }}>reviewed</span>
+                        ) : null}
                       </div>
 
                       {/* Detail section */}
@@ -291,6 +371,50 @@ export function AlertsPanel({
                           </span>
                         )}
                       </div>
+
+                      {actionsEnabled && !useDemoData ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="fdp__chip"
+                            disabled={pendingAlertId === alert.id || !!alert.acknowledgedAt}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void mutateAlert(alert.id, 'acknowledge');
+                            }}
+                            style={{
+                              fontSize: 9,
+                              cursor:
+                                pendingAlertId === alert.id || !!alert.acknowledgedAt
+                                  ? 'default'
+                                  : 'pointer',
+                              opacity: pendingAlertId === alert.id ? 0.6 : 1,
+                            }}
+                          >
+                            {alert.acknowledgedAt
+                              ? 'Reviewed'
+                              : pendingAlertId === alert.id
+                                ? 'Saving…'
+                                : 'Mark reviewed'}
+                          </button>
+                          <button
+                            type="button"
+                            className="fdp__chip"
+                            disabled={pendingAlertId === alert.id}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void mutateAlert(alert.id, 'dismiss');
+                            }}
+                            style={{
+                              fontSize: 9,
+                              cursor: pendingAlertId === alert.id ? 'default' : 'pointer',
+                              opacity: pendingAlertId === alert.id ? 0.6 : 1,
+                            }}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      ) : null}
 
                       {/* Expanded detail */}
                       {isExpanded && (
@@ -324,13 +448,13 @@ export function AlertsPanel({
             )}
 
             {/* ── Resolved ── */}
-            {showResolved && resolvedAlerts.length > 0 && (
+            {showResolved && resolvedItemsState.length > 0 && (
               <>
                 <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                   <LblM>RESOLVED</LblM>
-                  <Mono>{resolvedAlerts.length} cleared</Mono>
+                  <Mono>{resolvedItemsState.length} cleared</Mono>
                 </div>
-                {resolvedAlerts.map(alert => (
+                {resolvedItemsState.map(alert => (
                   <Card key={alert.id} span={-1} className="fdp-card--muted">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -342,8 +466,9 @@ export function AlertsPanel({
                       <span className="fdp-mono" style={{
                         fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
                         textTransform: 'uppercase', flexShrink: 0,
-                        background: 'rgba(22, 163, 74, 0.12)', color: '#16a34a',
-                      }}>resolved</span>
+                        background: alert.status === 'dismissed' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(22, 163, 74, 0.12)',
+                        color: alert.status === 'dismissed' ? 'var(--text-muted)' : '#16a34a',
+                      }}>{alert.status === 'dismissed' ? 'dismissed' : 'resolved'}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Clock size={10} style={{ color: 'var(--text-muted)' }} />

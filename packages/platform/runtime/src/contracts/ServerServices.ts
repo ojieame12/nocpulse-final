@@ -11,6 +11,7 @@ import type {
   CropIntelligenceRun,
   FieldActionCuration,
   DiseaseRiskReport,
+  GenerateActionBriefFindingsResult,
   GenerateDiseaseRiskFindingsResult,
   FieldIntelligenceFinding,
   FieldZoneActivityReport,
@@ -496,6 +497,18 @@ export type GenerateFieldDiseaseRiskFindingsResult =
     alertSync: IntelligenceAlertSyncSummary;
   };
 
+export type GenerateFieldActionBriefFindingsInput = {
+  workspaceId: WorkspaceId;
+  fieldId: string;
+  requestedAt?: string;
+};
+
+export type GenerateFieldActionBriefFindingsResult =
+  GenerateActionBriefFindingsResult & {
+    alerts: readonly FieldAlert[];
+    alertSync: IntelligenceAlertSyncSummary;
+  };
+
 export type LoadLatestFieldActionCurationInput = {
   workspaceId: WorkspaceId;
   fieldId: string;
@@ -896,6 +909,9 @@ export type ServerServices = {
     generateDiseaseRiskFindings(
       input: GenerateFieldDiseaseRiskFindingsInput,
     ): Promise<GenerateFieldDiseaseRiskFindingsResult>;
+    generateActionBriefFindings(
+      input: GenerateFieldActionBriefFindingsInput,
+    ): Promise<GenerateFieldActionBriefFindingsResult>;
     loadLatestFieldActionCuration(
       input: LoadLatestFieldActionCurationInput,
     ): Promise<FieldActionCuration | null>;
