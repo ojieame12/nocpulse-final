@@ -47,6 +47,10 @@ export function formatWorkspaceRoleLabel(role: WorkspaceRole) {
   return WORKSPACE_INVITE_ROLE_LABELS[role];
 }
 
+export function canManageWorkspace(role: WorkspaceRole) {
+  return role === "owner" || role === "manager";
+}
+
 export function listAllowedWorkspaceInviteRoles(
   actorRole: WorkspaceRole,
 ): readonly WorkspaceInviteRole[] {

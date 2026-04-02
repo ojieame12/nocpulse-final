@@ -22,6 +22,7 @@ import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../../server/runtime/resolveRequestContext";
+import { canManageWorkspace } from "../../../../../features/settings/workspaceAccess";
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -112,6 +113,9 @@ export async function PATCH(
     const actor = await resolveRequestActor(request, runtime, {
       allowDevelopmentFallback: true,
     });
+    if (!canManageWorkspace(actor.role)) {
+      return jsonError(403, "Manager access is required to update crop context.");
+    }
     const { fieldId } = await context.params;
     const body = await readJsonObject(request);
 

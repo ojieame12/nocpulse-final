@@ -21,6 +21,7 @@ import {
   RequestContextError,
   resolveRequestActor,
 } from "../../../../server/runtime/resolveRequestContext";
+import { canManageWorkspace } from "../../../../features/settings/workspaceAccess";
 
 const FIELD_MUTATION_ACTOR_RATE_LIMIT = {
   scope: "field-mutation:actor",
@@ -64,6 +65,9 @@ export async function PATCH(
     const actor = await resolveRequestActor(request, runtime, {
       allowDevelopmentFallback: true,
     });
+    if (!canManageWorkspace(actor.role)) {
+      return jsonError(403, "Manager access is required to update fields.");
+    }
     const { fieldId } = await context.params;
     const body = await readJsonObject(request);
 
@@ -164,6 +168,9 @@ export async function DELETE(
     const actor = await resolveRequestActor(request, runtime, {
       allowDevelopmentFallback: true,
     });
+    if (!canManageWorkspace(actor.role)) {
+      return jsonError(403, "Manager access is required to delete fields.");
+    }
     const { fieldId } = await context.params;
     const rateLimitResponse = await enforceRouteRateLimits({
       runtime,
