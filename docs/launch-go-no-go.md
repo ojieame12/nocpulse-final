@@ -26,13 +26,16 @@ The codebase is healthy enough to ship behind a managed rollout, but the field-l
 
 ### Repo state
 
-- `WARN` `HEAD` matches `origin/main` (`a22823b`), but the checkout is on `codex/preview-shell-boundaries`, not `main`
-- `FAIL` working tree is noisy and not release-clean
-- `WARN` local changes include:
-  - `.next-dev-*` cache churn
-  - `package.json` adding `geotiff`
-  - untracked `package-lock.json`
-  - untracked `packages/pdf/test-density.ts`
+- `PASS` canonical checkout is on `main`
+- `PASS` working tree is clean
+- `PASS` generated `.next-dev-*` churn is no longer tracked in Git
+- `PASS` release candidates are now being assembled from intentional clean branches and merged back to `main`
+
+Operational entrypoint:
+
+```bash
+corepack pnpm -C /Users/ojieame/FieldPulse-v3 ops:beta-readiness -- --workspace-slug hope-creek --json
+```
 
 ### Workspace readiness snapshots
 
@@ -81,9 +84,9 @@ Interpretation:
 - `WARN` guided onboarding is still weak:
   - the first-insight chooser, workspace summary, and interpretation block are now in place
   - the remaining gap is proving the full sign-up-to-first-insight journey with a real grower
-- `WARN` proactive habit loop is still incomplete:
-  - explainable actions and alert scaffolding exist
-  - anomaly-driven field change intelligence is still incomplete or intentionally hidden when unsupported
+- `WARN` proactive habit loop is now operational, but not yet proven:
+  - material-change `action_brief` generation is now running
+  - the remaining gap is false-positive calibration and reviewed vs dismissed behavior on live fields
 - `WARN` long-tail field richness is still uneven:
   - curated demo fields are credible
   - average-workspace consistency is not there yet, especially on vegetation history depth
@@ -117,7 +120,7 @@ git -C /Users/ojieame/FieldPulse-v3 status --short --branch
 git -C /Users/ojieame/FieldPulse-v3 log --oneline --decorate -10
 ```
 
-Current status: `NO-GO`
+Current status: `GO`
 
 ### Gate 2: Static correctness
 
@@ -167,6 +170,7 @@ Commands:
 
 ```bash
 corepack pnpm -C /Users/ojieame/FieldPulse-v3/apps/worker run sources:utilization -- --workspace-id <workspace-id> --json
+corepack pnpm -C /Users/ojieame/FieldPulse-v3 ops:source-utilization -- --workspace-id <workspace-id> --json
 ```
 
 Current status: `GO` for Dev Farm source integrity
@@ -183,6 +187,7 @@ Commands:
 
 ```bash
 corepack pnpm -C /Users/ojieame/FieldPulse-v3/apps/worker run report:readiness -- --workspace-id <workspace-id> --json
+corepack pnpm -C /Users/ojieame/FieldPulse-v3 ops:readiness -- --workspace-id <workspace-id> --json
 ```
 
 Current status: `NO-GO`
@@ -215,16 +220,12 @@ Current status: `UNVERIFIED`
 - `NO-GO` if:
   - anomaly language is shipped while anomaly enrichment is still unfinished
 
-Known gap:
-
-- `/Users/ojieame/FieldPulse-v3/packages/modules/reports/src/application/buildFieldReportReadModel.ts` still documents anomaly fields as worker-populated and currently absent when not provided
-
 Current status: `WARN`
 
 Reason:
 
 - historical anomaly claims are now more honest in the UI because incomplete anomaly context is hidden
-- the underlying anomaly enrichment path is still not complete enough to power a durable “something changed in your field” alert loop
+- the material-change `action_brief` loop is running, but alert trust still needs live calibration on weak/stale fields
 
 ### Gate 8: Validation discipline
 
@@ -274,12 +275,11 @@ Current status: `UNVERIFIED in this pass`
 
 ## Minimum remaining work before calling this launch-ready
 
-1. Clean the repo and release branch state.
-2. Build and verify a guided sign-up-to-first-insight path for a real grower.
-3. Decide which fields are allowed in launch demos and hide or defer `thin` readiness fields.
-4. Finish or explicitly de-scope anomaly-dependent messaging and alert claims.
-5. Improve moisture validation quality before using strong accuracy language.
-6. Re-verify onboarding isolation and PDF exports on the live environment.
+1. Run 1-3 real grower walkthroughs from sign-up to first insight and fix only the friction they expose.
+2. Keep launch-visible field curation tight while the long tail remains `thin`.
+3. Calibrate the live `action_brief` alert loop for false positives and dismissal behavior.
+4. Improve moisture validation quality before using strong accuracy language.
+5. Re-verify onboarding isolation, soil enrichment, and PDF exports on the live environment.
 
 ## Decision
 
