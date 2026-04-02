@@ -26,6 +26,7 @@ import {
   resolveFieldAccessPresentation,
   resolveSeedingRecommendation,
 } from "./buildFieldOverviewViewModel.spring";
+import { resolveSprayWindowRecommendation } from "./buildFieldOverviewViewModel.spray";
 
 type ActionSignal = FieldActionProps["signals"][number];
 type RankedActionSignal = ActionSignal & {
@@ -293,6 +294,7 @@ function buildWatchlistSummary(input: {
   moistureSourceLabel: string;
   weatherSourceLabel: string;
   seedingRecommendation?: WatchlistSummary | null;
+  sprayRecommendation?: WatchlistSummary | null;
 }): WatchlistSummary | null {
   const candidates: Array<WatchlistSummary & { score: number }> = [];
 
@@ -305,6 +307,13 @@ function buildWatchlistSummary(input: {
             ? 6
             : 5,
       ...input.seedingRecommendation,
+    });
+  }
+
+  if (input.sprayRecommendation) {
+    candidates.push({
+      score: 4,
+      ...input.sprayRecommendation,
     });
   }
 
@@ -498,6 +507,7 @@ export function buildActionProps(
   });
   const latestOpticalRaster = rm.imagery?.latestOpticalRasterObservation ?? null;
   const latestObservation = rm.weather?.profile?.latestObservation ?? null;
+  const forecasts = rm.weather?.profile?.forecasts ?? [];
   const opticalNdviAvg = averageMeasurement(latestOpticalRaster?.cells ?? [], "ndvi");
   const opticalNdreAvg = averageMeasurement(latestOpticalRaster?.cells ?? [], "ndre");
   const opticalSeasonality = resolveOpticalSeasonality({
@@ -622,6 +632,15 @@ export function buildActionProps(
       frostRiskNights7d: weatherSignals?.frostRiskNights7d ?? null,
       weatherSourceLabel,
     }) ?? null;
+  const sprayRecommendation =
+    seedingRecommendation == null
+      ? resolveSprayWindowRecommendation({
+          cropLabel,
+          sprayWindowCount24h: weatherSignals?.sprayWindowCount24h ?? null,
+          forecasts,
+          weatherSourceLabel,
+        })
+      : null;
 
   const watchlistSummary =
     !hasActiveIntelligence
@@ -645,6 +664,22 @@ export function buildActionProps(
                   confidence: seedingRecommendation.confidence,
                   signals: seedingRecommendation.signals,
                   tags: seedingRecommendation.tags,
+                },
+          sprayRecommendation:
+            sprayRecommendation == null
+              ? null
+              : {
+                  title: sprayRecommendation.title,
+                  severity: sprayRecommendation.severity,
+                  urgency: sprayRecommendation.urgency,
+                  dueDate: sprayRecommendation.dueDate,
+                  recommendation: sprayRecommendation.recommendation,
+                  explanation: sprayRecommendation.explanation,
+                  whyNow: sprayRecommendation.whyNow,
+                  inspectFirst: sprayRecommendation.inspectFirst,
+                  confidence: sprayRecommendation.confidence,
+                  signals: sprayRecommendation.signals,
+                  tags: sprayRecommendation.tags,
                 },
         })
       : null;
