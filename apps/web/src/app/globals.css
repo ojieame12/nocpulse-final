@@ -14535,11 +14535,17 @@ img {
 
   .field-strip {
     position: fixed; bottom: 0; left: 0; right: 0; top: auto;
-    z-index: 150; width: 100%; height: auto; min-height: 56px;
+    z-index: 150; width: 100%; height: auto; min-height: 84px;
     border-radius: 0; border-top: 1px solid var(--glass-border, rgba(255,255,255,0.10));
     padding-bottom: max(8px, env(safe-area-inset-bottom));
   }
-  .field-strip__header { display: none; }
+  .field-strip__header {
+    display: flex;
+    height: auto;
+    min-height: 28px;
+    margin-bottom: 4px;
+  }
+  .field-strip__arrows { display: none; }
 
   .fdp {
     position: fixed !important; top: auto !important; right: 0 !important;
@@ -14555,7 +14561,7 @@ img {
   }
   [data-theme="light"] .fdp::after { background: rgba(0,0,0,0.12); }
   .fdp__header { padding-top: 20px; }
-  .map-area { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+  .map-area { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
   .field-strip__kebab-menu { max-width: calc(100vw - 16px); }
 
   /* Panel content reflow */
@@ -14600,7 +14606,7 @@ img {
 
 @media (max-width: 479px) {
   .fdp { height: 100vh; height: 100dvh; max-height: 100vh; border-radius: 0; }
-  .field-strip { min-height: 52px; }
+  .field-strip { min-height: 80px; }
   .fdp__body--cols-4 { grid-template-columns: 1fr; }
   .outlook-grid { grid-template-columns: repeat(3, 1fr) !important; }
   .panel__body { padding: 12px; }
@@ -14609,7 +14615,7 @@ img {
 
 @media (max-height: 500px) and (max-width: 767px) {
   .app-topbar { height: 40px; }
-  .field-strip { min-height: 48px; }
+  .field-strip { min-height: 72px; }
   .fdp { max-height: 70vh; }
 }
 
