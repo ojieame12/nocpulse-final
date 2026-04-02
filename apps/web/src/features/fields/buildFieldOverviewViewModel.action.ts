@@ -290,6 +290,10 @@ type BuildActionPropsOptions = {
   curation?: FieldActionCuration | null;
 };
 
+function isWatchlistEligibleForDataQuality(label: string | null | undefined) {
+  return label == null || label === "Ready";
+}
+
 function buildWatchlistSummary(input: {
   moisture: any;
   weatherSignals: any;
@@ -612,11 +616,15 @@ export function buildActionProps(
   const activeAlertCount =
     rm.summary?.activeAlertCount ??
     alerts.length;
+  const summaryDataQualityLabel = rm.summary?.dataQuality?.label ?? null;
   const hasActiveIntelligence =
     activeFindingCount > 0 ||
     activeZoneCount > 0 ||
     primaryFinding != null ||
     primaryAlert != null;
+  const watchlistEligibleForDataQuality = isWatchlistEligibleForDataQuality(
+    summaryDataQualityLabel,
+  );
   const fieldAccessPresentation = resolveFieldAccessPresentation({
     surfaceMoisturePct: latestObservation?.soilMoisturePct ?? null,
     recentPrecipTotal72hMm: weatherSignals?.recentPrecipTotal72hMm ?? null,
@@ -653,7 +661,7 @@ export function buildActionProps(
       : null;
 
   const watchlistSummary =
-    !hasActiveIntelligence
+    !hasActiveIntelligence && watchlistEligibleForDataQuality
       ? buildWatchlistSummary({
           moisture,
           weatherSignals,
@@ -918,7 +926,9 @@ export function buildActionProps(
         "Review the strongest active field signal and confirm it on the ground before changing the whole-field plan."
       : intelligenceState === "watchlist"
         ? watchlistSummary!.recommendation
-        : "No immediate intelligence-driven action is recommended right now.";
+        : watchlistEligibleForDataQuality
+          ? "No immediate intelligence-driven action is recommended right now."
+          : "No heuristic action is being shown because current field context is not strong enough yet.";
 
   const explanationParts =
     intelligenceState === "active"
@@ -958,8 +968,10 @@ export function buildActionProps(
                 : `${cropLabel} is in the ${stageLabel.toLowerCase()} stage.`
               : null,
           ]
-        : [
-            "No active findings, tracked zones, or watchlist heuristics are currently driving action for this field.",
+      : [
+            watchlistEligibleForDataQuality
+              ? "No active findings, tracked zones, or watchlist heuristics are currently driving action for this field."
+              : `No active findings or alerts are currently driving action for this field, and heuristic watchlists stay suppressed while data quality is ${String(summaryDataQualityLabel).toLowerCase()}.`,
           ];
 
   const questions: ActionQAItem[] =
@@ -1058,13 +1070,17 @@ export function buildActionProps(
             {
               question: "Why is nothing active?",
               answer:
-                "There are no active findings, tracked zones, or watchlist heuristics currently attached to this field.",
+                watchlistEligibleForDataQuality
+                  ? "There are no active findings, tracked zones, or watchlist heuristics currently attached to this field."
+                  : `There are no active findings or alerts currently attached to this field, and watchlist heuristics are being held back because data quality is ${String(summaryDataQualityLabel).toLowerCase()}.`,
               tags: [{ label: "No active signals", color: "green" }],
             },
             {
               question: "What supports this status?",
               answer:
-                "The current field view has no active finding, no active alert, and no moisture or weather heuristic that crossed the watchlist thresholds used for recommendations.",
+                watchlistEligibleForDataQuality
+                  ? "The current field view has no active finding, no active alert, and no moisture or weather heuristic that crossed the watchlist thresholds used for recommendations."
+                  : "The current field view has no active finding or active alert, and heuristic recommendations are intentionally suppressed until field data quality is ready.",
               tags: [{ label: "Quiet field", color: "green" }],
             },
           ];
