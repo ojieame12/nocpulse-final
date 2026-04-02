@@ -1,6 +1,8 @@
 export {
+  type SmapFieldTimeseriesPoint,
   type SmapFieldReport,
   type SmapBacktestReport,
+  type SmapValidationExclusionReason,
 } from "./contracts/SmapValidationResult";
 export {
   computeValidationMetrics,
