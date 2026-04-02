@@ -79,7 +79,12 @@ test("refreshFieldCropStage preserves legacy incremental accumulation when no se
   assert.equal(result.derivedGrowthStage, "vegetative");
   assert.equal(result.context.accumulatedGdd, 18.25);
   assert.equal(result.context.lastGddObservedOn, "2026-05-03");
-  assert.equal(lastUpsert?.accumulatedGdd, 18.25);
+  const persistedContext = lastUpsert;
+  if (!persistedContext) {
+    throw new Error("Expected refreshFieldCropStage to upsert the updated context");
+  }
+  const updatedContext = persistedContext as FieldCropContext;
+  assert.equal(updatedContext.accumulatedGdd, 18.25);
 });
 
 test("refreshFieldCropStage recomputes seasonal GDD from seeding date using recent signal history", async () => {

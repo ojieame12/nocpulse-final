@@ -234,6 +234,7 @@ function createWeatherObservation(input: {
     windSpeedKph: 11,
     relativeHumidityPct: 54,
     soilMoisturePct: 33,
+    soilTemperature6cmC: 7.2,
     evapotranspirationMm: 2.1,
     provenance: {
       soilDataset: "open-meteo-hourly",
@@ -690,7 +691,14 @@ test("createServerServices moisture rebuild estimate persists a weather baseline
   });
 
   assert.equal(result.snapshot.inputs.baselineDataset, "open-meteo-hourly");
-  assert.equal(capturedInputs?.baselineDataset, "open-meteo-hourly");
+  const persistedInputs = capturedInputs;
+  if (!persistedInputs) {
+    throw new Error("Expected rebuildFieldEstimate to capture snapshot inputs");
+  }
+  const rebuiltInputs = persistedInputs as Record<string, unknown> & {
+    baselineDataset?: unknown;
+  };
+  assert.equal(rebuiltInputs.baselineDataset, "open-meteo-hourly");
   assert.match(
     String(result.snapshot.inputs.confidenceReason ?? ""),
     /baseline soil moisture/,

@@ -53,6 +53,7 @@ function createWeatherSignalSet(
     frostRiskMinTempC: 2.5,
     frostRiskMinTempC7d: 1.2,
     frostRiskNights7d: 2,
+    frostProbabilityPct7d: null,
     recentPrecipTotal72hMm: 3.4,
     freezeThawCycles7d: 1,
     soilTemp6cmCurrentC: 6.8,
