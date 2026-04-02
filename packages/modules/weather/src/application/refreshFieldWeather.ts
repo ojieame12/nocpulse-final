@@ -53,6 +53,7 @@ export async function refreshFieldWeather(
     longitude: input.weather.longitude,
     requestedAt: input.weather.requestedAt,
     forecastHours: input.weather.forecastHours,
+    frostDamageThresholdC: input.weather.frostDamageThresholdC,
   });
 
   const observation = await input.observationRepository.upsertObservation({
@@ -92,6 +93,11 @@ export async function refreshFieldWeather(
       forecasts,
       gddBaseC: input.weather.gddBaseC,
       soilTempThresholdC: input.weather.soilTempThresholdC,
+      frostProbabilityPct7d: fetched.ensemble?.frostProbabilityPct7d ?? null,
+      frostProbabilityThresholdC:
+        fetched.ensemble?.frostProbabilityThresholdC ?? null,
+      frostProbabilityModelKey: fetched.ensemble?.modelKey ?? null,
+      frostProbabilityMemberCount: fetched.ensemble?.memberCount ?? null,
     }),
   );
 

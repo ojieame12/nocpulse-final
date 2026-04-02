@@ -112,6 +112,10 @@ test("deriveWeatherSignalSet computes soil-temperature, frost, and workability-r
     recentObservations,
     forecasts,
     soilTempThresholdC: 5,
+    frostProbabilityPct7d: 42.4,
+    frostProbabilityThresholdC: -1.5,
+    frostProbabilityModelKey: "icon_seamless_eps",
+    frostProbabilityMemberCount: 39,
   });
 
   assert.equal(signalSet.soilTemp6cmCurrentC, 8);
@@ -121,6 +125,7 @@ test("deriveWeatherSignalSet computes soil-temperature, frost, and workability-r
   assert.equal(signalSet.frostRiskMinTempC, 1.5);
   assert.equal(signalSet.frostRiskMinTempC7d, -2.2);
   assert.equal(signalSet.frostRiskNights7d, 2);
+  assert.equal(signalSet.frostProbabilityPct7d, 42.4);
   assert.deepEqual(signalSet.provenance, {
     calculationMode: "observation-plus-hourly-forecast",
     forecastSampleCount24h: 24,
@@ -129,6 +134,9 @@ test("deriveWeatherSignalSet computes soil-temperature, frost, and workability-r
     observationSampleCount72h: 4,
     observationSampleCount168h: 4,
     soilTempThresholdC: 5,
+    frostProbabilityModelKey: "icon_seamless_eps",
+    frostProbabilityThresholdC: -1.5,
+    frostProbabilityMemberCount: 39,
     windowHours24: 24,
     windowHours72: 72,
     windowHours168: 168,

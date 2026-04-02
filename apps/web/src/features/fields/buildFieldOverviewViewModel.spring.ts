@@ -56,6 +56,14 @@ function formatSignedTemperature(value: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}°C`;
 }
 
+function formatProbabilityLabel(value: number | null) {
+  if (value == null || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return `${Math.round(value)}% probability`;
+}
+
 function formatSoilTempDetail(input: {
   current: number | null;
   thresholdC: number;
@@ -261,6 +269,7 @@ export function resolveSeedingRecommendation(input: {
   fieldAccessPresentation: FieldAccessPresentation | null;
   frostRiskMinTempC7d: number | null;
   frostRiskNights7d: number | null;
+  frostProbabilityPct7d?: number | null;
   weatherSourceLabel?: string | null;
 }): SeedingRecommendationPresentation | null {
   if (!isSpringSeedingContext(input.cropStagePresentation)) {
@@ -290,7 +299,13 @@ export function resolveSeedingRecommendation(input: {
     Number.isFinite(input.frostRiskNights7d)
       ? input.frostRiskNights7d
       : 0;
+  const frostProbabilityPct7d =
+    typeof input.frostProbabilityPct7d === "number" &&
+    Number.isFinite(input.frostProbabilityPct7d)
+      ? input.frostProbabilityPct7d
+      : null;
   const weatherSourceLabel = input.weatherSourceLabel?.trim() || "weather-backed";
+  const frostProbabilityLabel = formatProbabilityLabel(frostProbabilityPct7d);
 
   if (
     soilTempCurrent == null &&
@@ -323,14 +338,21 @@ export function resolveSeedingRecommendation(input: {
     frostRiskMinTempC7d != null && frostRiskMinTempC7d <= input.frostDamageTempC;
   const frostBlocked = frostDamageRisk || frostRiskNights7d > 0;
   const cropLabel = input.cropLabel.trim().length > 0 ? input.cropLabel : "This crop";
-  const frostSignal = frostRiskMinTempC7d != null
+  const frostSignal: SeedingRecommendationPresentation["signals"][number] | null =
+    frostRiskMinTempC7d != null
     ? {
         label: `Frost min ${formatSignedTemperature(frostRiskMinTempC7d)}`,
         color: frostKillRisk ? "red" : frostBlocked ? "yellow" : "green",
         detail:
-          frostRiskNights7d > 0
-            ? `${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} next 7d · ${weatherSourceLabel}`
-            : `No frost-risk nights next 7d · ${weatherSourceLabel}`,
+          [
+            frostRiskNights7d > 0
+              ? `${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} next 7d`
+              : "No frost-risk nights next 7d",
+            frostProbabilityLabel,
+            weatherSourceLabel,
+          ]
+            .filter((value): value is string => Boolean(value))
+            .join(" · "),
       }
     : null;
   const soilSignal = {
@@ -353,7 +375,7 @@ export function resolveSeedingRecommendation(input: {
       requiredDays,
     }),
   } as const;
-  const accessSignal = input.fieldAccessPresentation
+  const accessSignal: SeedingRecommendationPresentation["signals"][number] | null = input.fieldAccessPresentation
     ? {
         label: `Field access ${input.fieldAccessPresentation.value}`,
         color: signalColor(input.fieldAccessPresentation.tone),
@@ -404,7 +426,7 @@ export function resolveSeedingRecommendation(input: {
       explanation: `No confirmed finding is active yet. Soil conditions are approaching readiness, but the next 7 days still carry frost exposure for ${cropLabel.toLowerCase()}. This recommendation is advisory and based on crop-specific frost sensitivity.`,
       whyNow:
         frostRiskMinTempC7d != null
-          ? `The lowest forecast low is ${formatSignedTemperature(frostRiskMinTempC7d)} with ${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} in the next 7 days.`
+          ? `The lowest forecast low is ${formatSignedTemperature(frostRiskMinTempC7d)} with ${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} in the next 7 days${frostProbabilityLabel ? ` and ${frostProbabilityLabel.toLowerCase()} of dropping below the crop damage threshold.` : "."}`
           : `Frost-sensitive nights are still present in the next 7 days.`,
       inspectFirst:
         "Check low-lying, residue-light, and wind-exposed areas first, then reassess the seeding plan once the frost window clears.",
@@ -458,7 +480,7 @@ export function resolveSeedingRecommendation(input: {
     explanation: `No confirmed finding is active yet. Crop-specific soil temperature, frost, and field-access checks are aligned for ${cropLabel.toLowerCase()}, so the field is in a workable seeding window.`,
     whyNow:
       frostRiskMinTempC7d != null
-        ? `Soil @ 6 cm has cleared ${thresholdC.toFixed(0)}°C for ${soilTempSustainedDays ?? requiredDays}d, field access is workable, and the next 7 days stay above the ${formatSignedTemperature(input.frostDamageTempC)} damage threshold.`
+        ? `Soil @ 6 cm has cleared ${thresholdC.toFixed(0)}°C for ${soilTempSustainedDays ?? requiredDays}d, field access is workable, and the next 7 days stay above the ${formatSignedTemperature(input.frostDamageTempC)} damage threshold${frostProbabilityLabel ? ` with only ${frostProbabilityLabel.toLowerCase()} of crossing it.` : "."}`
         : `Soil @ 6 cm has cleared ${thresholdC.toFixed(0)}°C for ${soilTempSustainedDays ?? requiredDays}d and field access is workable.`,
     inspectFirst:
       "Start with representative strips and your colder low spots, then keep checking seed-depth temperature as the window advances.",

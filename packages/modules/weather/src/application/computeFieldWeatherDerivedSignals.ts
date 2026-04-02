@@ -24,6 +24,10 @@ type ListFieldWeatherForecastRepository = {
 };
 
 type UpsertFieldWeatherDerivedSignalSetRepository = {
+  getLatestByField(
+    workspaceId: string,
+    fieldId: string,
+  ): Promise<FieldWeatherDerivedSignalSet | null>;
   upsertSignalSet(
     input: ReturnType<typeof deriveWeatherSignalSet>,
   ): Promise<FieldWeatherDerivedSignalSet>;
@@ -59,6 +63,10 @@ export async function computeFieldWeatherDerivedSignals(
     validAfter: observation.observedAt,
     limit: input.input.forecastLimit ?? 168,
   });
+  const previousSignalSet = await input.signalSets.getLatestByField(
+    input.input.workspaceId,
+    input.input.fieldId,
+  );
 
   return input.signalSets.upsertSignalSet(
     deriveWeatherSignalSet({
@@ -70,6 +78,22 @@ export async function computeFieldWeatherDerivedSignals(
       signalVersion: input.input.signalVersion,
       gddBaseC: input.input.gddBaseC,
       soilTempThresholdC: input.input.soilTempThresholdC,
+      frostProbabilityPct7d:
+        previousSignalSet?.observedAt === observation.observedAt
+          ? previousSignalSet.frostProbabilityPct7d
+          : null,
+      frostProbabilityThresholdC:
+        previousSignalSet?.observedAt === observation.observedAt
+          ? previousSignalSet.provenance?.frostProbabilityThresholdC ?? null
+          : null,
+      frostProbabilityModelKey:
+        previousSignalSet?.observedAt === observation.observedAt
+          ? previousSignalSet.provenance?.frostProbabilityModelKey ?? null
+          : null,
+      frostProbabilityMemberCount:
+        previousSignalSet?.observedAt === observation.observedAt
+          ? previousSignalSet.provenance?.frostProbabilityMemberCount ?? null
+          : null,
     }),
   );
 }

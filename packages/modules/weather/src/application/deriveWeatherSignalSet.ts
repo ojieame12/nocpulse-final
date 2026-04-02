@@ -307,6 +307,10 @@ export function deriveWeatherSignalSet(input: {
   signalVersion?: string;
   gddBaseC?: number;
   soilTempThresholdC?: number;
+  frostProbabilityPct7d?: number | null;
+  frostProbabilityThresholdC?: number | null;
+  frostProbabilityModelKey?: string | null;
+  frostProbabilityMemberCount?: number | null;
 }): UpsertFieldWeatherDerivedSignalSetInput {
   const next24h = selectWindow(input.forecasts, 24);
   const next72h = selectWindow(input.forecasts, 72);
@@ -353,6 +357,11 @@ export function deriveWeatherSignalSet(input: {
       next168h,
       DEFAULT_FROST_WATCH_THRESHOLD_C,
     ),
+    frostProbabilityPct7d:
+      typeof input.frostProbabilityPct7d === "number" &&
+      Number.isFinite(input.frostProbabilityPct7d)
+        ? roundTo(input.frostProbabilityPct7d, 1)
+        : null,
     recentPrecipTotal72hMm: calculateRecentPrecipTotalMm(recentObservations72h),
     freezeThawCycles7d: calculateFreezeThawCycles(recentObservations168h),
     soilTemp6cmCurrentC: input.observation.soilTemperature6cmC ?? null,
@@ -371,6 +380,17 @@ export function deriveWeatherSignalSet(input: {
       observationSampleCount72h: recentObservations72h.length,
       observationSampleCount168h: recentObservations168h.length,
       soilTempThresholdC,
+      frostProbabilityModelKey: input.frostProbabilityModelKey ?? undefined,
+      frostProbabilityThresholdC:
+        typeof input.frostProbabilityThresholdC === "number" &&
+        Number.isFinite(input.frostProbabilityThresholdC)
+          ? input.frostProbabilityThresholdC
+          : undefined,
+      frostProbabilityMemberCount:
+        typeof input.frostProbabilityMemberCount === "number" &&
+        Number.isFinite(input.frostProbabilityMemberCount)
+          ? input.frostProbabilityMemberCount
+          : undefined,
       windowHours24: 24,
       windowHours72: 72,
       windowHours168: 168,

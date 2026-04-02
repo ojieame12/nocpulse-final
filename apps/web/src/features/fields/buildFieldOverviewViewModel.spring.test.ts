@@ -216,12 +216,14 @@ test("resolveSeedingRecommendation returns Hold when frost risk remains in the 7
     }),
     frostRiskMinTempC7d: -2.5,
     frostRiskNights7d: 1,
+    frostProbabilityPct7d: 43,
     weatherSourceLabel: "open-meteo · hourly-v1",
   });
 
   assert.equal(recommendation?.title, "Hold seeding for frost risk");
   assert.equal(recommendation?.severity, "medium");
   assert.match(recommendation?.whyNow ?? "", /lowest forecast low is -2\.5°C/i);
+  assert.match(recommendation?.whyNow ?? "", /43% probability/i);
 });
 
 test("resolveSeedingRecommendation returns Seed now when soil, frost, and access align", () => {

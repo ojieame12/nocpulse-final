@@ -12,6 +12,7 @@ export type RefreshFieldWeatherInput = WorkspaceScoped & {
   forecastHours?: number;
   gddBaseC?: number;
   soilTempThresholdC?: number;
+  frostDamageThresholdC?: number;
 };
 
 export type RefreshFieldWeatherResult = {

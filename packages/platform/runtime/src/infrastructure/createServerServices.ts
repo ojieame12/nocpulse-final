@@ -1216,6 +1216,7 @@ export function createServerServices(
             forecastHours: input.forecastHours,
             gddBaseC: resolvedRules.crop.gddBaseC,
             soilTempThresholdC: resolvedRules.seedingThresholds.soilTempMinC,
+            frostDamageThresholdC: resolvedRules.weatherRisk.frost.damageTempC,
           },
         });
         await refreshCanonicalFieldCropStage(repositories, {
@@ -1253,6 +1254,9 @@ export function createServerServices(
             gddBaseC: input.gddBaseC ?? resolvedRules.crop.gddBaseC,
             soilTempThresholdC:
               input.soilTempThresholdC ?? resolvedRules.seedingThresholds.soilTempMinC,
+            frostDamageThresholdC:
+              input.frostDamageThresholdC ??
+              resolvedRules.weatherRisk.frost.damageTempC,
           },
         });
         if (signalSet) {

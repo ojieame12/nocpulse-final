@@ -35,12 +35,27 @@ async function withMockFetch<T>(
   responseBody: unknown,
   callback: () => Promise<T>,
 ): Promise<{ capturedUrl: string; result: T }> {
-  let capturedUrl = "";
+  const { capturedUrls, result } = await withMockFetchSequence([responseBody], callback);
+  return {
+    capturedUrl: capturedUrls[0] ?? "",
+    result,
+  };
+}
+
+async function withMockFetchSequence<T>(
+  responseBodies: readonly unknown[],
+  callback: () => Promise<T>,
+): Promise<{ capturedUrls: string[]; result: T }> {
+  const capturedUrls: string[] = [];
   const originalFetch = globalThis.fetch;
+  let responseIndex = 0;
 
   globalThis.fetch = async (input: RequestInfo | URL, _init?: RequestInit) => {
-    capturedUrl = typeof input === "string" ? input : input.toString();
-    return new Response(JSON.stringify(responseBody), {
+    capturedUrls.push(typeof input === "string" ? input : input.toString());
+    const body =
+      responseBodies[Math.min(responseIndex, responseBodies.length - 1)] ?? {};
+    responseIndex += 1;
+    return new Response(JSON.stringify(body), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
@@ -48,7 +63,7 @@ async function withMockFetch<T>(
 
   try {
     const result = await callback();
-    return { capturedUrl, result };
+    return { capturedUrls, result };
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -114,6 +129,54 @@ test("observation includes soil temperature at 6 cm when Open-Meteo provides it"
   const url = new URL(capturedUrl);
   assert.match(url.searchParams.get("hourly") ?? "", /soil_temperature_6cm/);
   assert.equal(result.observation.soilTemperature6cmC, 11.4);
+});
+
+test("frostDamageThresholdC triggers ensemble fetch and computes 7-day frost probability", async () => {
+  const client = createOpenMeteoWeatherProviderClient();
+  const ensemblePayload = {
+    hourly: {
+      time: ["2024-06-15T12:00", "2024-06-15T13:00"],
+      temperature_2m: [1.2, -0.6],
+      temperature_2m_member01: [1.2, -0.6],
+      temperature_2m_member02: [3.4, 2.9],
+      temperature_2m_member03: [0.3, -1.8],
+    },
+  };
+
+  const { capturedUrls, result } = await withMockFetchSequence(
+    [makePayload(), ensemblePayload],
+    () =>
+      client.fetchFieldWeather({
+        ...INPUT,
+        frostDamageThresholdC: -1,
+      }),
+  );
+
+  assert.equal(capturedUrls.length, 2);
+  assert.equal(new URL(capturedUrls[0] ?? "").pathname, "/v1/forecast");
+  assert.equal(new URL(capturedUrls[1] ?? "").pathname, "/v1/ensemble");
+  assert.equal(
+    new URL(capturedUrls[1] ?? "").searchParams.get("models"),
+    "icon_seamless_eps",
+  );
+  assert.deepEqual(result.ensemble, {
+    frostProbabilityPct7d: 33.3,
+    frostProbabilityThresholdC: -1,
+    modelKey: "icon_seamless_eps",
+    memberCount: 3,
+  });
+});
+
+test("ensemble fetch is skipped when frostDamageThresholdC is omitted", async () => {
+  const client = createOpenMeteoWeatherProviderClient();
+
+  const { capturedUrls, result } = await withMockFetchSequence([makePayload()], () =>
+    client.fetchFieldWeather(INPUT),
+  );
+
+  assert.equal(capturedUrls.length, 1);
+  assert.equal(new URL(capturedUrls[0] ?? "").pathname, "/v1/forecast");
+  assert.equal(result.ensemble ?? null, null);
 });
 
 test("provenance defaults weatherModel to 'best_match' when not specified", async () => {

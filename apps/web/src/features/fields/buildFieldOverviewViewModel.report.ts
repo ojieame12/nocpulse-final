@@ -184,11 +184,14 @@ export function buildReportProps(
     weatherSignals?.frostRiskMinTempC ??
     null;
   const frostRiskNights7d = weatherSignals?.frostRiskNights7d ?? null;
+  const frostProbabilityPct7d = weatherSignals?.frostProbabilityPct7d ?? null;
   const frostLabel =
     weatherSignals?.frostRiskMinTempC7d != null
       ? frostRiskNights7d != null && frostRiskNights7d > 0
-        ? `Frost Min 7d (${frostRiskNights7d}n)`
-        : "Frost Min 7d"
+        ? `Frost Min 7d (${frostRiskNights7d}n${frostProbabilityPct7d != null ? ` · ${Math.round(frostProbabilityPct7d)}%` : ""})`
+        : frostProbabilityPct7d != null
+          ? `Frost Min 7d (${Math.round(frostProbabilityPct7d)}%)`
+          : "Frost Min 7d"
       : "Frost Min";
   const springSeedingContext = isSpringSeedingContext(cropStagePresentation);
   const soilTempPresentation = resolveSoilTempPresentation({

@@ -487,6 +487,7 @@ export type DatabaseSchema = {
           frost_risk_min_temp_c: number | string | null;
           frost_risk_min_temp_c_7d: number | string | null;
           frost_risk_nights_7d: number | string | null;
+          frost_probability_pct_7d: number | string | null;
           recent_precip_total_72h_mm: number | string | null;
           freeze_thaw_cycles_7d: number | string | null;
           soil_temp_6cm_current_c: number | string | null;
@@ -517,6 +518,7 @@ export type DatabaseSchema = {
           frost_risk_min_temp_c?: number | string | null;
           frost_risk_min_temp_c_7d?: number | string | null;
           frost_risk_nights_7d?: number | string | null;
+          frost_probability_pct_7d?: number | string | null;
           recent_precip_total_72h_mm?: number | string | null;
           freeze_thaw_cycles_7d?: number | string | null;
           soil_temp_6cm_current_c?: number | string | null;
@@ -544,6 +546,7 @@ export type DatabaseSchema = {
           frost_risk_min_temp_c: number | string | null;
           frost_risk_min_temp_c_7d: number | string | null;
           frost_risk_nights_7d: number | string | null;
+          frost_probability_pct_7d: number | string | null;
           recent_precip_total_72h_mm: number | string | null;
           freeze_thaw_cycles_7d: number | string | null;
           soil_temp_6cm_current_c: number | string | null;

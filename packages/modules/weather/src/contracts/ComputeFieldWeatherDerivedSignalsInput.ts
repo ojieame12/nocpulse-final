@@ -6,4 +6,5 @@ export type ComputeFieldWeatherDerivedSignalsInput = WorkspaceScoped & {
   forecastLimit?: number;
   gddBaseC?: number;
   soilTempThresholdC?: number;
+  frostDamageThresholdC?: number;
 };

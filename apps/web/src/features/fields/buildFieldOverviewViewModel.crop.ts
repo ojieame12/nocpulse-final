@@ -124,6 +124,11 @@ export function buildCropProps(rm: any): FieldCropProps {
     weatherSignals?.frostRiskMinTempC ??
     null;
   const frostRiskNights7d = weatherSignals?.frostRiskNights7d ?? null;
+  const frostProbabilityPct7d = weatherSignals?.frostProbabilityPct7d ?? null;
+  const frostProbabilityLabel =
+    frostProbabilityPct7d != null && Number.isFinite(frostProbabilityPct7d)
+      ? `${Math.round(frostProbabilityPct7d)}% probability`
+      : null;
   const frostHorizonLabel =
     weatherSignals?.frostRiskMinTempC7d != null ? "next 7d" : "next 24h";
   const soilTempPresentation = resolveSoilTempPresentation({
@@ -226,9 +231,9 @@ export function buildCropProps(rm: any): FieldCropProps {
             ? `Kill temperature forecast ${frostHorizonLabel} — protect crop immediately`
             : frostMinTemp <= resolvedRules.weatherRisk.frost.damageTempC
               ? frostRiskNights7d != null && frostRiskNights7d > 0
-                ? `${frostRiskNights7d} frost night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel} — monitor lows closely`
-                : `Damage risk ${frostHorizonLabel} — monitor overnight lows`
-              : `Above frost damage threshold ${frostHorizonLabel}`,
+                ? `${frostRiskNights7d} frost night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""} — monitor lows closely`
+                : `Damage risk ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""} — monitor overnight lows`
+              : `Above frost damage threshold ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""}`,
       status:
         frostMinTemp == null
           ? "warn"
@@ -521,8 +526,8 @@ export function buildCropProps(rm: any): FieldCropProps {
           frostMinTemp == null
             ? "No frost signal available"
             : frostRiskNights7d != null && frostRiskNights7d > 0
-              ? `Min ${frostMinTemp.toFixed(1)}°C · ${frostRiskNights7d} night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}`
-              : `Min ${frostMinTemp.toFixed(1)}°C ${frostHorizonLabel}`,
+              ? `Min ${frostMinTemp.toFixed(1)}°C · ${frostRiskNights7d} night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""}`
+              : `Min ${frostMinTemp.toFixed(1)}°C ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""}`,
         ...frostTone,
       },
       {

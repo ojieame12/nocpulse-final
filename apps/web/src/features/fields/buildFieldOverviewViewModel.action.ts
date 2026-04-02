@@ -366,12 +366,17 @@ function buildWatchlistSummary(input: {
     input.weatherSignals?.frostRiskMinTempC ??
     null;
   const frostRiskNights7d = input.weatherSignals?.frostRiskNights7d ?? null;
+  const frostProbabilityPct7d = input.weatherSignals?.frostProbabilityPct7d ?? null;
   const frostHorizonLabel =
     input.weatherSignals?.frostRiskMinTempC7d != null ? "next 7d" : "next 24h";
   const frostDetailLabel =
     input.weatherSignals?.frostRiskMinTempC7d != null
       ? "Lowest forecast low"
       : "Next overnight minimum";
+  const frostProbabilityLabel =
+    frostProbabilityPct7d != null && Number.isFinite(frostProbabilityPct7d)
+      ? `${Math.round(frostProbabilityPct7d)}% probability`
+      : null;
 
   if (
     typeof frostMin === "number" &&
@@ -392,12 +397,12 @@ function buildWatchlistSummary(input: {
         "Check low-lying and exposed parts of the field before the overnight low, and confirm crop-stage sensitivity before taking protective action.",
       explanation:
         frostRiskNights7d != null && frostRiskNights7d > 0
-          ? `No confirmed finding is active yet. Forecast minimum temperature is ${frostMin.toFixed(1)}°C with ${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}, so this recommendation is advisory and based on weather watch thresholds rather than an active tracked finding.`
-          : `No confirmed finding is active yet. Forecast minimum temperature is ${frostMin.toFixed(1)}°C ${frostHorizonLabel}, so this recommendation is advisory and based on weather watch thresholds rather than an active tracked finding.`,
+          ? `No confirmed finding is active yet. Forecast minimum temperature is ${frostMin.toFixed(1)}°C with ${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}${frostProbabilityLabel ? ` and ${frostProbabilityLabel.toLowerCase()} of dropping below the crop damage threshold` : ""}, so this recommendation is advisory and based on weather watch thresholds rather than an active tracked finding.`
+          : `No confirmed finding is active yet. Forecast minimum temperature is ${frostMin.toFixed(1)}°C ${frostHorizonLabel}${frostProbabilityLabel ? ` with ${frostProbabilityLabel.toLowerCase()} of dropping below the crop damage threshold` : ""}, so this recommendation is advisory and based on weather watch thresholds rather than an active tracked finding.`,
       whyNow:
         frostRiskNights7d != null && frostRiskNights7d > 0
-          ? `${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} are forecast ${frostHorizonLabel}, with the lowest low at ${frostMin.toFixed(1)}°C.`
-          : `Forecast minimum temperature is ${frostMin.toFixed(1)}°C ${frostHorizonLabel}.`,
+          ? `${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} are forecast ${frostHorizonLabel}, with the lowest low at ${frostMin.toFixed(1)}°C${frostProbabilityLabel ? ` and ${frostProbabilityLabel.toLowerCase()} below the crop damage threshold` : ""}.`
+          : `Forecast minimum temperature is ${frostMin.toFixed(1)}°C ${frostHorizonLabel}${frostProbabilityLabel ? ` with ${frostProbabilityLabel.toLowerCase()} below the crop damage threshold` : ""}.`,
       inspectFirst:
         "Inspect frost-prone low spots and exposed edges first, then verify whether crop stage or residue cover changes the actual risk on the ground.",
       confidence: "Heuristic watchlist · weather-backed",
@@ -409,6 +414,7 @@ function buildWatchlistSummary(input: {
             frostRiskNights7d != null && frostRiskNights7d > 0
               ? `${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}`
               : frostDetailLabel,
+            frostProbabilityLabel,
             input.weatherSourceLabel,
           ]
             .filter((value): value is string => Boolean(value))
@@ -631,6 +637,7 @@ export function buildActionProps(
       fieldAccessPresentation,
       frostRiskMinTempC7d: weatherSignals?.frostRiskMinTempC7d ?? null,
       frostRiskNights7d: weatherSignals?.frostRiskNights7d ?? null,
+      frostProbabilityPct7d: weatherSignals?.frostProbabilityPct7d ?? null,
       weatherSourceLabel,
     }) ?? null;
   const sprayRecommendation =
@@ -712,6 +719,22 @@ export function buildActionProps(
       weatherSignals?.updatedAt ?? weatherSignals?.observedAt ?? null,
     moistureObservedAt: moisture?.observedAt ?? null,
   });
+  const frostMin =
+    weatherSignals?.frostRiskMinTempC7d ??
+    weatherSignals?.frostRiskMinTempC ??
+    null;
+  const frostRiskNights7d = weatherSignals?.frostRiskNights7d ?? null;
+  const frostHorizonLabel =
+    weatherSignals?.frostRiskMinTempC7d != null ? "next 7d" : "next 24h";
+  const frostDetailLabel =
+    weatherSignals?.frostRiskMinTempC7d != null
+      ? "Lowest forecast low"
+      : "Next overnight minimum";
+  const frostProbabilityPct7d = weatherSignals?.frostProbabilityPct7d ?? null;
+  const frostProbabilityLabel =
+    frostProbabilityPct7d != null && Number.isFinite(frostProbabilityPct7d)
+      ? `${Math.round(frostProbabilityPct7d)}% probability`
+      : null;
 
   const activeSignals = finalizeRankedSignals(
     [
@@ -841,6 +864,7 @@ export function buildActionProps(
               frostRiskNights7d != null && frostRiskNights7d > 0
                 ? `${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}`
                 : frostDetailLabel,
+              frostProbabilityLabel,
               weatherSourceLabel,
             ]
               .filter((value): value is string => Boolean(value))
@@ -908,8 +932,8 @@ export function buildActionProps(
             : null,
           frostMin != null
             ? frostRiskNights7d != null && frostRiskNights7d > 0
-              ? `Minimum forecast temperature is ${frostMin.toFixed(1)}°C, with ${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}.`
-              : `Minimum forecast temperature is ${frostMin.toFixed(1)}°C ${frostHorizonLabel}.`
+              ? `Minimum forecast temperature is ${frostMin.toFixed(1)}°C, with ${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}${frostProbabilityLabel ? ` and ${frostProbabilityLabel.toLowerCase()} below the crop damage threshold` : ""}.`
+              : `Minimum forecast temperature is ${frostMin.toFixed(1)}°C ${frostHorizonLabel}${frostProbabilityLabel ? ` with ${frostProbabilityLabel.toLowerCase()} below the crop damage threshold` : ""}.`
             : null,
           weatherSignals?.peakForecastVpdKpa24h != null
             ? `Peak forecast crop water demand (VPD) over 24h is ${weatherSignals.peakForecastVpdKpa24h.toFixed(1)} kPa.`

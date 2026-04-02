@@ -51,6 +51,18 @@ function toProvenance(value: JsonValue): FieldWeatherDerivedSignalSetProvenance 
       typeof value.soilTempThresholdC === "number"
         ? value.soilTempThresholdC
         : undefined,
+    frostProbabilityModelKey:
+      typeof value.frostProbabilityModelKey === "string"
+        ? value.frostProbabilityModelKey
+        : undefined,
+    frostProbabilityThresholdC:
+      typeof value.frostProbabilityThresholdC === "number"
+        ? value.frostProbabilityThresholdC
+        : undefined,
+    frostProbabilityMemberCount:
+      typeof value.frostProbabilityMemberCount === "number"
+        ? value.frostProbabilityMemberCount
+        : undefined,
     windowHours24:
       typeof value.windowHours24 === "number" ? value.windowHours24 : undefined,
     windowHours72:
@@ -101,6 +113,10 @@ function mapSignalSet(
       row.frost_risk_nights_7d == null
         ? null
         : coerceNumber(row.frost_risk_nights_7d),
+    frostProbabilityPct7d:
+      row.frost_probability_pct_7d == null
+        ? null
+        : coerceNumber(row.frost_probability_pct_7d),
     recentPrecipTotal72hMm:
       row.recent_precip_total_72h_mm == null
         ? null
@@ -187,6 +203,7 @@ export function createSupabaseFieldWeatherDerivedSignalSetRepository(
             frost_risk_min_temp_c: input.frostRiskMinTempC ?? null,
             frost_risk_min_temp_c_7d: input.frostRiskMinTempC7d ?? null,
             frost_risk_nights_7d: input.frostRiskNights7d ?? null,
+            frost_probability_pct_7d: input.frostProbabilityPct7d ?? null,
             recent_precip_total_72h_mm: input.recentPrecipTotal72hMm ?? null,
             freeze_thaw_cycles_7d: input.freezeThawCycles7d ?? null,
             soil_temp_6cm_current_c: input.soilTemp6cmCurrentC ?? null,

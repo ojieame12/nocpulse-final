@@ -12,6 +12,7 @@ export type FetchFieldWeatherInput = {
   longitude: number;
   requestedAt?: TimestampIso;
   forecastHours?: number;
+  frostDamageThresholdC?: number;
 };
 
 export type WeatherProviderObservation = {
@@ -36,6 +37,12 @@ export type FetchFieldWeatherResult = {
   sourceKey: string;
   observation: WeatherProviderObservation;
   forecastSet: WeatherProviderForecastSet;
+  ensemble?: {
+    frostProbabilityPct7d: number | null;
+    frostProbabilityThresholdC: number | null;
+    modelKey: string | null;
+    memberCount: number | null;
+  } | null;
 };
 
 export type WeatherProviderClient = {
