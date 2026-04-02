@@ -35,6 +35,7 @@ import {
   Sprout,
   DollarSign,
   StickyNote,
+  ChevronDown,
   ChevronLeft,
   ShieldCheck,
   Download,
@@ -953,6 +954,7 @@ export function FieldDetailPanel({
   const [bodyKey, setBodyKey] = useState(0);
   const [modeSwitchKey, setModeSwitchKey] = useState(0);
   const [headerScrolled, setHeaderScrolled] = useState(false);
+  const [heroExpanded, setHeroExpanded] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const theme = useAppTheme();
   const isDark = theme === "dark";
@@ -974,6 +976,7 @@ export function FieldDetailPanel({
     }
     onModeChange?.(newMode);
     setModeSwitchKey((k) => k + 1);
+    setHeroExpanded(false);
   }, [activeMode, mode, onModeChange]);
 
   /* ── Subpage navigation with direction tracking ── */
@@ -1506,8 +1509,16 @@ export function FieldDetailPanel({
         >
           {/* ━━ HERO ━━ */}
           <div
-            className="fdp__hero"
-            style={heroSev !== "positive" ? { background: sevColors.gradient } : undefined}
+            className={`fdp__hero${heroExpanded && firstInsightCard ? " fdp__hero--insight-open" : ""}`}
+            style={{
+              ...(heroSev !== "positive" ? { background: sevColors.gradient } : {}),
+              cursor: firstInsightCard ? "pointer" : undefined,
+            }}
+            onClick={firstInsightCard ? () => setHeroExpanded((p) => !p) : undefined}
+            role={firstInsightCard ? "button" : undefined}
+            tabIndex={firstInsightCard ? 0 : undefined}
+            aria-expanded={firstInsightCard ? heroExpanded : undefined}
+            onKeyDown={firstInsightCard ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setHeroExpanded((p) => !p); } } : undefined}
           >
             <div style={{ flexShrink: 0 }}>
               <HeroDonut
@@ -1518,7 +1529,7 @@ export function FieldDetailPanel({
                 label={resolveModeLabel(mode, mapModel).toUpperCase()}
               />
             </div>
-            <div className="fdp__hero-text">
+            <div className="fdp__hero-text" style={{ flex: 1, minWidth: 0 }}>
               <h2
                 className="fdp__hero-headline fdp__hero-headline--compact"
                 style={heroSev !== "positive" ? { color: sevColors.text } : undefined}
@@ -1527,7 +1538,88 @@ export function FieldDetailPanel({
               </h2>
               <p className="fdp__hero-sub">{liveModeData.sub}</p>
             </div>
+            {firstInsightCard ? (
+              <ChevronDown
+                size={14}
+                style={{
+                  flexShrink: 0,
+                  opacity: 0.45,
+                  transform: heroExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 0.25s var(--ease-out-expo, cubic-bezier(0.22,1,0.36,1))",
+                }}
+              />
+            ) : null}
           </div>
+          {/* ━━ HERO EXPANDED: First Insight ━━ */}
+          {firstInsightCard && heroExpanded ? (
+            <div
+              className="fdp__hero-insight"
+              style={{
+                padding: "14px 16px",
+                borderTop: "1px solid var(--border-light)",
+                background: `${firstInsightAccent}08`,
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                animation: "fdp-insight-enter 0.3s var(--ease-out-expo, cubic-bezier(0.22,1,0.36,1)) both",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <ShieldCheck size={12} color={firstInsightAccent} />
+                <Lbl color={firstInsightAccent}>First Insight</Lbl>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 12,
+                }}
+              >
+                <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                  <LblM>What this field is telling me</LblM>
+                  <p
+                    style={{
+                      fontFamily: "var(--font-body)",
+                      fontSize: 12,
+                      color: "var(--text-primary)",
+                      margin: "4px 0 0",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {firstInsightCard.meaning}
+                  </p>
+                </div>
+                <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+                  <LblM>How much I should trust it</LblM>
+                  <p
+                    style={{
+                      fontFamily: "var(--font-body)",
+                      fontSize: 12,
+                      color: "var(--text-primary)",
+                      margin: "4px 0 0",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {firstInsightCard.trust}
+                  </p>
+                </div>
+                <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                  <LblM>What I should look at next</LblM>
+                  <p
+                    style={{
+                      fontFamily: "var(--font-body)",
+                      fontSize: 12,
+                      color: "var(--text-primary)",
+                      margin: "4px 0 0",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {firstInsightCard.next}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {workspaceFirstInsightSummary ? (
             <Card span={2} style={{ border: "1px solid var(--border-light)" }}>
@@ -1595,81 +1687,6 @@ export function FieldDetailPanel({
                         </div>
                       </div>
                     ))}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ) : null}
-
-          {firstInsightCard ? (
-            <Card span={2} style={{ border: "1px solid var(--border-light)" }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                <div
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 8,
-                    background: `${firstInsightAccent}14`,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <ShieldCheck size={14} color={firstInsightAccent} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <Lbl color={firstInsightAccent}>First Insight</Lbl>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: 12,
-                      marginTop: 6,
-                    }}
-                  >
-                    <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-                      <LblM>What this field is telling me</LblM>
-                      <p
-                        style={{
-                          fontFamily: "var(--font-body)",
-                          fontSize: 12,
-                          color: "var(--text-primary)",
-                          margin: "4px 0 0",
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        {firstInsightCard.meaning}
-                      </p>
-                    </div>
-                    <div style={{ flex: "1 1 180px", minWidth: 0 }}>
-                      <LblM>How much I should trust it</LblM>
-                      <p
-                        style={{
-                          fontFamily: "var(--font-body)",
-                          fontSize: 12,
-                          color: "var(--text-primary)",
-                          margin: "4px 0 0",
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        {firstInsightCard.trust}
-                      </p>
-                    </div>
-                    <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-                      <LblM>What I should look at next</LblM>
-                      <p
-                        style={{
-                          fontFamily: "var(--font-body)",
-                          fontSize: 12,
-                          color: "var(--text-primary)",
-                          margin: "4px 0 0",
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        {firstInsightCard.next}
-                      </p>
-                    </div>
                   </div>
                 </div>
               </div>

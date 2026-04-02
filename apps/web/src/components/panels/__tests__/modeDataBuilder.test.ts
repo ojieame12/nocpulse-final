@@ -308,3 +308,30 @@ test("spark: with report trend chart, spark length matches chart point count", (
   const result = buildFieldDetailModeData(createMinimalInput({ mode: "moisture", mapModel, report }));
   assert.equal(result.spark.length, 4);
 });
+
+test("trend color stays on the panel accent instead of inheriting report-series hex colors", () => {
+  const mapModel = createSurfaceMapModel();
+  const report = {
+    charts: [
+      { title: "Vegetation", series: [], subtitle: "" },
+      {
+        title: "MOISTURE ESTIMATE TREND",
+        subtitle: "Model estimates from weather + soil data",
+        series: [{
+          label: "Root (est.)",
+          color: "#60a5fa",
+          points: [
+            { label: "Mar 30", value: 44 },
+            { label: "Mar 31", value: 46 },
+          ],
+        }],
+      },
+    ],
+    findings: [],
+    zones: [],
+    readings: [],
+  } as any;
+  const result = buildFieldDetailModeData(createMinimalInput({ mode: "moisture", mapModel, report }));
+  assert.equal(result.trendLabel, "MOISTURE ESTIMATE TREND");
+  assert.equal(result.trendColor, undefined);
+});

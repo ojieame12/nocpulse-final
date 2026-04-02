@@ -158,6 +158,36 @@ test("FieldDetailPanel initialPage='notes' renders the canonical notes subpage",
   assert.match(markup, /Scout moisture pocket on the west edge\./);
 });
 
+test("FieldDetailPanel keeps first insight details collapsed by default", () => {
+  const markup = renderWithDarkTheme(
+    <FieldDetailPanel
+      {...createBasePanelProps()}
+      summary={{
+        ...createBasePanelProps().summary,
+        rootMoisture: "31%",
+        trend: "-4%",
+        fieldState: "Dry",
+        confidence: "High",
+        dataQuality: {
+          label: "Ready",
+          tone: "positive",
+          summary: "Backed by recent raster and moisture coverage.",
+          reasons: [],
+        },
+      }}
+      action={{
+        ...createBasePanelProps().action,
+        recommendation: "Scout the driest part of the field before the next pass.",
+      }}
+    />,
+  );
+
+  assert.match(markup, /aria-expanded="false"/);
+  assert.doesNotMatch(markup, /What this field is telling me/);
+  assert.doesNotMatch(markup, /How much I should trust it/);
+  assert.doesNotMatch(markup, /What I should look at next/);
+});
+
 test("CropsSubPage renders lld, provenance, crop alerts, and footer content", () => {
   const markup = renderWithDarkTheme(
     <CropsSubPage

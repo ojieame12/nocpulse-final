@@ -796,14 +796,14 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
         .filter((mode): mode is ModeKey => mode != null),
     [availableMetrics],
   );
+  const requestedMetricKey = LAYER_TO_METRIC[activeLayer];
   const activePanelMode = useMemo(
-    () => metricToModeKey(LAYER_TO_METRIC[activeLayer]) ?? 'moisture',
-    [activeLayer],
+    () => metricToModeKey(requestedMetricKey) ?? 'moisture',
+    [requestedMetricKey],
   );
 
   useEffect(() => {
-    const activeMetric = LAYER_TO_METRIC[activeLayer];
-    if (availableMetrics.includes(activeMetric)) {
+    if (availableMetrics.includes(requestedMetricKey)) {
       return;
     }
 
@@ -822,7 +822,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     if (nextLayer && nextLayer !== activeLayer) {
       setActiveLayer(nextLayer);
     }
-  }, [activeLayer, availableMetrics]);
+  }, [activeLayer, availableMetrics, requestedMetricKey]);
 
   const applyFieldData = useCallback((nextField: FieldViewModel) => {
     fieldCacheRef.current.set(nextField.fieldId, nextField);
@@ -2335,7 +2335,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
                 onCellClick={handleCellClick}
                 onFieldClick={handleFieldSelect}
                 onSurfaceChange={setRenderedSurface}
-                activeMetric={LAYER_TO_METRIC[activeLayer]}
+                activeMetric={requestedMetricKey}
               />
               {/* Loading indicator during field switch */}
               {isLoadingField && (
@@ -2390,6 +2390,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             {renderedSurface ? (
               <MetricLegendCard
                 metricKey={renderedSurface.metricKey}
+                selectedMetricKey={requestedMetricKey}
                 metricAveragePct={renderedSurface.metricAveragePct}
                 hoveredMetricPct={
                   hoveredCell?.metricKey === renderedSurface.metricKey
