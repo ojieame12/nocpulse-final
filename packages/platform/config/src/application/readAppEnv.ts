@@ -71,7 +71,7 @@ export function readAppEnv(source: Partial<Record<keyof AppEnv | string, string 
     },
     email: {
       resendApiKey: parsed.RESEND_API_KEY,
-      from: parsed.EMAIL_FROM ?? "NocPulse <noreply@nocpulse.com>",
+      from: parsed.EMAIL_FROM ?? "NocPulse <noreply@nocpulse.org>",
     },
     requestAccess: {
       notifyEmail: parsed.REQUEST_ACCESS_NOTIFY_EMAIL,

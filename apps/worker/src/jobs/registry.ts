@@ -19,9 +19,11 @@ import type {
   SyncLatestFieldImageryInput,
 } from "@fieldpulse/platform-runtime";
 import type { ImageryProviderProbeRecord } from "@fieldpulse/module-imagery";
+import type { FieldAlert } from "@fieldpulse/module-alerts";
 import type { WorkerJobContext } from "./contracts/WorkerJobContext";
 import { refreshMarketQuotes } from "../marketRefreshQuotes";
 import { enrichFieldSoilProperties, type SoilEnrichResult } from "../soilEnrich";
+import { notifyFieldAlerts } from "../notifyFieldAlerts";
 
 type LongRunningSmokeInput = {
   durationMs: number;
@@ -720,6 +722,56 @@ async function runIntakeFieldOnboardingJob(input: {
 
   if (!state.imagery) {
     throw new Error(`[worker] ${input.mode} completed without an imagery result`);
+  }
+
+  // --- Dispatch alert email notifications ---
+  // Collect newly created/escalated alerts from all intelligence results
+  const allAlerts: FieldAlert[] = [
+    ...(state.moistureStress?.alerts ?? []),
+    ...(state.weatherRisk?.alerts ?? []),
+    ...(state.diseaseRisk?.alerts ?? []),
+  ];
+
+  if (allAlerts.length > 0) {
+    try {
+      // Build fieldNames map — single field in this job
+      const fieldNames: Record<string, string> = {};
+
+      // Resolve field name from the catalog
+      try {
+        const fieldDetail =
+          await input.context.runtime.services.catalog.loadFieldDetailByWorkspace({
+            workspaceId: input.payload.workspaceId,
+            fieldId: input.payload.fieldId,
+          });
+        fieldNames[input.payload.fieldId] =
+          fieldDetail.field?.detail.name ?? "Unnamed Field";
+      } catch {
+        fieldNames[input.payload.fieldId] = "Unnamed Field";
+      }
+
+      const notifyResult = await notifyFieldAlerts({
+        context: input.context,
+        workspaceId: input.payload.workspaceId,
+        alerts: allAlerts,
+        fieldNames,
+      });
+
+      if (notifyResult.skipped) {
+        input.context.logger.info(
+          `[worker] alert notifications skipped: ${notifyResult.reason}`,
+        );
+      } else {
+        input.context.logger.info(
+          `[worker] alert notifications dispatched: ${notifyResult.emailsSent} sent, ${notifyResult.emailsFailed} failed`,
+        );
+      }
+    } catch (notifyError) {
+      // Notification failures should not fail the onboarding job
+      input.context.logger.warn(
+        `[worker] alert notification dispatch failed (non-fatal): ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`,
+      );
+    }
   }
 
   return {

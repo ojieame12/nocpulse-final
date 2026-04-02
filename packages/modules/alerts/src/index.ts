@@ -38,3 +38,13 @@ export {
 } from "./application/upsertFieldAlert";
 export { type AlertRepository } from "./infrastructure/AlertRepository";
 export { createSupabaseAlertRepository } from "./infrastructure/createSupabaseAlertRepository";
+export {
+  renderFieldAlertEmail,
+  type FieldAlertEmailInput,
+} from "./application/renderFieldAlertEmail";
+export {
+  dispatchAlertNotifications,
+  type DispatchAlertNotificationsInput,
+  type DispatchAlertNotificationsResult,
+  type NotifiableWorkspaceMember,
+} from "./application/dispatchAlertNotifications";
