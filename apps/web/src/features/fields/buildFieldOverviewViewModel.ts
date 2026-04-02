@@ -54,6 +54,7 @@ import {
   deriveSidebarStatus,
   estimateJsonSize,
   extractTrackedZoneIds,
+  filterFieldQualityDependentAlertRecords,
   finishPerfTimer,
   formatHistoryLabel,
   formatMediumDateTime,
@@ -617,46 +618,10 @@ export async function buildFieldOverviewViewModel(
     return `${days}d ago`;
   }
 
-  const alertItems: AlertItem[] = readModel.alerts.map((a) => ({
-    id: a.id,
-    title: a.title,
-    severity: a.severity === "high" ? "critical" : a.severity,
-    subtitle: a.summary ?? a.family.replace(/_/g, " "),
-    time: formatTimeAgo(a.startedAt),
-    trackedZoneIds: extractTrackedZoneIds(a.evidence),
-    acknowledgedAt: a.acknowledgedAt ?? null,
-  }));
-
-  const resolvedItems: ResolvedAlertItem[] = readModel.resolvedAlerts.map((a) => ({
-    id: a.id,
-    title: a.title,
-    subtitle: a.summary ?? a.family.replace(/_/g, " "),
-    time: a.resolvedAt ? formatTimeAgo(a.resolvedAt) : "—",
-    trackedZoneIds: extractTrackedZoneIds(a.evidence),
-    status: a.status === "dismissed" ? "dismissed" : "resolved",
-  }));
+  const rawAlertRecords = readModel.alerts ?? [];
+  const rawResolvedAlertRecords = readModel.resolvedAlerts ?? [];
   const activeAlertsAvailable = readModel.dataAvailability?.activeAlerts !== false;
   const resolvedAlertsAvailable = readModel.dataAvailability?.resolvedAlerts !== false;
-
-  const alertsPanel: AlertsPanelProps = {
-    activeAlerts: alertItems,
-    resolvedAlerts: resolvedItems,
-    activeCount: alertItems.length,
-    criticalCount: alertItems.filter((a) => a.severity === "critical").length,
-    weekCount: alertItems.length + resolvedItems.length,
-    emptyStateTitle:
-      !activeAlertsAvailable
-        ? "Alert data unavailable"
-        : !resolvedAlertsAvailable
-          ? "Alert history incomplete"
-          : undefined,
-    emptyStateDescription:
-      !activeAlertsAvailable
-        ? "Active alerts could not be loaded for this field. Refresh before treating this field as all clear."
-        : !resolvedAlertsAvailable
-          ? "Resolved alert history could not be loaded. Active alerts are current, but recent resolution history may be incomplete."
-          : undefined,
-  };
   const allCropContexts = await allCropContextsPromise;
 
   const resolvePanels = async () => {
@@ -801,46 +766,6 @@ export async function buildFieldOverviewViewModel(
     })),
   };
 
-  /* ── Sidebar field items (with crop types for all fields) ── */
-  const cropByFieldId = new Map(
-    allCropContexts.map((ctx) => [ctx.fieldId, ctx.cropType]),
-  );
-
-  // If we have crop data, only show fields with crops (seeded Hope Creek fields).
-  // If crop data is unavailable, fall back to showing all fields.
-  const filteredFields = cropByFieldId.size > 0
-    ? selection.fields.filter(
-        (entry) => cropByFieldId.has(entry.id) || entry.id === field.id,
-      )
-    : selection.fields;
-
-  const sidebarFields: SidebarFieldItem[] = filteredFields.map((entry) => ({
-    id: entry.id,
-    name: entry.name,
-    area: `${entry.areaHa.toFixed(1)} ha`,
-    legalLandDescription: entry.legalLandDescription,
-    crop: cropByFieldId.get(entry.id),
-    alertCount:
-      entry.id === field.id && activeAlertsAvailable
-        ? readModel.summary.activeAlertCount ?? undefined
-        : undefined,
-    status:
-      entry.id === field.id
-        ? deriveSidebarStatus({
-            rootZonePct: effectiveMoisture.latestSnapshot?.rootZonePct ?? null,
-            confidence: effectiveMoisture.latestSnapshot?.confidence ?? null,
-            activeAlertCount: activeAlertsAvailable
-              ? readModel.summary.activeAlertCount
-              : undefined,
-          })
-        : deriveSidebarStatus({
-            rootZonePct: entry.latestMoisture?.rootZonePct ?? null,
-            confidence: entry.latestMoisture?.confidence ?? null,
-          }),
-  }));
-
-  /* ── Summary panel data (from whatever the catalog provides) ── */
-
   const latestMoisture = effectiveMoisture.latestSnapshot;
   const rootPct = effectiveMoisture.rootZoneAvgPct;
   const surfPct = effectiveMoisture.surfaceAvgPct;
@@ -893,6 +818,96 @@ export async function buildFieldOverviewViewModel(
         (entry.precipitationProbabilityPct ?? 0) >= 40 ||
         entry.precipitationMm > 0.5,
     ) ?? null;
+  const summaryDataQuality = deriveSummaryDataQuality({
+    snapshot: latestMoisture,
+    confidence,
+    weatherAvailability: weatherDataAvailability,
+    opticalObservationCount,
+  });
+  const presentedAlertRecords = filterFieldQualityDependentAlertRecords(
+    rawAlertRecords,
+    summaryDataQuality?.label,
+  );
+  const presentedResolvedAlertRecords = filterFieldQualityDependentAlertRecords(
+    rawResolvedAlertRecords,
+    summaryDataQuality?.label,
+  );
+  const alertItems: AlertItem[] = presentedAlertRecords.map((a) => ({
+    id: a.id,
+    title: a.title,
+    severity: a.severity === "high" ? "critical" : a.severity,
+    subtitle: a.summary ?? a.family.replace(/_/g, " "),
+    time: formatTimeAgo(a.startedAt),
+    trackedZoneIds: extractTrackedZoneIds(a.evidence),
+    acknowledgedAt: a.acknowledgedAt ?? null,
+  }));
+  const resolvedItems: ResolvedAlertItem[] = presentedResolvedAlertRecords.map((a) => ({
+    id: a.id,
+    title: a.title,
+    subtitle: a.summary ?? a.family.replace(/_/g, " "),
+    time: a.resolvedAt ? formatTimeAgo(a.resolvedAt) : "—",
+    trackedZoneIds: extractTrackedZoneIds(a.evidence),
+    status: a.status === "dismissed" ? "dismissed" : "resolved",
+  }));
+  const alertsPanel: AlertsPanelProps = {
+    activeAlerts: alertItems,
+    resolvedAlerts: resolvedItems,
+    activeCount: alertItems.length,
+    criticalCount: alertItems.filter((a) => a.severity === "critical").length,
+    weekCount: alertItems.length + resolvedItems.length,
+    emptyStateTitle:
+      !activeAlertsAvailable
+        ? "Alert data unavailable"
+        : !resolvedAlertsAvailable
+          ? "Alert history incomplete"
+          : undefined,
+    emptyStateDescription:
+      !activeAlertsAvailable
+        ? "Active alerts could not be loaded for this field. Refresh before treating this field as all clear."
+        : !resolvedAlertsAvailable
+          ? "Resolved alert history could not be loaded. Active alerts are current, but recent resolution history may be incomplete."
+          : undefined,
+  };
+
+  /* ── Sidebar field items (with crop types for all fields) ── */
+  const cropByFieldId = new Map(
+    allCropContexts.map((ctx) => [ctx.fieldId, ctx.cropType]),
+  );
+
+  // If we have crop data, only show fields with crops (seeded Hope Creek fields).
+  // If crop data is unavailable, fall back to showing all fields.
+  const filteredFields = cropByFieldId.size > 0
+    ? selection.fields.filter(
+        (entry) => cropByFieldId.has(entry.id) || entry.id === field.id,
+      )
+    : selection.fields;
+
+  const sidebarFields: SidebarFieldItem[] = filteredFields.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    area: `${entry.areaHa.toFixed(1)} ha`,
+    legalLandDescription: entry.legalLandDescription,
+    crop: cropByFieldId.get(entry.id),
+    alertCount:
+      entry.id === field.id && activeAlertsAvailable
+        ? alertItems.length
+        : undefined,
+    status:
+      entry.id === field.id
+        ? deriveSidebarStatus({
+            rootZonePct: effectiveMoisture.latestSnapshot?.rootZonePct ?? null,
+            confidence: effectiveMoisture.latestSnapshot?.confidence ?? null,
+            activeAlertCount: activeAlertsAvailable
+              ? alertItems.length
+              : undefined,
+          })
+        : deriveSidebarStatus({
+            rootZonePct: entry.latestMoisture?.rootZonePct ?? null,
+            confidence: entry.latestMoisture?.confidence ?? null,
+          }),
+  }));
+
+  /* ── Summary panel data (from whatever the catalog provides) ── */
   const summary: FieldSummaryProps = {
     name: field.name,
     lld: readModel.intake.legalLandDescription ?? "",
@@ -998,12 +1013,7 @@ export async function buildFieldOverviewViewModel(
 
     // Data sources
     dataSources: deriveSummaryDataSources(latestMoisture, weatherDataAvailability),
-    dataQuality: deriveSummaryDataQuality({
-      snapshot: latestMoisture,
-      confidence,
-      weatherAvailability: weatherDataAvailability,
-      opticalObservationCount,
-    }),
+    dataQuality: summaryDataQuality,
   };
 
   const viewModel = {

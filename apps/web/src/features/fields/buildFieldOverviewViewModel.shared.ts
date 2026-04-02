@@ -273,3 +273,32 @@ export function resolveHistoricalAnomalyFromReadModel(readModel: {
           : 'normal',
   };
 }
+
+export function isFieldQualityDependentAlertFamily(
+  family: string | null | undefined,
+) {
+  switch (family) {
+    case "action_brief":
+    case "crop_health":
+    case "disease_risk":
+    case "moisture_stress":
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function filterFieldQualityDependentAlertRecords<
+  T extends { family?: string | null },
+>(
+  records: readonly T[],
+  dataQualityLabel: string | null | undefined,
+) {
+  if (dataQualityLabel == null || dataQualityLabel === "Ready") {
+    return [...records];
+  }
+
+  return records.filter(
+    (record) => !isFieldQualityDependentAlertFamily(record.family),
+  );
+}

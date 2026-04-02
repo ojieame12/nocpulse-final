@@ -15,6 +15,7 @@ import type {
 import {
   buildObservationHistoryLabels,
   extractTrackedZoneIds,
+  filterFieldQualityDependentAlertRecords,
   formatHistoryLabel,
   shortProviderTag,
 } from "./buildFieldOverviewViewModel.shared";
@@ -111,7 +112,10 @@ export function buildReportProps(
     forecasts: true,
   };
   const moisture = rm.moisture;
-  const alerts = rm.alerts ?? [];
+  const alerts = filterFieldQualityDependentAlertRecords(
+    rm.alerts ?? [],
+    rm.summary?.dataQuality?.label,
+  );
   const summary = rm.summary;
   const activeAlertsAvailable = rm.dataAvailability?.activeAlerts !== false;
   const cropContext = rm.cropContext;
@@ -422,7 +426,7 @@ export function buildReportProps(
   if (latestNdmiRaster?.sourceKey) sourceKeys.add(latestNdmiRaster.sourceKey);
 
   const baseHealthStatus =
-    summary?.activeAlertCount != null && summary.activeAlertCount > 0
+    alerts.length > 0
       ? "Needs Attention"
       : latestOpticalRaster != null
         ? canopySignalPresentation.reportHealthStatus
