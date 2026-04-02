@@ -50,6 +50,7 @@ import {
   chooseFirstInsightField,
   type FirstInsightFieldEntry,
 } from '../../features/fields/firstInsightChooser';
+import { resolvePreviewPostOnboardingFieldId } from './resolvePreviewPostOnboardingFieldId';
 import type { FieldCropProps as LiveCropPanelProps } from '../../features/fields/tabs/CropTab';
 
 /* ── Types ── */
@@ -1481,14 +1482,10 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
            Re-run the chooser so that hydration summaries collected during
            polling are considered and thin/broken fields stay excluded even
            when only a single field was imported. */
-        const refreshFieldId = isPlaceholderFieldId(activeFieldId)
-          ? (
-              pendingOnboardingWatch.preferredFieldId ??
-              (pendingOnboardingWatch.fieldIds.length === 1
-                ? (pendingOnboardingWatch.fieldIds[0] ?? null)
-                : null)
-            )
-          : activeFieldId;
+        const refreshFieldId = resolvePreviewPostOnboardingFieldId({
+          activeFieldId,
+          preferredFieldId: pendingOnboardingWatch.preferredFieldId ?? null,
+        });
 
         if (!refreshFieldId) {
           setPendingOnboardingWatch(null);
