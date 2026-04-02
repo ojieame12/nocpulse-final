@@ -14,6 +14,7 @@
     "check:boundaries": "node ./scripts/check-boundaries.mjs",
     "lint": "node ./scripts/check-boundaries.mjs",
     "ops:beta-readiness": "corepack pnpm -C ./apps/worker run report:beta-readiness",
+    "ops:beta-roster": "corepack pnpm -C ./apps/worker run report:beta-roster",
     "ops:field-quality": "corepack pnpm -C ./apps/worker run report:quality",
     "ops:first-insight-funnel": "corepack pnpm -C ./apps/worker run report:first-insight-funnel",
     "ops:first-insight-followup": "corepack pnpm -C ./apps/worker run report:first-insight-followup",

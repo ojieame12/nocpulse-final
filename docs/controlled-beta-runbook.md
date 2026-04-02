@@ -19,6 +19,7 @@ Workspace-specific:
 
 ```bash
 corepack pnpm -C /Users/ojieame/FieldPulse-v3/apps/worker run report:beta-readiness -- --workspace-slug hope-creek --json
+corepack pnpm -C /Users/ojieame/FieldPulse-v3 ops:beta-roster -- --days 30 --json
 ```
 
 Portfolio-wide:
@@ -33,6 +34,7 @@ What it checks:
 - source integrity from the latest field context
 - field quality
 - first-insight evidence
+- recent workspace outreach status across the beta roster
 
 Interpretation:
 - `GO`: acceptable for managed beta widening
