@@ -49,11 +49,14 @@ export function buildPreviewFirstInsightAuditPayload(input: {
     return null;
   }
 
+  const dataQualityLabel: PreviewFirstInsightAuditPayload["dataQualityLabel"] =
+    dataQuality.label === "Ready" ? "Ready" : "Limited";
+
   return {
     workspaceId,
     fieldId: fieldData.fieldId,
     fieldName: fieldData.fieldName,
-    dataQualityLabel: dataQuality.label,
+    dataQualityLabel,
     moistureConfidenceLevel: confidence,
     moistureDerivationMode: summary.moistureDerivationMode,
     workspaceSummaryComparisonCount:
