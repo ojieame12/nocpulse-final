@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   HydrationStageTracker,
   type HydrationStageTrackerProps,
@@ -44,22 +44,24 @@ export function HydrationOverlay({
   useEffect(() => {
     const prev = prevStatusRef.current;
     prevStatusRef.current = onboardingStatus?.status;
+    let holdTimer: ReturnType<typeof setTimeout> | null = null;
+    let dismissTimer: ReturnType<typeof setTimeout> | null = null;
 
     if (prev != null && prev !== 'completed' && isComplete) {
-      let dismissTimer: ReturnType<typeof setTimeout> | null = null;
-      // Hold the completed state briefly, then fade out
-      const holdTimer = setTimeout(() => {
+      holdTimer = setTimeout(() => {
         setVisible(false);
         dismissTimer = setTimeout(() => setDismissed(true), 500);
       }, 800);
-
-      return () => {
-        clearTimeout(holdTimer);
-        if (dismissTimer) {
-          clearTimeout(dismissTimer);
-        }
-      };
     }
+
+    return () => {
+      if (holdTimer) {
+        clearTimeout(holdTimer);
+      }
+      if (dismissTimer) {
+        clearTimeout(dismissTimer);
+      }
+    };
   }, [isComplete, onboardingStatus?.status]);
 
   // Reset when a new field starts onboarding

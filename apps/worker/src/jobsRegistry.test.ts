@@ -31,7 +31,8 @@ function createWorkspaceScheduleJob(
     | "weather.schedule-workspace-refresh"
     | "moisture.schedule-workspace-estimate-rebuild"
     | "intelligence.schedule-workspace-moisture-stress"
-    | "intelligence.schedule-workspace-weather-risk",
+    | "intelligence.schedule-workspace-weather-risk"
+    | "intelligence.schedule-workspace-action-brief",
 ): SimpleWorkspaceScheduleJob {
   const job = jobs.find((entry) => entry.key === key);
   assert.ok(job, `${key} should be registered`);
@@ -258,6 +259,43 @@ test("intelligence.schedule-workspace-moisture-stress and intelligence.schedule-
   );
   assert.deepEqual(
     weatherResult.queuedDispatchIds,
+    fields.map((field) => `dispatch-${field.id}`),
+  );
+});
+
+test("intelligence.schedule-workspace-action-brief preserves field order", async () => {
+  const scheduleJob = createWorkspaceScheduleJob(
+    "intelligence.schedule-workspace-action-brief",
+  );
+  const fields = Array.from({ length: 5 }, (_, index) => ({
+    id: `field-${index + 1}`,
+    workspaceId: "workspace-1",
+    name: `Field ${index + 1}`,
+    areaHa: 64 + index,
+    legalLandDescription: null,
+    latestMoisture: null,
+  }));
+  const { context } = createMockContext(fields);
+
+  const result = await scheduleJob.run(
+    context,
+    {
+      workspaceId: "workspace-1",
+      requestedAt: "2026-03-30T10:00:00.000Z",
+    },
+    {
+      dispatchId: "dispatch-action-brief",
+      attempt: 1,
+      workerName: "test-worker",
+      async reportProgress() {},
+      async throwIfCancellationRequested() {
+        return;
+      },
+    },
+  );
+
+  assert.deepEqual(
+    result.queuedDispatchIds,
     fields.map((field) => `dispatch-${field.id}`),
   );
 });

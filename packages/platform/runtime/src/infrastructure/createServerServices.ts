@@ -14,6 +14,7 @@ import {
   buildFieldZoneActivityReport,
   buildDiseaseRiskReport,
   buildAlertFromIntelligenceFinding,
+  generateActionBriefFindings,
   generateDiseaseRiskFindings,
   generateHailRiskFindings,
   generateMoistureStressFindings,
@@ -282,8 +283,10 @@ function familyPriority(value: string | null | undefined) {
       return 3;
     case "weather_risk":
       return 2;
-    case "crop_health":
+    case "action_brief":
       return 1;
+    case "crop_health":
+      return 0;
     default:
       return 0;
   }
@@ -1618,6 +1621,31 @@ export function createServerServices(
             cropContext,
           },
           rulePack: prairieDefaultRulePack,
+        });
+        const { alerts, alertSync } = await syncGeneratedFindingAlerts(
+          repositories.alerts,
+          result.findings,
+        );
+
+        return {
+          ...result,
+          alerts,
+          alertSync,
+        };
+      },
+      async generateActionBriefFindings(input) {
+        await requireFieldDetail(repositories, input.workspaceId, input.fieldId);
+        const requestedAt = input.requestedAt ?? new Date().toISOString();
+        const result = await generateActionBriefFindings({
+          moistureSnapshots: repositories.moistureSnapshots,
+          weatherSignalSets: repositories.weatherSignalSets,
+          runs: repositories.cropIntelligenceRuns,
+          findings: repositories.cropIntelligenceFindings,
+          input: {
+            workspaceId: input.workspaceId,
+            fieldId: input.fieldId,
+            requestedAt,
+          },
         });
         const { alerts, alertSync } = await syncGeneratedFindingAlerts(
           repositories.alerts,

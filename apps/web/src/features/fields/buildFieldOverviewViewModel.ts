@@ -624,6 +624,7 @@ export async function buildFieldOverviewViewModel(
     subtitle: a.summary ?? a.family.replace(/_/g, " "),
     time: formatTimeAgo(a.startedAt),
     trackedZoneIds: extractTrackedZoneIds(a.evidence),
+    acknowledgedAt: a.acknowledgedAt ?? null,
   }));
 
   const resolvedItems: ResolvedAlertItem[] = readModel.resolvedAlerts.map((a) => ({
@@ -632,6 +633,7 @@ export async function buildFieldOverviewViewModel(
     subtitle: a.summary ?? a.family.replace(/_/g, " "),
     time: a.resolvedAt ? formatTimeAgo(a.resolvedAt) : "—",
     trackedZoneIds: extractTrackedZoneIds(a.evidence),
+    status: a.status === "dismissed" ? "dismissed" : "resolved",
   }));
   const activeAlertsAvailable = readModel.dataAvailability?.activeAlerts !== false;
   const resolvedAlertsAvailable = readModel.dataAvailability?.resolvedAlerts !== false;

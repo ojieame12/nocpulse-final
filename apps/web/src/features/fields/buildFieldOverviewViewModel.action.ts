@@ -151,8 +151,10 @@ function familyPriority(value: string | null | undefined) {
       return 3;
     case "weather_risk":
       return 2;
-    case "crop_health":
+    case "action_brief":
       return 1;
+    case "crop_health":
+      return 0;
     default:
       return 0;
   }

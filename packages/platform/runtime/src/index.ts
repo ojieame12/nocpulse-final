@@ -21,6 +21,8 @@ export {
   type CreateSpreadsheetImportBatchResult,
   type GenerateFieldHailRiskFindingsInput,
   type GenerateFieldHailRiskFindingsResult,
+  type GenerateFieldActionBriefFindingsInput,
+  type GenerateFieldActionBriefFindingsResult,
   type GenerateFieldDiseaseRiskFindingsInput,
   type GenerateFieldDiseaseRiskFindingsResult,
   type GenerateFieldMoistureStressFindingsInput,

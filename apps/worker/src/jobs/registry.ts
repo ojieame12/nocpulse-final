@@ -6,6 +6,7 @@ import {
 } from "@fieldpulse/platform-jobs";
 import type {
   FieldHydrationReplayResult,
+  GenerateFieldActionBriefFindingsInput,
   GenerateFieldDiseaseRiskFindingsInput,
   GenerateFieldHailRiskFindingsInput,
   GenerateFieldMoistureStressFindingsInput,
@@ -92,6 +93,13 @@ type IntakeFieldOnboardingJobResult = {
         >
       >
     | null;
+  actionBrief:
+    | Awaited<
+        ReturnType<
+          WorkerJobContext["runtime"]["services"]["intelligence"]["generateActionBriefFindings"]
+        >
+      >
+    | null;
   actionCuration:
     | Awaited<
         ReturnType<
@@ -134,8 +142,9 @@ function buildSkippedIntakeFieldOnboardingJobResult(input: {
     moistureStress: null,
     weatherRisk: null,
     diseaseRisk: null,
-  actionCuration: null,
-  replayResult: null,
+    actionBrief: null,
+    actionCuration: null,
+    replayResult: null,
   };
 }
 
@@ -160,6 +169,7 @@ type IntakeFieldOnboardingJobState = {
   moistureStress: IntakeFieldOnboardingJobResult["moistureStress"];
   weatherRisk: IntakeFieldOnboardingJobResult["weatherRisk"];
   diseaseRisk: IntakeFieldOnboardingJobResult["diseaseRisk"];
+  actionBrief: IntakeFieldOnboardingJobResult["actionBrief"];
   actionCuration: IntakeFieldOnboardingJobResult["actionCuration"];
   replayResult: IntakeFieldOnboardingJobResult["replayResult"];
 };
@@ -309,6 +319,21 @@ type ScheduleWorkspaceWeatherRiskResult = {
   queuedDispatchIds: readonly string[];
 };
 
+type ScheduleWorkspaceActionBriefInput = {
+  workspaceId: string;
+  fieldIds?: readonly string[];
+  limit?: number;
+  requestedAt?: string;
+};
+
+type ScheduleWorkspaceActionBriefResult = {
+  workspaceId: string;
+  requestedAt: string;
+  fieldCount: number;
+  queuedCount: number;
+  queuedDispatchIds: readonly string[];
+};
+
 type RefreshMarketPricesInput = {
   requestedAt?: string;
   cropSymbols?: readonly string[];
@@ -441,6 +466,7 @@ async function runIntakeFieldOnboardingJob(input: {
         moistureStress: null as IntakeFieldOnboardingJobResult["moistureStress"],
         weatherRisk: null as IntakeFieldOnboardingJobResult["weatherRisk"],
         diseaseRisk: null as IntakeFieldOnboardingJobResult["diseaseRisk"],
+        actionBrief: null as IntakeFieldOnboardingJobResult["actionBrief"],
         actionCuration: null as IntakeFieldOnboardingJobResult["actionCuration"],
         replayResult: null as IntakeFieldOnboardingJobResult["replayResult"],
       } satisfies IntakeFieldOnboardingJobState,
@@ -712,8 +738,26 @@ async function runIntakeFieldOnboardingJob(input: {
               },
             },
             {
-              key: "curate-field-action",
+              key: "generate-action-brief",
               progressPct: 99,
+              progressMessage: "generating material change action brief",
+              async run(currentState: IntakeFieldOnboardingJobState) {
+                return {
+                  ...currentState,
+                  actionBrief:
+                    await input.context.runtime.services.intelligence.generateActionBriefFindings(
+                      {
+                        workspaceId: input.payload.workspaceId,
+                        fieldId: input.payload.fieldId,
+                        requestedAt,
+                      },
+                    ),
+                };
+              },
+            },
+            {
+              key: "curate-field-action",
+              progressPct: 100,
               progressMessage: "curating field action summary",
               async run(currentState: IntakeFieldOnboardingJobState) {
                 return {
@@ -763,6 +807,7 @@ async function runIntakeFieldOnboardingJob(input: {
     ...(state.moistureStress?.alerts ?? []),
     ...(state.weatherRisk?.alerts ?? []),
     ...(state.diseaseRisk?.alerts ?? []),
+    ...(state.actionBrief?.alerts ?? []),
   ];
 
   if (allAlerts.length > 0) {
@@ -822,6 +867,7 @@ async function runIntakeFieldOnboardingJob(input: {
     moistureStress: state.moistureStress,
     weatherRisk: state.weatherRisk,
     diseaseRisk: state.diseaseRisk,
+    actionBrief: state.actionBrief,
     actionCuration: state.actionCuration,
     replayResult: state.replayResult,
   };
@@ -2138,6 +2184,236 @@ export const jobs = [
       await execution.reportProgress({
         progressPct: 100,
         progressMessage: "workspace disease risk generation jobs scheduled",
+        phaseKey: null,
+        phaseLabel: null,
+      });
+
+      return {
+        workspaceId: payload.workspaceId,
+        requestedAt,
+        fieldCount: selectedFields.length,
+        queuedCount: fields.length,
+        queuedDispatchIds,
+      };
+    },
+  }),
+  createRegisteredJob<
+    WorkerJobContext,
+    GenerateFieldActionBriefFindingsInput,
+    {
+      weatherSignals: Awaited<
+        ReturnType<
+          WorkerJobContext["runtime"]["services"]["weather"]["computeFieldDerivedSignals"]
+        >
+      >;
+      intelligence: Awaited<
+        ReturnType<
+          WorkerJobContext["runtime"]["services"]["intelligence"]["generateActionBriefFindings"]
+        >
+      >;
+    }
+  >({
+    key: "intelligence.generate-action-brief",
+    description:
+      "Materialize weather-derived signals, then generate a material-change action brief and synced alert.",
+    async samplePayload(context: WorkerJobContext) {
+      const target = await context.resolveDefaultFieldTarget();
+      return {
+        ...target,
+      };
+    },
+    async run(context: WorkerJobContext, payload, execution) {
+      const state = await runJobPhases(execution, {
+        initialState: {
+          weatherSignals: null as Awaited<
+            ReturnType<
+              WorkerJobContext["runtime"]["services"]["weather"]["computeFieldDerivedSignals"]
+            >
+          > | null,
+          intelligence: null as Awaited<
+            ReturnType<
+              WorkerJobContext["runtime"]["services"]["intelligence"]["generateActionBriefFindings"]
+            >
+          > | null,
+        },
+        phases: [
+          {
+            key: "validate-request",
+            progressPct: 10,
+            progressMessage: "validating action brief request",
+            run(currentState) {
+              return currentState;
+            },
+          },
+          {
+            key: "compute-weather-signals",
+            progressPct: 45,
+            progressMessage: "computing weather-derived context",
+            async run(currentState) {
+              return {
+                ...currentState,
+                weatherSignals:
+                  await context.runtime.services.weather.computeFieldDerivedSignals({
+                    workspaceId: payload.workspaceId,
+                    fieldId: payload.fieldId,
+                  }),
+              };
+            },
+          },
+          {
+            key: "generate-findings",
+            progressPct: 80,
+            progressMessage: "generating material change action brief",
+            async run(currentState) {
+              return {
+                ...currentState,
+                intelligence:
+                  await context.runtime.services.intelligence.generateActionBriefFindings(
+                    payload,
+                  ),
+              };
+            },
+          },
+          {
+            key: "finalize-result",
+            progressPct: 95,
+            progressMessage: "finalizing action brief result",
+            run(currentState) {
+              return currentState;
+            },
+          },
+        ],
+      });
+
+      if (!state.intelligence) {
+        throw new Error(
+          "[worker] action brief intelligence job completed without a result",
+        );
+      }
+
+      const notifiableAlerts = (state.intelligence.alerts ?? []).filter(
+        (alert) => alert.status === "active",
+      );
+
+      if (notifiableAlerts.length > 0) {
+        try {
+          const fieldNames: Record<string, string> = {};
+
+          try {
+            const fieldDetail =
+              await context.runtime.services.catalog.loadFieldDetailByWorkspace({
+                workspaceId: payload.workspaceId,
+                fieldId: payload.fieldId,
+              });
+            fieldNames[payload.fieldId] =
+              fieldDetail.field?.detail.name ?? "Unnamed Field";
+          } catch {
+            fieldNames[payload.fieldId] = "Unnamed Field";
+          }
+
+          await notifyFieldAlerts({
+            context,
+            workspaceId: payload.workspaceId,
+            alerts: notifiableAlerts,
+            fieldNames,
+          });
+        } catch (notifyError) {
+          context.logger.warn(
+            `[worker] action brief notification dispatch failed (non-fatal): ${
+              notifyError instanceof Error ? notifyError.message : String(notifyError)
+            }`,
+          );
+        }
+      }
+
+      return {
+        weatherSignals: state.weatherSignals,
+        intelligence: state.intelligence,
+      };
+    },
+  }),
+  createRegisteredJob<
+    WorkerJobContext,
+    ScheduleWorkspaceActionBriefInput,
+    ScheduleWorkspaceActionBriefResult
+  >({
+    key: "intelligence.schedule-workspace-action-brief",
+    description:
+      "Enumerate workspace fields and enqueue one material-change action brief job per field.",
+    async samplePayload(context: WorkerJobContext) {
+      const target = await context.resolveDefaultFieldTarget();
+      return {
+        workspaceId: target.workspaceId,
+        limit: 1,
+      };
+    },
+    async run(context: WorkerJobContext, payload, execution) {
+      const requestedAt = payload.requestedAt ?? new Date().toISOString();
+      const overview = await context.runtime.services.catalog.loadWorkspaceFieldOverview({
+        preferredWorkspaceId: payload.workspaceId,
+      });
+
+      if (!overview.selectedWorkspace || overview.selectedWorkspace.id !== payload.workspaceId) {
+        throw new Error(
+          `[worker] workspace ${payload.workspaceId} could not be resolved for action brief scheduling`,
+        );
+      }
+
+      const selectedFields = payload.fieldIds?.length
+        ? overview.fields.filter((field) => payload.fieldIds!.includes(field.id))
+        : overview.fields;
+      const fields = payload.limit
+        ? selectedFields.slice(0, Math.max(0, payload.limit))
+        : selectedFields;
+      const queuedDispatchIds: string[] = [];
+
+      await execution.reportProgress({
+        progressPct: 10,
+        progressMessage: "loaded workspace fields for action brief scheduling",
+        phaseKey: "load-workspace-fields",
+        phaseLabel: "load workspace fields",
+      });
+
+      if (fields.length === 0) {
+        await execution.reportProgress({
+          progressPct: 100,
+          progressMessage: "no workspace fields matched action brief schedule",
+          phaseKey: null,
+          phaseLabel: null,
+        });
+
+        return {
+          workspaceId: payload.workspaceId,
+          requestedAt,
+          fieldCount: 0,
+          queuedCount: 0,
+          queuedDispatchIds,
+        };
+      }
+
+      queuedDispatchIds.push(
+        ...await enqueueWorkspaceFieldJobs({
+          execution,
+          fields,
+          phaseKey: "enqueue-field-action-brief",
+          phaseLabel: "enqueue field action brief generation",
+          progressMessage: (completedCount, totalCount) =>
+            `queued action brief generation ${completedCount} of ${totalCount}`,
+          enqueue: (field) =>
+            context.enqueueJob({
+              key: "intelligence.generate-action-brief",
+              payload: {
+                workspaceId: payload.workspaceId,
+                fieldId: field.id,
+                requestedAt,
+              },
+            }),
+        }),
+      );
+
+      await execution.reportProgress({
+        progressPct: 100,
+        progressMessage: "workspace action brief generation jobs scheduled",
         phaseKey: null,
         phaseLabel: null,
       });
