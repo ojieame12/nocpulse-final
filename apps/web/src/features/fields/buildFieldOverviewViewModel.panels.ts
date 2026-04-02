@@ -5,6 +5,7 @@ import type {
   FieldActivityPanelModel,
   FieldActivityZoneItem,
 } from "./FieldActivityPanelModel";
+import { filterFieldQualityDependentAlertRecords } from "./buildFieldOverviewViewModel.shared";
 
 function formatCoordinateLabel(point: readonly [number, number] | null | undefined) {
   if (!point) {
@@ -101,13 +102,39 @@ export function buildNotesProps(
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function buildActivityPanelModel(rm: any): FieldActivityPanelModel {
-  const activeFindingCount = rm.summary?.activeFindingCount ?? 0;
-  const activeZoneCount = rm.summary?.activeTrackedZoneCount ?? 0;
-  const newZoneCount = rm.zones?.newZoneCount ?? 0;
-  const recoveringZoneCount = rm.zones?.recoveringZoneCount ?? 0;
-  const resolvedZoneCount = rm.zones?.resolvedZoneCount ?? 0;
+  const dataQualityLabel = rm.summary?.dataQuality?.label ?? null;
+  const rawFindings = rm.findings ?? [];
+  const rawZones = rm.zones?.zones ?? [];
+  const rawFamilySummaries = rm.zones?.familySummaries ?? [];
+  const presentedFindings = filterFieldQualityDependentAlertRecords(
+    rawFindings,
+    dataQualityLabel,
+  );
+  const presentedZones = filterFieldQualityDependentAlertRecords(
+    rawZones,
+    dataQualityLabel,
+  );
+  const presentedFamilySummaries = filterFieldQualityDependentAlertRecords(
+    rawFamilySummaries,
+    dataQualityLabel,
+  );
+  const hiddenFindingCount = rawFindings.length - presentedFindings.length;
+  const hiddenZoneCount = rawZones.length - presentedZones.length;
+  const activeFindingCount = presentedFindings.filter(
+    (finding: any) => finding.status === "active",
+  ).length;
+  const activeZoneCount = presentedZones.filter(
+    (zone: any) => zone.status !== "resolved",
+  ).length;
+  const newZoneCount = presentedZones.filter((zone: any) => zone.status === "new").length;
+  const recoveringZoneCount = presentedZones.filter(
+    (zone: any) => zone.status === "recovering",
+  ).length;
+  const resolvedZoneCount = presentedZones.filter(
+    (zone: any) => zone.status === "resolved",
+  ).length;
 
-  const findings: FieldActivityFindingItem[] = (rm.findings ?? []).map((finding: any) => ({
+  const findings: FieldActivityFindingItem[] = presentedFindings.map((finding: any) => ({
     id: finding.id,
     title: finding.title,
     summary: finding.summary,
@@ -119,7 +146,7 @@ export function buildActivityPanelModel(rm: any): FieldActivityPanelModel {
         .filter((zoneId: unknown) => typeof zoneId === "string") ?? [],
   }));
 
-  const zones: FieldActivityZoneItem[] = (rm.zones?.zones ?? []).map((zone: any) => ({
+  const zones: FieldActivityZoneItem[] = presentedZones.map((zone: any) => ({
     id: zone.id,
     family: zone.family,
     trackingKey: zone.trackingKey,
@@ -130,7 +157,7 @@ export function buildActivityPanelModel(rm: any): FieldActivityPanelModel {
     lastSeenAt: zone.lastSeenAt,
   }));
 
-  const familySummaries: FieldActivityFamilySummary[] = (rm.zones?.familySummaries ?? []).map(
+  const familySummaries: FieldActivityFamilySummary[] = presentedFamilySummaries.map(
     (summary: any) => ({
       family: summary.family,
       activeZoneCount:
@@ -143,11 +170,14 @@ export function buildActivityPanelModel(rm: any): FieldActivityPanelModel {
 
   return {
     generatedAt: rm.generatedAt,
+    dataQualityLabel,
     activeFindingCount,
     activeZoneCount,
     newZoneCount,
     recoveringZoneCount,
     resolvedZoneCount,
+    hiddenFindingCount,
+    hiddenZoneCount,
     familySummaries,
     findings,
     zones,

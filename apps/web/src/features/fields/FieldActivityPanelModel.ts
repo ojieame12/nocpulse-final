@@ -26,11 +26,14 @@ export interface FieldActivityFamilySummary {
 
 export interface FieldActivityPanelModel {
   generatedAt: string;
+  dataQualityLabel: string | null;
   activeFindingCount: number;
   activeZoneCount: number;
   newZoneCount: number;
   recoveringZoneCount: number;
   resolvedZoneCount: number;
+  hiddenFindingCount: number;
+  hiddenZoneCount: number;
   familySummaries: readonly FieldActivityFamilySummary[];
   findings: readonly FieldActivityFindingItem[];
   zones: readonly FieldActivityZoneItem[];

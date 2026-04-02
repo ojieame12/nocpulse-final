@@ -211,6 +211,11 @@ function ActivityContent({
 
   // All zeros — show a calm "all clear" state instead of blank cards
   if (isAllQuiet(activity)) {
+    const heldBackOnly =
+      (activity.hiddenFindingCount > 0 || activity.hiddenZoneCount > 0) &&
+      activity.dataQualityLabel != null &&
+      activity.dataQualityLabel !== "Ready";
+
     return (
       <>
         <div
@@ -259,11 +264,12 @@ function ActivityContent({
                 color: "var(--text-primary)",
               }}
             >
-              All clear
+              {heldBackOnly ? "Activity held back" : "All clear"}
             </span>
             <Sub>
-              No active findings or tracked zones. The analysis engine will
-              detect patterns as satellite passes accumulate.
+              {heldBackOnly
+                ? `Field-dependent findings and tracked zones are being held back while data quality is ${String(activity.dataQualityLabel).toLowerCase()}.`
+                : "No active findings or tracked zones. The analysis engine will detect patterns as satellite passes accumulate."}
             </Sub>
           </div>
         </Card>
@@ -279,6 +285,14 @@ function ActivityContent({
               <Sub>Resolved zones</Sub>
               <Mono>{activity.resolvedZoneCount}</Mono>
             </div>
+            {heldBackOnly ? (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <Sub>Held back activity</Sub>
+                <Mono>
+                  {activity.hiddenFindingCount} findings · {activity.hiddenZoneCount} zones
+                </Mono>
+              </div>
+            ) : null}
           </div>
         </Card>
       </>
@@ -330,6 +344,14 @@ function ActivityContent({
       {contextLabel ? (
         <Card span={-1} className="fdp-card--muted">
           <Sub>{contextLabel}</Sub>
+        </Card>
+      ) : null}
+
+      {activity.hiddenFindingCount > 0 || activity.hiddenZoneCount > 0 ? (
+        <Card span={-1} className="fdp-card--muted">
+          <Sub>
+            {activity.hiddenFindingCount} finding{activity.hiddenFindingCount === 1 ? "" : "s"} and {activity.hiddenZoneCount} zone{activity.hiddenZoneCount === 1 ? "" : "s"} are being held back while field data quality is {String(activity.dataQualityLabel ?? "limited").toLowerCase()}.
+          </Sub>
         </Card>
       ) : null}
 
@@ -470,6 +492,14 @@ function ActivityContent({
               k: "Top finding",
               v: activity.findings[0]?.title ?? "No active findings",
             },
+            ...(activity.hiddenFindingCount > 0 || activity.hiddenZoneCount > 0
+              ? [
+                  {
+                    k: "Held back",
+                    v: `${activity.hiddenFindingCount} findings · ${activity.hiddenZoneCount} zones`,
+                  },
+                ]
+              : []),
           ].map((d) => (
             <div
               key={d.k}
