@@ -11,13 +11,17 @@
  *   --workspace-id <id> All fields in workspace
  *   --days <n>          Lookback period (default: 90)
  *   --output <path>     JSON report output (default: stdout)
- *   --smap-csv <path>   Path to SMAP fixture CSV (required until AppEEARS is wired)
+ *   --smap-csv <path>   Path to SMAP fixture CSV (optional when AppEEARS creds exist)
+ *   --appeears-task-id <id> Resume an existing AppEEARS task (field-id only)
+ *   --appeears-poll-seconds <n> Poll interval in seconds (default: 10)
+ *   --appeears-task-timeout-minutes <n> Task timeout in minutes (default: 60)
  *   --dry-run           Show what would be fetched without calling APIs
  */
 
 import { writeFile } from "node:fs/promises";
 import {
   computeValidationMetrics,
+  createAppEearsSmapSource,
   createCsvFixtureSmapSource,
   type SmapDataSource,
   type SmapFieldReport,
@@ -25,6 +29,7 @@ import {
 } from "@fieldpulse/module-validation";
 import { createSupabaseDatabaseClient } from "@fieldpulse/platform-db";
 import { createServerRuntime } from "@fieldpulse/platform-runtime";
+import { buildValidationPoint } from "./smapBacktest.shared";
 import { loadWorkerEnv } from "./runtime/loadEnv";
 import {
   parseCliArgs,
@@ -41,9 +46,67 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+function utcDayStartIso(d: Date): string {
+  return `${isoDate(d)}T00:00:00.000Z`;
+}
+
+function addUtcDays(d: Date, days: number): Date {
+  const next = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
 function mean(values: number[]): number {
   if (values.length === 0) return NaN;
   return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+type BacktestFieldRow = {
+  id: string;
+  workspace_id: string;
+  name: string | null;
+  label_point:
+    | {
+        type?: string;
+        coordinates?: unknown;
+      }
+    | readonly [number, number]
+    | null;
+};
+
+function toLabelPoint(
+  value: BacktestFieldRow["label_point"],
+): readonly [number, number] | null {
+  if (Array.isArray(value)) {
+    if (
+      value.length >= 2 &&
+      typeof value[0] === "number" &&
+      typeof value[1] === "number"
+    ) {
+      return [value[0], value[1]];
+    }
+    return null;
+  }
+
+  const point =
+    value && typeof value === "object"
+      ? (value as { type?: string; coordinates?: unknown })
+      : null;
+
+  if (
+    point &&
+    point.type === "Point" &&
+    Array.isArray(point.coordinates) &&
+    point.coordinates.length >= 2 &&
+    typeof point.coordinates[0] === "number" &&
+    typeof point.coordinates[1] === "number"
+  ) {
+    return [point.coordinates[0], point.coordinates[1]];
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,11 +123,25 @@ async function main() {
   const days = readNumberFlag(args, "days") ?? 90;
   const outputPath = readStringFlag(args, "output");
   const smapCsvPath = readStringFlag(args, "smap-csv");
+  const appeearsTaskId = readStringFlag(args, "appeears-task-id");
+  const appeearsPollSeconds = readNumberFlag(args, "appeears-poll-seconds");
+  const appeearsTaskTimeoutMinutes = readNumberFlag(
+    args,
+    "appeears-task-timeout-minutes",
+  );
   const dryRun = readBooleanFlag(args, "dry-run");
 
   if (!fieldId && !workspaceId) {
     console.error(
       "[smap-backtest] Either --field-id or --workspace-id is required.",
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  if (appeearsTaskId && !fieldId) {
+    console.error(
+      "[smap-backtest] --appeears-task-id requires --field-id so the resumed task maps to one field.",
     );
     process.exitCode = 1;
     return;
@@ -107,14 +184,16 @@ async function main() {
     return;
   }
 
+  const fieldRows = fields as BacktestFieldRow[];
+
   console.log(
-    `[smap-backtest] found ${fields.length} field(s), period: ${isoDate(startDate)} to ${isoDate(endDate)} (${days} days)`,
+    `[smap-backtest] found ${fieldRows.length} field(s), period: ${isoDate(startDate)} to ${isoDate(endDate)} (${days} days)`,
   );
 
   if (dryRun) {
     const summary = {
       mode: "dry-run",
-      fields: fields.map((f) => ({
+      fields: fieldRows.map((f) => ({
         id: f.id,
         name: f.name,
         labelPoint: f.label_point,
@@ -134,25 +213,61 @@ async function main() {
     smapSource = createCsvFixtureSmapSource(smapCsvPath);
     console.log(`[smap-backtest] using CSV fixture: ${smapCsvPath}`);
   } else {
-    // TODO: wire AppEEARS client when credentials are available
-    // const username = process.env.EARTHDATA_USERNAME;
-    // const password = process.env.EARTHDATA_PASSWORD;
-    // smapSource = createAppEearsSmapSource(username, password);
-    console.error(
-      "[smap-backtest] No --smap-csv provided and AppEEARS is not yet wired. " +
-        "Provide a fixture CSV with --smap-csv <path>.",
+    const username = process.env.EARTHDATA_USERNAME;
+    const password = process.env.EARTHDATA_PASSWORD;
+    const baseUrl = process.env.APPEEARS_BASE_URL;
+
+    if (!username || !password) {
+      console.error(
+        "[smap-backtest] No --smap-csv provided and AppEEARS credentials are missing. " +
+          "Set EARTHDATA_USERNAME / EARTHDATA_PASSWORD or provide --smap-csv <path>.",
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    smapSource = createAppEearsSmapSource(username, password, {
+      baseUrl,
+      existingTaskId: appeearsTaskId,
+      pollIntervalMs:
+        appeearsPollSeconds && appeearsPollSeconds > 0
+          ? appeearsPollSeconds * 1000
+          : undefined,
+      taskTimeoutMs:
+        appeearsTaskTimeoutMinutes && appeearsTaskTimeoutMinutes > 0
+          ? appeearsTaskTimeoutMinutes * 60_000
+          : undefined,
+      onTaskSubmitted(taskId) {
+        console.log(`[smap-backtest] AppEEARS task submitted: ${taskId}`);
+      },
+      onTaskResumed(taskId) {
+        console.log(`[smap-backtest] resuming AppEEARS task: ${taskId}`);
+      },
+      onProgress(update) {
+        const steps = update.steps
+          .map((step) =>
+            `${step.step ?? "?"}:${step.desc}:${step.pctComplete ?? 0}%`,
+          )
+          .join(" | ");
+        console.log(
+          `[smap-backtest] AppEEARS ${update.taskId} ` +
+            `${update.taskStatus ?? "unknown"} ` +
+            `${update.summaryPct ?? 0}% ` +
+            `${update.statusUpdatedAt ?? ""} ` +
+            (steps ? `steps=${steps}` : ""),
+        );
+      },
+    });
+    console.log(
+      `[smap-backtest] using AppEEARS${baseUrl ? ` (${baseUrl})` : ""}`,
     );
-    process.exitCode = 1;
-    return;
   }
 
   // ---- Process each field ----
   const fieldReports: SmapFieldReport[] = [];
 
-  for (const field of fields) {
-    const labelPoint = field.label_point as unknown as
-      | readonly [number, number]
-      | null;
+  for (const field of fieldRows) {
+    const labelPoint = toLabelPoint(field.label_point);
 
     if (!labelPoint || labelPoint.length < 2) {
       console.warn(
@@ -162,14 +277,16 @@ async function main() {
     }
 
     const [lng, lat] = labelPoint;
+    const windowStart = utcDayStartIso(startDate);
+    const windowEndExclusive = utcDayStartIso(addUtcDays(endDate, 1));
 
     // Fetch NocPulse moisture snapshots for this field
     const { data: snapshots, error: snapError } = await db
       .from("field_moisture_snapshots")
-      .select("observed_at, root_zone_pct")
+      .select("observed_at, root_zone_pct, source_key, inputs")
       .eq("field_id", field.id)
-      .gte("observed_at", isoDate(startDate))
-      .lte("observed_at", isoDate(endDate))
+      .gte("observed_at", windowStart)
+      .lt("observed_at", windowEndExclusive)
       .order("observed_at", { ascending: true });
 
     if (snapError) {
@@ -180,7 +297,14 @@ async function main() {
     }
 
     // Build NocPulse lookup by date
-    const nocpulseByDate = new Map<string, number>();
+    const nocpulseByDate = new Map<
+      string,
+      {
+        pct: number;
+        sourceKey: string | null;
+        derivationMode: string | null;
+      }
+    >();
     for (const snap of snapshots ?? []) {
       const date =
         typeof snap.observed_at === "string"
@@ -188,8 +312,18 @@ async function main() {
           : "";
       const pct =
         typeof snap.root_zone_pct === "number" ? snap.root_zone_pct : NaN;
+      const inputs =
+        snap.inputs && typeof snap.inputs === "object"
+          ? (snap.inputs as { derivationMode?: unknown })
+          : null;
+      const derivationMode =
+        typeof inputs?.derivationMode === "string"
+          ? inputs.derivationMode
+          : null;
+      const sourceKey =
+        typeof snap.source_key === "string" ? snap.source_key : null;
       if (date && Number.isFinite(pct)) {
-        nocpulseByDate.set(date, pct);
+        nocpulseByDate.set(date, { pct, sourceKey, derivationMode });
       }
     }
 
@@ -215,25 +349,38 @@ async function main() {
 
     const timeseries: SmapFieldReport["timeseries"] = [];
     const pairs: Array<{ predicted: number; observed: number }> = [];
+    let rawMatchedDates = 0;
 
     for (const date of sortedDates) {
-      const nocpulsePct = nocpulseByDate.get(date) ?? null;
+      const nocpulseSnapshot = nocpulseByDate.get(date) ?? null;
+      const nocpulsePct = nocpulseSnapshot?.pct ?? null;
       const smapPct = smapByDate.get(date) ?? null;
+      const result = buildValidationPoint(date, nocpulsePct, smapPct, {
+        sourceKey: nocpulseSnapshot?.sourceKey ?? null,
+        derivationMode: nocpulseSnapshot?.derivationMode ?? null,
+      });
 
-      timeseries.push({ date, nocpulsePct, smapPct });
+      timeseries.push(result.point);
 
-      if (nocpulsePct !== null && smapPct !== null) {
-        pairs.push({ predicted: nocpulsePct, observed: smapPct });
+      if (result.rawMatched) {
+        rawMatchedDates += 1;
+      }
+
+      if (result.pair) {
+        pairs.push(result.pair);
       }
     }
 
     const metrics = computeValidationMetrics(pairs);
+    const excludedMatchedDates = rawMatchedDates - pairs.length;
 
     const report: SmapFieldReport = {
       fieldId: field.id,
       fieldName: field.name ?? "Unnamed",
       periodDays: days,
       matchedDates: pairs.length,
+      rawMatchedDates,
+      excludedMatchedDates,
       metrics,
       timeseries,
     };
@@ -241,7 +388,10 @@ async function main() {
     fieldReports.push(report);
 
     console.log(
-      `[smap-backtest] ${field.name ?? field.id}: ${pairs.length} matched dates, ` +
+      `[smap-backtest] ${field.name ?? field.id}: ` +
+        `${pairs.length}/${rawMatchedDates} scored/raw matched dates` +
+        (excludedMatchedDates > 0 ? ` (${excludedMatchedDates} excluded)` : "") +
+        `, ` +
         `RMSE=${metrics.rmse.toFixed(2)}, MAE=${metrics.mae.toFixed(2)}, ` +
         `r=${metrics.pearsonR.toFixed(3)}, bias=${metrics.bias.toFixed(2)}`,
     );
