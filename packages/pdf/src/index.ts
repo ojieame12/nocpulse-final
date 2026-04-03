@@ -27,3 +27,6 @@ export type {
 } from "./contracts/PdfRender";
 export { describePdfRenderResult } from "./application/describePdfRenderResult";
 export { renderPdfDocument } from "./application/renderPdfDocument";
+export {
+  TEXT, BRAND, STATUS, BADGE, SURFACE, SPACE,
+} from "./application/PdfStyleSheet";

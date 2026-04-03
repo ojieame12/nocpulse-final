@@ -1,8 +1,16 @@
 import { jsonError, jsonServerError } from "../../../../../server/http/json";
 import { buildFieldOverviewViewModel } from "../../../../../features/fields/buildFieldOverviewViewModel";
-import { prepareFieldDetailReportArtifact } from "../../../../../server/exports/prepareFieldDetailReportArtifact";
+import { prepareFieldReportArtifact } from "@fieldpulse/module-reports";
+import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
 
 export const dynamic = "force-dynamic";
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 export async function GET(
   request: Request,
@@ -25,23 +33,27 @@ export async function GET(
       return jsonError(404, `Field ${fieldId} not found.`);
     }
 
-    const panels = await viewModel.resolvePanels();
-    const prepared = prepareFieldDetailReportArtifact({
+    const generatedAt = new Date().toISOString();
+    const runtime = getWebServerRuntime();
+    if (!runtime.services) {
+      throw new Error("Server runtime services are unavailable for field report export.");
+    }
+    const readModel = await runtime.services.reports.buildFieldReadModel({
+      workspaceId: viewModel.workspaceId,
       fieldId: viewModel.fieldId,
-      fieldName: viewModel.fieldName,
-      areaLabel: viewModel.areaHaLabel,
-      summary: viewModel.summary,
-      report: panels.reportPanel,
-      action: panels.actionPanel,
-      notes: panels.notesPanel,
+      reportDate: generatedAt,
     });
+    const prepared = prepareFieldReportArtifact({
+      readModel,
+    });
+    const fileName = `${slugify(viewModel.fieldName)}-field-report-${generatedAt.slice(0, 10)}.pdf`;
 
     return new Response(Buffer.from(prepared.bytes), {
       status: 200,
       headers: {
         "content-type": prepared.contentType,
         "cache-control": prepared.cacheControl,
-        "content-disposition": `attachment; filename="${prepared.fileName}"`,
+        "content-disposition": `attachment; filename="${fileName}"`,
       },
     });
   } catch (error) {

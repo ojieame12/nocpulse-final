@@ -1,6 +1,7 @@
 import { jsonError, jsonServerError } from "../../../../../server/http/json";
 import { buildFieldOverviewViewModel } from "../../../../../features/fields/buildFieldOverviewViewModel";
-import { prepareFieldCropReportArtifact } from "../../../../../server/exports/prepareFieldCropReportArtifact";
+import { prepareFieldCropReportArtifact } from "@fieldpulse/module-reports";
+import { loadPdfBrandLogo } from "../../../../../server/exports/loadPdfBrandLogo";
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +27,14 @@ export async function GET(
     }
 
     const panels = await viewModel.resolvePanels();
+    const brandLogo = loadPdfBrandLogo();
     const prepared = prepareFieldCropReportArtifact({
       fieldId: viewModel.fieldId,
       fieldName: viewModel.fieldName,
       areaLabel: viewModel.areaHaLabel,
       summary: viewModel.summary,
       crop: panels.cropPanel,
+      brandLogoPngBytes: brandLogo ?? undefined,
     });
 
     return new Response(Buffer.from(prepared.bytes), {

@@ -11,6 +11,13 @@ export {
   prepareFieldReportArtifact,
   type PreparedFieldReportArtifact,
 } from "./application/prepareFieldReportArtifact";
+export {
+  prepareFieldCropReportArtifact,
+  type FieldCropReportProps,
+  type FieldCropReportSummary,
+  type PrepareFieldCropReportArtifactInput,
+  type PreparedFieldCropReportArtifact,
+} from "./application/prepareFieldCropReportArtifact";
 export { renderFieldReportArtifact } from "./application/renderFieldReportArtifact";
 export {
   createObjectStoreReportArtifactStore,

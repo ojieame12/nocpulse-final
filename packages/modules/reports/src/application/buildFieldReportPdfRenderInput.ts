@@ -1,4 +1,5 @@
 import type { PdfRenderInput, PdfBlock, RGB } from "@fieldpulse/pdf";
+import { STATUS, BRAND, SURFACE } from "@fieldpulse/pdf";
 import type { FieldAlert } from "@fieldpulse/module-alerts";
 import type { FieldIntelligenceFinding } from "@fieldpulse/module-crop-intelligence";
 import type { FieldZoneActivityItem } from "@fieldpulse/module-crop-intelligence";
@@ -6,18 +7,10 @@ import type { FieldWeatherForecast } from "@fieldpulse/module-weather";
 import type { FieldReportReadModel } from "../contracts/FieldReportReadModel";
 
 /* ═══════════════════════════════════════════════════════════════════
-   NocPulse Field Report — PDF Document Builder  (v2)
+   NocPulse Field Report — PDF Document Builder  (v3)
    ───────────────────────────────────────────────────────────────────
-   Produces a branded, farmer-friendly report with:
-
-   Page 1  — Cover with field identity, health badge, vitals,
-             top-line action items from active alerts
-   Page 2  — Moisture & weather conditions, crop parameter
-             thresholds with color-coded progress bars
-   Page 3  — 7-day forecast table, derived weather signals
-   Page 4  — Alerts with recommended actions, intelligence findings
-             with context, tracked zones summary table
-   Footer  — Provenance, coordinates, data source timestamps
+   Colors now sourced from @fieldpulse/pdf PdfStyleSheet.
+   Section headers use uniform styling — no per-section accent colors.
    ═══════════════════════════════════════════════════════════════════ */
 
 type BuildFieldReportPdfRenderInput = {
@@ -25,14 +18,14 @@ type BuildFieldReportPdfRenderInput = {
   readModel: FieldReportReadModel;
 };
 
-/* ── Brand palette ── */
+/* ── Palette aliases from stylesheet ── */
 
-const GREEN: RGB = [0.08, 0.24, 0.17];
-const GREEN_SOFT: RGB = [0.09, 0.64, 0.29];
-const RED: RGB = [0.93, 0.27, 0.27];
-const AMBER: RGB = [0.96, 0.62, 0.04];
-const TEAL: RGB = [0.09, 0.64, 0.29];
-const SLATE: RGB = [0.42, 0.44, 0.47];
+const GREEN: RGB = BRAND.forest900;
+const GREEN_SOFT: RGB = BRAND.positive;
+const RED: RGB = STATUS.critical;
+const AMBER: RGB = STATUS.warning;
+const TEAL: RGB = STATUS.info;
+const SLATE: RGB = SURFACE.border;
 
 /* ── Helpers ── */
 
@@ -85,6 +78,95 @@ function sevToType(severity: string): "critical" | "warning" | "info" {
 function sevToColor(severity: string): RGB {
   const t = sevToType(severity);
   return t === "critical" ? RED : t === "warning" ? AMBER : TEAL;
+}
+
+/* ── Seeding Intelligence Helpers ── */
+
+/** Crop-specific minimum soil temperature for safe seeding (°C at 5–6 cm). */
+function seedingTempThreshold(cropType: string | null): number {
+  const c = (cropType ?? "").toLowerCase();
+  if (c.includes("canola") || c.includes("mustard")) return 7;
+  if (c.includes("flax") || c.includes("lentil")) return 7;
+  if (c.includes("wheat") || c.includes("barley") || c.includes("oat")) return 5;
+  if (c.includes("pea") || c.includes("chickpea")) return 5;
+  if (c.includes("corn") || c.includes("soybean") || c.includes("sunflower")) return 10;
+  return 5; // conservative default
+}
+
+/** Determine seeding recommendation from soil temp, frost, moisture, and freeze-thaw. */
+function seedingRecommendation(opts: {
+  soilTempC: number | null;
+  sustainedDays: number | null;
+  frostProbPct7d: number | null;
+  frostNights7d: number | null;
+  surfaceMoisturePct: number | null;
+  freezeThawCycles7d: number | null;
+  cropType: string | null;
+}): { verdict: "Seed Now" | "Hold" | "Too Early"; explanation: string } {
+  const threshold = seedingTempThreshold(opts.cropType);
+  const cropLabel = opts.cropType ?? "crop";
+
+  // Too Early checks
+  if (opts.soilTempC === null) {
+    return { verdict: "Too Early", explanation: "Soil temperature data unavailable. Wait for weather station readings." };
+  }
+  if (opts.soilTempC < threshold) {
+    return { verdict: "Too Early", explanation: `Soil at 6 cm is ${opts.soilTempC.toFixed(1)}°C — ${cropLabel} needs sustained ≥${threshold}°C. Wait for warmer conditions.` };
+  }
+  if ((opts.sustainedDays ?? 0) < 3) {
+    return { verdict: "Hold", explanation: `Soil is ${opts.soilTempC.toFixed(1)}°C but has only been above ${threshold}°C for ${opts.sustainedDays ?? 0} day(s). Need 3+ sustained days.` };
+  }
+
+  // Hold checks
+  if (opts.frostProbPct7d !== null && opts.frostProbPct7d > 40) {
+    return { verdict: "Hold", explanation: `Soil temp OK but ${opts.frostProbPct7d.toFixed(0)}% frost probability in the next 7 days. Delay seeding until frost risk subsides.` };
+  }
+  if (opts.frostNights7d !== null && opts.frostNights7d >= 3) {
+    return { verdict: "Hold", explanation: `${opts.frostNights7d} frost-risk nights forecast in the next 7 days. High risk of seedling damage.` };
+  }
+  if (opts.surfaceMoisturePct !== null && opts.surfaceMoisturePct > 85) {
+    return { verdict: "Hold", explanation: `Surface moisture at ${opts.surfaceMoisturePct.toFixed(0)}% — field likely too wet for equipment. Wait for drying.` };
+  }
+  if (opts.freezeThawCycles7d !== null && opts.freezeThawCycles7d >= 3) {
+    return { verdict: "Hold", explanation: `${opts.freezeThawCycles7d} freeze-thaw cycles in the past 7 days. Soil structure unstable — risk of crusting after seeding.` };
+  }
+
+  // Seed Now
+  return { verdict: "Seed Now", explanation: `Soil at 6 cm is ${opts.soilTempC.toFixed(1)}°C (sustained ${opts.sustainedDays ?? "?"} days), frost risk is low, and field access looks workable. Conditions favor seeding.` };
+}
+
+/** Determine field workability verdict. */
+function fieldWorkability(opts: {
+  surfaceMoisturePct: number | null;
+  recentPrecip72hMm: number | null;
+  freezeThawCycles7d: number | null;
+}): { verdict: "Fit" | "Marginal" | "Unfit"; explanation: string } {
+  if (opts.surfaceMoisturePct !== null && opts.surfaceMoisturePct > 85) {
+    return { verdict: "Unfit", explanation: `Surface moisture at ${opts.surfaceMoisturePct.toFixed(0)}% — soil saturated. Equipment access will cause compaction.` };
+  }
+  if (opts.recentPrecip72hMm !== null && opts.recentPrecip72hMm > 25) {
+    return { verdict: "Unfit", explanation: `${opts.recentPrecip72hMm.toFixed(0)} mm precipitation in the last 72 h. Fields need time to dry.` };
+  }
+  if (opts.freezeThawCycles7d !== null && opts.freezeThawCycles7d >= 4) {
+    return { verdict: "Unfit", explanation: `${opts.freezeThawCycles7d} freeze-thaw cycles. Top soil is unstable and prone to rutting.` };
+  }
+
+  const warnings: string[] = [];
+  if (opts.surfaceMoisturePct !== null && opts.surfaceMoisturePct > 70) {
+    warnings.push(`surface moisture elevated (${opts.surfaceMoisturePct.toFixed(0)}%)`);
+  }
+  if (opts.recentPrecip72hMm !== null && opts.recentPrecip72hMm > 10) {
+    warnings.push(`${opts.recentPrecip72hMm.toFixed(0)} mm rain in 72 h`);
+  }
+  if (opts.freezeThawCycles7d !== null && opts.freezeThawCycles7d >= 2) {
+    warnings.push(`${opts.freezeThawCycles7d} freeze-thaw cycles`);
+  }
+
+  if (warnings.length > 0) {
+    return { verdict: "Marginal", explanation: `Caution: ${warnings.join("; ")}. Scout field edges before committing equipment.` };
+  }
+
+  return { verdict: "Fit", explanation: "Field conditions are workable. Soil is firm enough for equipment traffic." };
 }
 
 /** Derive a plain-language recommended action from an alert title. */
@@ -581,6 +663,21 @@ export function buildFieldReportPdfRenderInput({
       },
     ];
 
+    // Add soil temperature row if available
+    if (sig.soilTemp6cmCurrentC !== null) {
+      const soilThreshold = seedingTempThreshold(crop?.cropType ?? m.summary.cropType ?? null);
+      signalRows.push({
+        label: "Soil Temp (6 cm)",
+        value: `${fmt(sig.soilTemp6cmCurrentC)}°C`,
+        range: `≥ ${soilThreshold}°C`,
+        status: sig.soilTemp6cmCurrentC >= soilThreshold ? "OK" : sig.soilTemp6cmCurrentC >= soilThreshold - 2 ? "Watch" : "Cold",
+        note: sig.soilTemp6cmCurrentC >= soilThreshold
+          ? `Above ${soilThreshold}°C seeding minimum${sig.soilTemp6cmSustainedDays !== null ? ` (${sig.soilTemp6cmSustainedDays} days sustained)` : ""}.`
+          : `Below seeding threshold. ${(crop?.cropType ?? "Crop")} needs sustained ≥${soilThreshold}°C at seed depth.`,
+        color: sig.soilTemp6cmCurrentC < soilThreshold ? AMBER : undefined,
+      });
+    }
+
     blocks.push({
       kind: "table",
       columns: [
@@ -609,6 +706,278 @@ export function buildFieldReportPdfRenderInput({
         rangeLabels: ["-4°C", ">-2°C"],
         marginTop: 4,
       });
+    }
+
+    /* ── Frost & Spring Risk (expanded) ── */
+
+    const hasFrostDetail =
+      sig.frostRiskMinTempC7d !== null ||
+      sig.frostProbabilityPct7d !== null ||
+      sig.frostRiskNights7d !== null ||
+      sig.freezeThawCycles7d !== null;
+
+    if (hasFrostDetail) {
+      blocks.push({ kind: "spacer", height: 6 });
+      blocks.push({
+        kind: "section-header",
+        label: "Frost & Spring Risk",
+        meta: "7-day outlook",
+        accentColor: GREEN,
+      });
+
+      const frostMetrics: { label: string; value: string; sub?: string; valueColor?: RGB }[] = [];
+
+      if (sig.frostRiskMinTempC7d !== null) {
+        frostMetrics.push({
+          label: "7-Day Low",
+          value: `${fmt(sig.frostRiskMinTempC7d)}°C`,
+          sub: sig.frostRiskMinTempC7d < 0
+            ? "Hard frost expected this week"
+            : sig.frostRiskMinTempC7d < 2
+              ? "Near-frost conditions possible"
+              : "No frost risk in 7-day window",
+          valueColor: sig.frostRiskMinTempC7d < 0 ? RED : sig.frostRiskMinTempC7d < 2 ? AMBER : undefined,
+        });
+      }
+
+      if (sig.frostProbabilityPct7d !== null) {
+        frostMetrics.push({
+          label: "Frost Probability",
+          value: `${fmt(sig.frostProbabilityPct7d, 0)}%`,
+          sub: sig.frostProbabilityPct7d > 60
+            ? "Very likely — delay sensitive operations"
+            : sig.frostProbabilityPct7d > 30
+              ? "Moderate risk — monitor forecasts daily"
+              : "Low probability — conditions trending safe",
+          valueColor: sig.frostProbabilityPct7d > 60 ? RED : sig.frostProbabilityPct7d > 30 ? AMBER : undefined,
+        });
+      }
+
+      if (sig.frostRiskNights7d !== null) {
+        frostMetrics.push({
+          label: "Frost-Risk Nights",
+          value: `${sig.frostRiskNights7d} of 7`,
+          sub: sig.frostRiskNights7d >= 4
+            ? "Persistent frost pattern — not safe for tender seedlings"
+            : sig.frostRiskNights7d >= 2
+              ? "Intermittent frost — watch overnight lows"
+              : "Isolated occurrence only",
+          valueColor: sig.frostRiskNights7d >= 4 ? RED : sig.frostRiskNights7d >= 2 ? AMBER : undefined,
+        });
+      }
+
+      if (sig.freezeThawCycles7d !== null) {
+        frostMetrics.push({
+          label: "Freeze-Thaw Cycles",
+          value: String(sig.freezeThawCycles7d),
+          sub: sig.freezeThawCycles7d >= 3
+            ? "Soil structure at risk — crusting possible after seeding"
+            : sig.freezeThawCycles7d >= 1
+              ? "Some soil heaving — monitor seedbed condition"
+              : "Stable — no freeze-thaw disruption",
+          valueColor: sig.freezeThawCycles7d >= 3 ? AMBER : undefined,
+        });
+      }
+
+      blocks.push({
+        kind: "metric-grid",
+        cells: frostMetrics,
+        columns: frostMetrics.length >= 4 ? 4 : frostMetrics.length as 2 | 3,
+        marginTop: 6,
+      });
+
+      // 7-day frost probability progress bar
+      if (sig.frostProbabilityPct7d !== null) {
+        blocks.push({
+          kind: "progress-bar",
+          label: "7-Day Frost Probability",
+          value: `${fmt(sig.frostProbabilityPct7d, 0)}%`,
+          percent: sig.frostProbabilityPct7d,
+          fillColor: sig.frostProbabilityPct7d > 60 ? RED : sig.frostProbabilityPct7d > 30 ? AMBER : GREEN_SOFT,
+          rangeLabels: ["0%", "100%"],
+          marginTop: 4,
+        });
+      }
+    }
+
+    /* ── Seeding Intelligence ── */
+
+    const cropType = crop?.cropType ?? m.summary.cropType ?? null;
+    const hasSoilTemp = sig.soilTemp6cmCurrentC !== null;
+    const growthStage = (crop?.growthStage ?? m.summary.growthStage ?? "").toLowerCase();
+    const isPreSeed = !growthStage || growthStage === "pre-seed" || growthStage.includes("pre");
+
+    if (hasSoilTemp || isPreSeed) {
+      blocks.push({ kind: "spacer", height: 6 });
+      blocks.push({
+        kind: "section-header",
+        label: "Seeding Intelligence",
+        meta: cropType ? `${cropType} — ${seedingTempThreshold(cropType)}°C min` : "Spring assessment",
+        accentColor: GREEN,
+      });
+
+      // Soil temperature metrics
+      const seedMetrics: { label: string; value: string; sub?: string; valueColor?: RGB }[] = [];
+
+      const threshold = seedingTempThreshold(cropType);
+      if (sig.soilTemp6cmCurrentC !== null) {
+        seedMetrics.push({
+          label: "Soil Temp (6 cm)",
+          value: `${fmt(sig.soilTemp6cmCurrentC)}°C`,
+          sub: sig.soilTemp6cmCurrentC >= threshold
+            ? `Above ${threshold}°C minimum for ${cropType ?? "seeding"}`
+            : `Below ${threshold}°C — too cold for ${cropType ?? "seeding"}`,
+          valueColor: sig.soilTemp6cmCurrentC < threshold ? RED : undefined,
+        });
+      }
+
+      if (sig.soilTemp6cmSustainedDays !== null) {
+        seedMetrics.push({
+          label: "Days Sustained",
+          value: `${sig.soilTemp6cmSustainedDays} day${sig.soilTemp6cmSustainedDays !== 1 ? "s" : ""}`,
+          sub: sig.soilTemp6cmSustainedDays >= 3
+            ? "3+ days above threshold — soil warming is stable"
+            : "Need 3+ consecutive days above threshold",
+          valueColor: sig.soilTemp6cmSustainedDays < 3 ? AMBER : undefined,
+        });
+      }
+
+      // Field workability
+      const workability = fieldWorkability({
+        surfaceMoisturePct: snap?.surfacePct ?? null,
+        recentPrecip72hMm: sig.recentPrecipTotal72hMm,
+        freezeThawCycles7d: sig.freezeThawCycles7d,
+      });
+      seedMetrics.push({
+        label: "Field Access",
+        value: workability.verdict,
+        sub: workability.explanation,
+        valueColor: workability.verdict === "Unfit" ? RED : workability.verdict === "Marginal" ? AMBER : undefined,
+      });
+
+      blocks.push({
+        kind: "metric-grid",
+        cells: seedMetrics,
+        columns: seedMetrics.length >= 3 ? 3 : 2,
+        marginTop: 6,
+      });
+
+      // Seeding recommendation — the hero element
+      const rec = seedingRecommendation({
+        soilTempC: sig.soilTemp6cmCurrentC,
+        sustainedDays: sig.soilTemp6cmSustainedDays,
+        frostProbPct7d: sig.frostProbabilityPct7d,
+        frostNights7d: sig.frostRiskNights7d,
+        surfaceMoisturePct: snap?.surfacePct ?? null,
+        freezeThawCycles7d: sig.freezeThawCycles7d,
+        cropType,
+      });
+
+      blocks.push({
+        kind: "severity-card",
+        severity: rec.verdict === "Seed Now" ? "info" : rec.verdict === "Hold" ? "warning" : "critical",
+        title: rec.verdict === "Seed Now"
+          ? `Seeding Window Open — ${cropType ?? "Crop"}`
+          : rec.verdict === "Hold"
+            ? `Seeding On Hold — ${cropType ?? "Crop"}`
+            : `Too Early to Seed — ${cropType ?? "Crop"}`,
+        body: rec.explanation,
+        action: rec.verdict === "Seed Now"
+          ? "Conditions favor seeding. Confirm with local soil probe before committing."
+          : rec.verdict === "Hold"
+            ? "Re-check conditions in 2–3 days. Monitor the 7-day forecast."
+            : "Wait for sustained warming. Track soil temperature daily.",
+        marginTop: 6,
+      });
+
+      // Soil temp progress bar
+      if (sig.soilTemp6cmCurrentC !== null) {
+        blocks.push({
+          kind: "progress-bar",
+          label: `Soil Temperature vs ${threshold}°C Seeding Minimum`,
+          value: `${fmt(sig.soilTemp6cmCurrentC)}°C`,
+          percent: Math.max(0, Math.min(100, (sig.soilTemp6cmCurrentC / (threshold * 2)) * 100)),
+          fillColor: sig.soilTemp6cmCurrentC >= threshold ? GREEN_SOFT : RED,
+          rangeLabels: ["0°C", `${threshold * 2}°C`],
+          marginTop: 4,
+        });
+      }
+    }
+
+    /* ── GDD Accumulation ── */
+
+    const cumulativeGdd = crop?.accumulatedGdd ?? null;
+    const hasGddData = cumulativeGdd !== null || sig.gdd24h !== null;
+
+    if (hasGddData) {
+      blocks.push({ kind: "spacer", height: 6 });
+      blocks.push({
+        kind: "section-header",
+        label: "Growing Degree Days",
+        meta: crop?.lastGddObservedOn ? `Since ${fmtDate(crop.lastGddObservedOn)}` : "Season tracker",
+        accentColor: GREEN,
+      });
+
+      const gddCells: { label: string; value: string; sub?: string; valueColor?: RGB }[] = [];
+
+      if (cumulativeGdd !== null) {
+        gddCells.push({
+          label: "Season Total",
+          value: fmt(cumulativeGdd, 0),
+          sub: cumulativeGdd < 100
+            ? "Early season — emergence stage for most crops"
+            : cumulativeGdd < 400
+              ? "Vegetative growth phase"
+              : cumulativeGdd < 800
+                ? "Reproductive phase approaching"
+                : "Late-season maturation",
+        });
+      }
+
+      if (sig.gdd24h !== null) {
+        gddCells.push({
+          label: "Last 24 h",
+          value: fmt(sig.gdd24h, 1),
+          sub: sig.gdd24h < 2 ? "Near-zero accumulation — cold stall" : "Active accumulation",
+          valueColor: sig.gdd24h < 2 ? AMBER : undefined,
+        });
+      }
+
+      if (sig.gdd72h !== null) {
+        gddCells.push({
+          label: "Last 72 h",
+          value: fmt(sig.gdd72h, 1),
+          sub: sig.gdd72h < 5 ? "Minimal heat units — growth essentially paused" : `${fmt(sig.gdd72h / 3, 1)} avg/day`,
+          valueColor: sig.gdd72h < 5 ? AMBER : undefined,
+        });
+      }
+
+      gddCells.push({
+        label: "Base Temp",
+        value: `${fmt(sig.gddBaseC, 0)}°C`,
+        sub: `GDD = max(0, avg daily temp − ${fmt(sig.gddBaseC, 0)}°C)`,
+      });
+
+      blocks.push({
+        kind: "metric-grid",
+        cells: gddCells,
+        columns: gddCells.length >= 4 ? 4 : gddCells.length as 2 | 3,
+        marginTop: 6,
+      });
+
+      // GDD season progress bar (rough: 1200 GDD typical canola season)
+      if (cumulativeGdd !== null) {
+        const seasonTarget = cropType?.toLowerCase().includes("canola") ? 1200 : 1400;
+        blocks.push({
+          kind: "progress-bar",
+          label: "Season GDD Progress",
+          value: `${fmt(cumulativeGdd, 0)} / ~${seasonTarget}`,
+          percent: Math.min(100, (cumulativeGdd / seasonTarget) * 100),
+          fillColor: GREEN_SOFT,
+          rangeLabels: ["0", String(seasonTarget)],
+          marginTop: 4,
+        });
+      }
     }
   }
 

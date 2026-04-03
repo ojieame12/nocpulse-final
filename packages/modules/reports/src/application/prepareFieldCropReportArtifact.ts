@@ -1,116 +1,135 @@
 import { renderPdfDocument, type PdfBlock, type PdfRenderInput, type RGB } from "@fieldpulse/pdf";
-import type { FieldCropProps } from "../../features/fields/tabs/CropTab";
-import type { FieldSummaryProps } from "../../components/panels/SummaryTab";
-import { loadPdfBrandLogo } from "./loadPdfBrandLogo";
 
-/* ═══════════════════════════════════════════════════════════════════
-   Crop Detail Report — Branded PDF Artifact
-   ───────────────────────────────────────────────────────────────────
-   Produces a visual NocPulse-branded PDF from the same view-model
-   data that drives the Crop tab: health/moisture donuts, thresholds,
-   disease risk cards, growth progression, and field context tiles.
-   ═══════════════════════════════════════════════════════════════════ */
+export type CropReportGrowthSegment = {
+  label: string;
+  active: boolean;
+  color?: string | null;
+};
 
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+export type CropReportThreshold = {
+  param: string;
+  min: string;
+  optimal: string;
+  max: string;
+  actual: string;
+  notes: string;
+  status: "ok" | "warn" | "danger";
+};
 
-/* ── Brand palette ── */
-const GREEN: RGB = [0.08, 0.24, 0.17];
-const RED: RGB = [0.93, 0.27, 0.27];
-const AMBER: RGB = [0.96, 0.62, 0.04];
-const TEAL: RGB = [0.09, 0.64, 0.29];
-const SLATE: RGB = [0.42, 0.44, 0.47];
+export type CropReportMetric = {
+  label: string;
+  value: string;
+  valueColor?: string | null;
+};
 
-function hexToRgb(hex: string): RGB | undefined {
-  const c = hex.replace("#", "");
-  if (c.length !== 6) return undefined;
-  const r = parseInt(c.slice(0, 2), 16) / 255;
-  const g = parseInt(c.slice(2, 4), 16) / 255;
-  const b = parseInt(c.slice(4, 6), 16) / 255;
-  if (Number.isNaN(r)) return undefined;
-  return [r, g, b];
-}
+export type CropReportSignalGroup = {
+  value: number;
+  label: string;
+  subLabel?: string | null;
+  fillColor: string;
+  metrics: readonly CropReportMetric[];
+};
 
-function thresholdSeverity(status: string): "critical" | "warning" | "info" {
-  return status === "danger" ? "critical" : status === "warn" ? "warning" : "info";
-}
+export type CropReportFieldTile = {
+  label: string;
+  value: string;
+  sub?: string | null;
+  valueColor?: string | null;
+  bg?: string | null;
+  border?: string | null;
+};
 
-function joinParts(parts: Array<string | null | undefined>, separator = " · "): string | undefined {
-  const compact = parts.map((part) => part?.trim()).filter((part): part is string => Boolean(part));
-  return compact.length > 0 ? compact.join(separator) : undefined;
-}
+export type CropReportDiseaseRisk = {
+  name: string;
+  desc: string;
+  pct: string;
+  color?: string | null;
+  bg?: string | null;
+  recommendedAction?: string | null;
+};
 
-function dataQualityColor(summary: FieldSummaryProps | null | undefined): RGB {
-  switch (summary?.dataQuality?.tone) {
-    case "positive":
-      return TEAL;
-    case "warning":
-      return AMBER;
-    case "danger":
-      return RED;
-    default:
-      return SLATE;
-  }
-}
+export type CropReportAlert = {
+  iconKey: string;
+  iconColor?: string | null;
+  bg?: string | null;
+  title: string;
+  desc: string;
+};
 
-function deriveTruthSource(summary: FieldSummaryProps): string | undefined {
-  if (summary.sourceTagExtended?.trim()) return summary.sourceTagExtended.trim();
-  if (summary.moistureDerivationMode === "source-backed") {
-    return joinParts(["Satellite-derived", summary.confidenceSub !== "No source" ? summary.confidenceSub : undefined]);
-  }
-  if (summary.moistureDerivationMode && summary.moistureDerivationMode !== "unknown") {
-    return joinParts(["Modeled estimate", summary.confidenceSub !== "No source" ? summary.confidenceSub : undefined]);
-  }
-  return undefined;
-}
+export type CropReportProvenanceRow = {
+  key: string;
+  value: string;
+};
 
-/** Derive a plain-language action for a disease risk card. */
-function inferDiseaseAction(
-  name: string,
-  sev: "critical" | "warning" | "info",
-): string | undefined {
-  const n = name.toLowerCase();
-  if (sev === "info") return undefined; // No action needed for low risk
-  if (n.includes("sclerotinia"))
-    return "Scout canopy for sclerotinia symptoms. Consult agronomist on fungicide timing if at petal stage.";
-  if (n.includes("fusarium"))
-    return "Monitor heads for fusarium symptoms. Consider fungicide if heading stage and conditions persist.";
-  if (n.includes("rust") || n.includes("stripe"))
-    return "Scout lower canopy for rust pustules. Apply foliar fungicide if spread is confirmed.";
-  if (n.includes("blackleg"))
-    return "Inspect stem bases for lesions. Plan resistant variety selection for next rotation.";
-  if (n.includes("clubroot"))
-    return "Avoid equipment movement from affected areas. Use resistant cultivars in future rotations.";
-  if (sev === "critical")
-    return "Scout affected areas immediately. Consult agronomist for treatment options.";
-  return "Monitor for symptoms. Scout during next field walk.";
-}
+export type FieldCropReportProps = {
+  cropName: string;
+  lld?: string | null;
+  growthSegments: readonly CropReportGrowthSegment[];
+  accumulatedGddLabel: string;
+  gddUnitLabel: string;
+  thresholdStageLabel: string;
+  thresholds: readonly CropReportThreshold[];
+  healthIndexTitle: string;
+  healthIndex: CropReportSignalGroup;
+  moistureBalanceTitle: string;
+  moistureBalance: CropReportSignalGroup;
+  fieldTiles: readonly CropReportFieldTile[];
+  diseaseRisks: readonly CropReportDiseaseRisk[];
+  provenanceLabel?: string | null;
+  provenanceRows: readonly CropReportProvenanceRow[];
+  provenanceChips: readonly string[];
+  alerts: readonly CropReportAlert[];
+  footer?: string | null;
+};
 
-/** Derive an action for crop alert severity cards. */
-function inferCropAlertAction(title: string): string | undefined {
-  const t = title.toLowerCase();
-  if (t.includes("frost")) return "Consider frost protection measures. Monitor overnight lows closely.";
-  if (t.includes("moisture stress")) return "Schedule irrigation check. Prioritize affected zones.";
-  if (t.includes("hail")) return "Review hail protection options. Check crop insurance coverage.";
-  if (t.includes("wind")) return "Assess wind damage risk. Delay spraying until conditions settle.";
-  if (t.includes("disease")) return "Scout affected areas. Consult agronomist for fungicide options.";
-  if (t.includes("vpd") || t.includes("atmospheric")) return "Monitor crop water demand. Consider irrigation timing.";
-  return undefined;
-}
+export type CropReportConfidenceBreakdown = {
+  freshness: string;
+  agreement: string;
+  resolution: string;
+  scaleFit: string;
+};
 
-/* ── Export types ── */
+export type CropReportDataSources = {
+  satellite?: string | null;
+  weather?: string | null;
+  soil?: string | null;
+};
+
+export type CropReportDataQuality = {
+  label: string;
+  tone: "positive" | "warning" | "danger" | string;
+  summary: string;
+};
+
+export type FieldCropReportSummary = {
+  crop?: string | null;
+  cropStage?: string | null;
+  updatedLabel?: string | null;
+  sourceTagExtended?: string | null;
+  moistureDerivationMode?: string | null;
+  confidence?: string | null;
+  confidenceSub?: string | null;
+  historicalAnomaly?: {
+    description?: string | null;
+  } | null;
+  confidenceBreakdown?: CropReportConfidenceBreakdown | null;
+  dataSources?: CropReportDataSources | null;
+  dataQuality?: CropReportDataQuality | null;
+  nextRain?: string | null;
+  trend?: string | null;
+  precipitation?: string | null;
+  rainChance?: string | null;
+  sevenDayTotal?: string | null;
+};
 
 export type PrepareFieldCropReportArtifactInput = {
   fieldId: string;
   fieldName: string;
   areaLabel: string;
-  crop: FieldCropProps | null;
-  summary: FieldSummaryProps | null;
+  crop: FieldCropReportProps | null;
+  summary: FieldCropReportSummary | null;
   generatedAt?: string;
+  brandLogoPngBytes?: Uint8Array;
 };
 
 export type PreparedFieldCropReportArtifact = {
@@ -126,7 +145,92 @@ export type PreparedFieldCropReportArtifact = {
   };
 };
 
-/* ── Block builder ── */
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+const GREEN: RGB = [0.08, 0.24, 0.17];
+const RED: RGB = [0.93, 0.27, 0.27];
+const AMBER: RGB = [0.96, 0.62, 0.04];
+const TEAL: RGB = [0.09, 0.64, 0.29];
+const SLATE: RGB = [0.42, 0.44, 0.47];
+
+function hexToRgb(hex: string) {
+  const c = hex.replace("#", "");
+  if (c.length !== 6) return undefined;
+  const r = parseInt(c.slice(0, 2), 16) / 255;
+  const g = parseInt(c.slice(2, 4), 16) / 255;
+  const b = parseInt(c.slice(4, 6), 16) / 255;
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return undefined;
+  return [r, g, b] as RGB;
+}
+
+function joinParts(parts: Array<string | null | undefined>, separator = " · ") {
+  const compact = parts.map((part) => part?.trim()).filter((part): part is string => Boolean(part));
+  return compact.length > 0 ? compact.join(separator) : undefined;
+}
+
+function dataQualityColor(summary: FieldCropReportSummary | null | undefined): RGB {
+  switch (summary?.dataQuality?.tone) {
+    case "positive":
+      return TEAL;
+    case "warning":
+      return AMBER;
+    case "danger":
+      return RED;
+    default:
+      return SLATE;
+  }
+}
+
+function deriveTruthSource(summary: FieldCropReportSummary): string | undefined {
+  if (summary.sourceTagExtended?.trim()) return summary.sourceTagExtended.trim();
+  if (summary.moistureDerivationMode === "source-backed") {
+    return joinParts(["Satellite-derived", summary.confidenceSub !== "No source" ? summary.confidenceSub : undefined]);
+  }
+  if (summary.moistureDerivationMode && summary.moistureDerivationMode !== "unknown") {
+    return joinParts(["Modeled estimate", summary.confidenceSub !== "No source" ? summary.confidenceSub : undefined]);
+  }
+  return undefined;
+}
+
+function inferDiseaseAction(name: string, sev: "critical" | "warning" | "info") {
+  const n = name.toLowerCase();
+  if (sev === "info") return undefined;
+  if (n.includes("sclerotinia")) {
+    return "Scout canopy for sclerotinia symptoms. Consult agronomist on fungicide timing if at petal stage.";
+  }
+  if (n.includes("fusarium")) {
+    return "Monitor heads for fusarium symptoms. Consider fungicide if heading stage and conditions persist.";
+  }
+  if (n.includes("rust") || n.includes("stripe")) {
+    return "Scout lower canopy for rust pustules. Apply foliar fungicide if spread is confirmed.";
+  }
+  if (n.includes("blackleg")) {
+    return "Inspect stem bases for lesions. Plan resistant variety selection for next rotation.";
+  }
+  if (n.includes("clubroot")) {
+    return "Avoid equipment movement from affected areas. Use resistant cultivars in future rotations.";
+  }
+  if (sev === "critical") {
+    return "Scout affected areas immediately. Consult agronomist for treatment options.";
+  }
+  return "Monitor for symptoms. Scout during next field walk.";
+}
+
+function inferCropAlertAction(title: string) {
+  const t = title.toLowerCase();
+  if (t.includes("frost")) return "Consider frost protection measures. Monitor overnight lows closely.";
+  if (t.includes("moisture stress")) return "Schedule irrigation check. Prioritize affected zones.";
+  if (t.includes("hail")) return "Review hail protection options. Check crop insurance coverage.";
+  if (t.includes("wind")) return "Assess wind damage risk. Delay spraying until conditions settle.";
+  if (t.includes("disease")) return "Scout affected areas. Consult agronomist for fungicide options.";
+  if (t.includes("vpd") || t.includes("atmospheric")) return "Monitor crop water demand. Consider irrigation timing.";
+  return undefined;
+}
 
 function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
   const blocks: PdfBlock[] = [];
@@ -136,8 +240,6 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
   const cropName = c?.cropName ?? s?.crop ?? "n/a";
   const stageLabel = s?.cropStage ?? c?.thresholdStageLabel ?? "Stage unavailable";
 
-  /* ━━ COVER ━━ */
-
   blocks.push({ kind: "text", style: "title", text: `${input.fieldName} — Crop Report` });
   blocks.push({
     kind: "text",
@@ -145,7 +247,6 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
     text: `${cropName} · ${stageLabel} · ${generatedAt.slice(0, 10)}`,
   });
 
-  // Health status badge derived from crop health donut
   if (c) {
     const healthPct = c.healthIndex.value;
     const ok = healthPct >= 70;
@@ -157,7 +258,6 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
     });
   }
 
-  // Field identity
   blocks.push({
     kind: "key-value",
     pairs: [
@@ -187,11 +287,9 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
     blocks.push({
       kind: "text",
       style: "caption",
-      text: `Generated from the current FDP crop model, including growth stage, crop health, moisture balance, active alerts, threshold assessments, and provenance.`,
+      text: "Generated from the current FDP crop model, including growth stage, crop health, moisture balance, active alerts, threshold assessments, and provenance.",
     });
   }
-
-  /* ━━ TRUTH & FRESHNESS ━━ */
 
   if (s && (s.dataQuality || s.confidenceBreakdown || s.sourceTagExtended || s.historicalAnomaly || s.dataSources)) {
     const sourceSummary = deriveTruthSource(s);
@@ -200,7 +298,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
     blocks.push({
       kind: "section-header",
       label: "Truth & Freshness",
-      meta: s.updatedLabel,
+      meta: s.updatedLabel ?? undefined,
       accentColor: dataQualityColor(s),
     });
 
@@ -224,7 +322,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
       kind: "key-value",
       pairs: [
         { key: "Moisture source", value: sourceSummary ?? "Unavailable" },
-        { key: "Confidence", value: joinParts([s.confidence, s.confidenceSub]) ?? s.confidence },
+        { key: "Confidence", value: joinParts([s.confidence, s.confidenceSub]) ?? s.confidence ?? "Unavailable" },
         ...(s.historicalAnomaly?.description
           ? [{ key: "Historical signal", value: s.historicalAnomaly.description }]
           : []),
@@ -256,8 +354,6 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
     }
   }
 
-  /* ━━ GROWTH PROGRESSION ━━ */
-
   if (c && c.growthSegments.length > 0) {
     blocks.push({
       kind: "section-header",
@@ -275,10 +371,8 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
       marginTop: 4,
     });
 
-    // GDD accumulation progress bar
     if (c.accumulatedGddLabel && c.accumulatedGddLabel !== "—") {
       const gddNum = parseFloat(c.accumulatedGddLabel);
-      // Typical crop GDD targets vary, but use a reasonable scale
       const gddPct = !Number.isNaN(gddNum) ? Math.min(100, Math.max(0, (gddNum / 2000) * 100)) : 0;
       blocks.push({
         kind: "progress-bar",
@@ -292,8 +386,6 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
     }
   }
 
-  /* ━━ CROP SIGNAL SUMMARY ━━ */
-
   if (c) {
     blocks.push({
       kind: "section-header",
@@ -304,14 +396,12 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
 
     blocks.push({
       kind: "metric-grid",
-      cells: [
-        ...(c.fieldTiles.slice(0, 4).map((tile) => ({
-          label: tile.label,
-          value: tile.value,
-          sub: tile.sub,
-          valueColor: hexToRgb(tile.valueColor),
-        }))),
-      ],
+      cells: c.fieldTiles.slice(0, 4).map((tile) => ({
+        label: tile.label,
+        value: tile.value,
+        sub: tile.sub ?? undefined,
+        valueColor: hexToRgb(tile.valueColor ?? ""),
+      })),
       columns: c.fieldTiles.length <= 3 ? 3 : 4,
       marginTop: 4,
     });
@@ -342,13 +432,13 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
         {
           label: c.healthIndexTitle,
           value: c.healthIndex.label,
-          sub: c.healthIndex.subLabel,
+          sub: c.healthIndex.subLabel ?? undefined,
           valueColor: hexToRgb(c.healthIndex.fillColor),
         },
         {
           label: c.moistureBalanceTitle,
           value: c.moistureBalance.label,
-          sub: c.moistureBalance.subLabel,
+          sub: c.moistureBalance.subLabel ?? undefined,
           valueColor: hexToRgb(c.moistureBalance.fillColor),
         },
         {
@@ -361,8 +451,6 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
       marginTop: 4,
     });
 
-    /* ── Health index metrics ── */
-
     if (c.healthIndex.metrics.length > 0) {
       blocks.push({
         kind: "section-header",
@@ -372,17 +460,15 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
 
       blocks.push({
         kind: "metric-grid",
-        cells: c.healthIndex.metrics.map((m) => ({
-          label: m.label,
-          value: m.value,
-          valueColor: hexToRgb(m.valueColor),
+        cells: c.healthIndex.metrics.map((metric) => ({
+          label: metric.label,
+          value: metric.value,
+          valueColor: hexToRgb(metric.valueColor ?? ""),
         })),
         columns: c.healthIndex.metrics.length <= 3 ? 3 : 4,
         marginTop: 4,
       });
     }
-
-    /* ── Moisture balance metrics ── */
 
     if (c.moistureBalance.metrics.length > 0) {
       blocks.push({
@@ -393,18 +479,16 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
 
       blocks.push({
         kind: "metric-grid",
-        cells: c.moistureBalance.metrics.map((m) => ({
-          label: m.label,
-          value: m.value,
-          valueColor: hexToRgb(m.valueColor),
+        cells: c.moistureBalance.metrics.map((metric) => ({
+          label: metric.label,
+          value: metric.value,
+          valueColor: hexToRgb(metric.valueColor ?? ""),
         })),
         columns: c.moistureBalance.metrics.length <= 3 ? 3 : 4,
         marginTop: 4,
       });
     }
   }
-
-  /* ━━ CROP THRESHOLDS ━━ */
 
   if (c && c.thresholds.length > 0) {
     blocks.push({
@@ -431,24 +515,22 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
         { label: "Notes", width: 0.28 },
       ],
       headerBg: GREEN,
-      rows: c.thresholds.map((t) => ({
+      rows: c.thresholds.map((threshold) => ({
         cells: [
-          t.param,
-          t.min,
-          t.optimal,
-          t.max,
-          t.actual,
-          t.status.toUpperCase(),
-          t.notes,
+          threshold.param,
+          threshold.min,
+          threshold.optimal,
+          threshold.max,
+          threshold.actual,
+          threshold.status.toUpperCase(),
+          threshold.notes,
         ],
         accentColor:
-          t.status === "danger" ? RED : t.status === "warn" ? AMBER : undefined,
+          threshold.status === "danger" ? RED : threshold.status === "warn" ? AMBER : undefined,
       })),
       marginTop: 4,
     });
   }
-
-  /* ━━ FIELD CONTEXT ━━ */
 
   if (c && c.fieldTiles.length > 0) {
     blocks.push({
@@ -461,15 +543,13 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
       cells: c.fieldTiles.map((tile) => ({
         label: tile.label,
         value: tile.value,
-        sub: tile.sub,
-        valueColor: hexToRgb(tile.valueColor),
+        sub: tile.sub ?? undefined,
+        valueColor: hexToRgb(tile.valueColor ?? ""),
       })),
       columns: c.fieldTiles.length <= 3 ? 3 : 4,
       marginTop: 4,
     });
   }
-
-  /* ━━ DISEASE RISKS ━━ */
 
   if (c && c.diseaseRisks.length > 0) {
     blocks.push({
@@ -481,30 +561,23 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
 
     for (const risk of c.diseaseRisks) {
       const pctNum = parseFloat(risk.pct);
-      const sev: "critical" | "warning" | "info" =
+      const severity: "critical" | "warning" | "info" =
         !Number.isNaN(pctNum) && pctNum >= 60
           ? "critical"
           : !Number.isNaN(pctNum) && pctNum >= 30
             ? "warning"
             : "info";
 
-      // Derive action text: prefer explicit recommendedAction, fall back to heuristic
-      const action =
-        risk.recommendedAction ??
-        inferDiseaseAction(risk.name, sev);
-
       blocks.push({
         kind: "severity-card",
-        severity: sev,
+        severity,
         title: `${risk.name} — ${risk.pct}`,
         body: risk.desc,
-        action,
+        action: risk.recommendedAction ?? inferDiseaseAction(risk.name, severity),
         marginTop: 4,
       });
     }
   }
-
-  /* ━━ ACTIVE ALERTS ━━ */
 
   const alertCount = c?.alerts.length ?? 0;
   blocks.push({
@@ -522,27 +595,23 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
     });
   } else {
     for (const alert of c.alerts.slice(0, 10)) {
-      const sev: "critical" | "warning" | "info" =
+      const severity: "critical" | "warning" | "info" =
         alert.iconKey === "disease" || alert.iconKey === "temperature"
           ? "critical"
           : alert.iconKey === "moisture"
             ? "warning"
             : "info";
 
-      const action = inferCropAlertAction(alert.title);
-
       blocks.push({
         kind: "severity-card",
-        severity: sev,
+        severity,
         title: alert.title,
         body: alert.desc,
-        action,
+        action: inferCropAlertAction(alert.title),
         marginTop: 4,
       });
     }
   }
-
-  /* ━━ PROVENANCE ━━ */
 
   blocks.push({ kind: "divider", marginTop: 16 });
 
@@ -552,7 +621,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
       blocks.push({
         kind: "text",
         style: "caption",
-        text: `Crop interpretation is currently constrained by ${s?.dataQuality?.label?.toLowerCase()} field context. Provenance is included so the reader can see which signals are source-backed versus held back.`,
+        text: `Crop interpretation is currently constrained by ${s.dataQuality?.label?.toLowerCase()} field context. Provenance is included so the reader can see which signals are source-backed versus held back.`,
       });
     }
     blocks.push({
@@ -587,22 +656,19 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
   return blocks;
 }
 
-/* ── Public API ── */
-
 export function prepareFieldCropReportArtifact(
   input: PrepareFieldCropReportArtifactInput,
 ): PreparedFieldCropReportArtifact {
   const blocks = buildBlocks(input);
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const now = generatedAt.slice(0, 10);
-  const brandLogo = loadPdfBrandLogo();
 
   const renderInput: PdfRenderInput = {
     artifactKey: `crop-reports/${slugify(input.fieldName)}/${now}.pdf`,
     title: `${input.fieldName} Crop Report`,
     subject: `Crop report for ${input.fieldName}`,
     author: "NocPulse",
-    brandLogo: brandLogo ? { format: "png", bytes: brandLogo } : undefined,
+    brandLogo: input.brandLogoPngBytes ? { format: "png", bytes: input.brandLogoPngBytes } : undefined,
     blocks,
   };
 
