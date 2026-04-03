@@ -92,3 +92,43 @@ test("buildLaunchVisibleReadinessReport falls back to all fields when no allowli
   assert.equal(report.minimumReadyFieldsRequired, 1);
   assert.equal(report.hasEnoughReadyFields, true);
 });
+
+test("buildLaunchVisibleReadinessReport scopes the dev farm to the curated first-insight allowlist", () => {
+  const workspaceId = "a625a72d-a2de-43ee-8bb4-aad93466f750";
+  const report = buildLaunchVisibleReadinessReport({
+    workspaceId,
+    workspaceSlug: "fieldpulse-dev-farm",
+    workspaceName: "FieldPulse Dev Farm",
+    fields: [
+      createField({
+        fieldId: "f1",
+        fieldName: "Biehn",
+        workspaceId,
+        workspaceSlug: "fieldpulse-dev-farm",
+        workspaceName: "FieldPulse Dev Farm",
+      }),
+      createField({
+        fieldId: "f2",
+        fieldName: "Krants",
+        workspaceId,
+        workspaceSlug: "fieldpulse-dev-farm",
+        workspaceName: "FieldPulse Dev Farm",
+      }),
+      createField({
+        fieldId: "f3",
+        fieldName: "Route Import North mn8xvfub",
+        workspaceId,
+        workspaceSlug: "fieldpulse-dev-farm",
+        workspaceName: "FieldPulse Dev Farm",
+      }),
+    ],
+  });
+
+  assert.equal(report.allowlistConfigured, true);
+  assert.equal(report.scopedFieldCount, 2);
+  assert.equal(report.minimumReadyFieldsRequired, 2);
+  assert.deepEqual(
+    report.rows.map((row) => row.fieldName),
+    ["Biehn", "Krants"],
+  );
+});

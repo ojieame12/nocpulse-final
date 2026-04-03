@@ -53,6 +53,13 @@ export type PreviewFirstInsightReport = {
 export const WORKSPACE_FIRST_INSIGHT_ALLOWLIST: Readonly<
   Record<string, readonly string[]>
 > = {
+  "a625a72d-a2de-43ee-8bb4-aad93466f750": [
+    "Biehn",
+    "Krants",
+    "Batch North 066039",
+    "Batch North 972158",
+    "Batch South 066039",
+  ],
   "8f2afceb-aefe-4e90-a24e-7ab07c4423fe": [
     "Main Farm",
     "Rath",

@@ -6,6 +6,7 @@ import {
 } from "./resolvePreviewFieldId";
 
 const HOPE_CREEK_WORKSPACE_ID = "8f2afceb-aefe-4e90-a24e-7ab07c4423fe";
+const DEV_FARM_WORKSPACE_ID = "a625a72d-a2de-43ee-8bb4-aad93466f750";
 
 test("resolvePreferredPreviewWorkspaceId keeps the actor workspace even when Hope Creek is present", () => {
   const workspaceId = resolvePreferredPreviewWorkspaceId(
@@ -94,4 +95,18 @@ test("resolvePreviewFieldId still uses the allowlist when only lower-confidence 
   );
 
   assert.equal(selected, "field-r");
+});
+
+test("resolvePreviewFieldId prefers the curated dev farm allowlist over noisy primary fields", () => {
+  const selected = resolvePreviewFieldId(
+    [
+      { id: "field-z", name: "Route Import North mn8xvfub", latestMoisture: { confidence: "high", sourceKey: "sentinel-1" } },
+      { id: "field-b", name: "Biehn", latestMoisture: { confidence: "high", sourceKey: "sentinel-1" } },
+      { id: "field-k", name: "Krants", latestMoisture: { confidence: "high", sourceKey: "sentinel-1" } },
+    ],
+    DEV_FARM_WORKSPACE_ID,
+    "field-z",
+  );
+
+  assert.equal(selected, "field-b");
 });

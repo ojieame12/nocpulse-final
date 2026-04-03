@@ -230,3 +230,38 @@ test("buildWorkspaceFirstInsightSummary returns null when an allowlisted workspa
 
   assert.equal(result, null);
 });
+
+test("buildWorkspaceFirstInsightSummary scopes the dev farm summary to curated ready fields", () => {
+  const result = buildWorkspaceFirstInsightSummary({
+    workspaceId: "a625a72d-a2de-43ee-8bb4-aad93466f750",
+    activeFieldId: "field-noisy",
+    fields: [
+      {
+        fieldId: "field-b",
+        fieldName: "Biehn",
+        summary: makeSummary({ rootMoisture: "44%", moisture: 0.44, trend: "+3%" }),
+      },
+      {
+        fieldId: "field-k",
+        fieldName: "Krants",
+        summary: makeSummary({ rootMoisture: "31%", moisture: 0.31, trend: "-5%" }),
+      },
+      {
+        fieldId: "field-noisy",
+        fieldName: "Route Import North mn8xvfub",
+        summary: makeSummary({ rootMoisture: "59%", moisture: 0.59, trend: "+11%" }),
+      },
+    ],
+  });
+
+  assert.ok(result);
+  assert.equal(result.focusFieldName, "Biehn");
+  assert.deepEqual(
+    result.comparisons.map((entry) => [entry.label, entry.fieldName, entry.value]),
+    [
+      ["Wettest field", "Biehn", "44%"],
+      ["Driest field", "Krants", "31%"],
+      ["Most changed this week", "Krants", "-5%"],
+    ],
+  );
+});
