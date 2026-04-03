@@ -130,6 +130,57 @@ test("buildPreviewFirstInsightAuditPayload rejects thin or off-focus fields", ()
   assert.equal(thin, null);
 });
 
+test("buildPreviewFirstInsightAuditPayload accepts a focused limited field when confidence is medium", () => {
+  const result = buildPreviewFirstInsightAuditPayload({
+    workspaceId: "workspace-1",
+    fieldId: "field-1",
+    activePanel: "detail",
+    isGuestSession: false,
+    summary: {
+      moisture: 0.44,
+      moistureLabel: "44%",
+      moistureTrend: "Rising",
+      moistureTrendDirection: "up",
+      moistureConfidence: "Medium confidence",
+      moistureConfidenceLevel: "medium",
+      moistureObservedAtLabel: "Today",
+      rootMoisture: "44%",
+      fieldState: "Watch",
+      trend: "+2%",
+      trendSub: "vs last week",
+      modeLabels: ["Crop health", "Canopy vigor", "Leaf moisture"],
+      currentModeLabel: "Crop health",
+      currentModeValue: "0.58",
+      moistureDerivationMode: "source-backed",
+      dataQuality: {
+        label: "Limited",
+        tone: "caution",
+        detail: "Usable but still thin",
+      },
+    },
+    workspaceFirstInsightSummary: {
+      focusFieldId: "field-1",
+      focusFieldName: "North Quarter",
+      headline: "Workspace first read",
+      summary: "Start here.",
+      comparisons: [],
+    },
+  });
+
+  assert.deepEqual(result, {
+    workspaceId: "workspace-1",
+    fieldId: "field-1",
+    fieldName: "North Quarter",
+    dataQualityLabel: "Limited",
+    moistureConfidenceLevel: "medium",
+    moistureDerivationMode: "source-backed",
+    focusFieldId: "field-1",
+    focusFieldName: "North Quarter",
+    workspaceSummaryComparisonCount: 0,
+    source: "workspace-first-read",
+  });
+});
+
 test("buildPreviewFirstInsightSessionKey is stable", () => {
   assert.equal(
     buildPreviewFirstInsightSessionKey({

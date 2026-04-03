@@ -1,5 +1,6 @@
 import type { FieldSummaryProps } from "../../components/panels/SummaryTab";
 import { getWorkspaceFirstInsightAllowlist } from "./firstInsightChooser";
+import { isTrackableFirstInsightSummary } from "./firstInsightEligibility";
 
 export type WorkspaceFirstInsightFieldSnapshot = {
   fieldId: string;
@@ -47,10 +48,6 @@ function parseTrendPercent(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function isEligibleForWorkspaceInsight(summary: FieldSummaryProps | null) {
-  return summary?.dataQuality?.label === "Ready";
-}
-
 function compareByFocusPriority(
   left: EligibleFieldSnapshot,
   right: EligibleFieldSnapshot,
@@ -94,7 +91,7 @@ export function buildWorkspaceFirstInsightSummary(options: {
 
   const allEligibleFields = options.fields
     .filter((field): field is WorkspaceFirstInsightFieldSnapshot & { summary: FieldSummaryProps } =>
-      isEligibleForWorkspaceInsight(field.summary),
+      isTrackableFirstInsightSummary(field.summary),
     )
     .map((field) => ({
       ...field,
@@ -138,7 +135,7 @@ export function buildWorkspaceFirstInsightSummary(options: {
 
   if (wettestField) {
     comparisons.push({
-      label: "Wettest ready field",
+      label: "Wettest field",
       fieldId: wettestField.fieldId,
       fieldName: wettestField.fieldName,
       value: wettestField.summary.rootMoisture,
@@ -148,7 +145,7 @@ export function buildWorkspaceFirstInsightSummary(options: {
 
   if (driestField) {
     comparisons.push({
-      label: "Driest ready field",
+      label: "Driest field",
       fieldId: driestField.fieldId,
       fieldName: driestField.fieldName,
       value: driestField.summary.rootMoisture,
@@ -167,7 +164,7 @@ export function buildWorkspaceFirstInsightSummary(options: {
   }
 
   const comparisonScopeCount = eligibleFields.length;
-  const scopeLabel = comparisonScopeCount === 1 ? "ready field" : "ready fields";
+  const scopeLabel = comparisonScopeCount === 1 ? "field" : "fields";
   const focusPrefix =
     focusField.fieldId === options.activeFieldId
       ? `${focusField.fieldName} is the clearest field to start with right now.`

@@ -1,4 +1,5 @@
 import type { FieldSummaryProps } from "../../components/panels/SummaryTab";
+import { isTrackableFirstInsightSummary } from "../../features/fields/firstInsightEligibility";
 import type { WorkspaceFirstInsightSummaryCard } from "../../features/fields/workspaceFirstInsightSummary";
 
 export type PreviewFirstInsightTrackInput = {
@@ -22,8 +23,6 @@ export type PreviewFirstInsightPayload = {
   workspaceSummaryComparisonCount: number;
   source: "workspace-first-read";
 };
-
-const TRACKABLE_CONFIDENCE_LEVELS = new Set(["high", "medium"]);
 
 export function buildPreviewFirstInsightSessionKey(
   input: Pick<PreviewFirstInsightPayload, "workspaceId" | "fieldId">,
@@ -58,15 +57,7 @@ export function buildPreviewFirstInsightAuditPayload(
   const dataQualityLabel = summary?.dataQuality?.label ?? null;
   const moistureConfidenceLevel = summary?.moistureConfidenceLevel ?? null;
 
-  const isTrackableField =
-    dataQualityLabel === "Ready"
-    || (
-      dataQualityLabel === "Limited"
-      && moistureConfidenceLevel != null
-      && TRACKABLE_CONFIDENCE_LEVELS.has(moistureConfidenceLevel)
-    );
-
-  if (!isTrackableField) {
+  if (!isTrackableFirstInsightSummary(summary)) {
     return null;
   }
 

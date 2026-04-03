@@ -45,7 +45,7 @@ function makeSummary(overrides: Partial<FieldSummaryProps> = {}): FieldSummaryPr
   };
 }
 
-test("buildWorkspaceFirstInsightSummary prefers the active ready field and computes comparison slots", () => {
+test("buildWorkspaceFirstInsightSummary prefers the active trackable field and computes comparison slots", () => {
   const result = buildWorkspaceFirstInsightSummary({
     workspaceId: "workspace-1",
     activeFieldId: "field-b",
@@ -74,8 +74,8 @@ test("buildWorkspaceFirstInsightSummary prefers the active ready field and compu
   assert.deepEqual(
     result.comparisons.map((entry) => [entry.label, entry.fieldName, entry.value]),
     [
-      ["Wettest ready field", "North Quarter", "46%"],
-      ["Driest ready field", "East Quarter", "29%"],
+      ["Wettest field", "North Quarter", "46%"],
+      ["Driest field", "East Quarter", "29%"],
       ["Most changed this week", "South Quarter", "-6%"],
     ],
   );
@@ -110,7 +110,7 @@ test("buildWorkspaceFirstInsightSummary returns null when there are not enough s
   assert.equal(result, null);
 });
 
-test("buildWorkspaceFirstInsightSummary excludes limited fields even when moisture confidence is medium", () => {
+test("buildWorkspaceFirstInsightSummary includes limited fields when moisture confidence is medium", () => {
   const result = buildWorkspaceFirstInsightSummary({
     workspaceId: "workspace-1",
     activeFieldId: "field-a",
@@ -136,7 +136,9 @@ test("buildWorkspaceFirstInsightSummary excludes limited fields even when moistu
     ],
   });
 
-  assert.equal(result, null);
+  assert.ok(result);
+  assert.equal(result.focusFieldId, "field-a");
+  assert.match(result.summary, /Across 2 fields/);
 });
 
 test("buildWorkspaceFirstInsightSummary respects the Hope Creek allowlist when the active field is weak", () => {
@@ -174,7 +176,7 @@ test("buildWorkspaceFirstInsightSummary respects the Hope Creek allowlist when t
   assert.equal(result.focusFieldName, "Rath");
 });
 
-test("buildWorkspaceFirstInsightSummary scopes comparisons to allowlisted ready fields", () => {
+test("buildWorkspaceFirstInsightSummary scopes comparisons to allowlisted trackable fields", () => {
   const result = buildWorkspaceFirstInsightSummary({
     workspaceId: "8f2afceb-aefe-4e90-a24e-7ab07c4423fe",
     activeFieldId: "field-a",
@@ -201,8 +203,8 @@ test("buildWorkspaceFirstInsightSummary scopes comparisons to allowlisted ready 
   assert.deepEqual(
     result.comparisons.map((entry) => [entry.label, entry.fieldName, entry.value]),
     [
-      ["Wettest ready field", "Rath", "41%"],
-      ["Driest ready field", "Towes", "35%"],
+      ["Wettest field", "Rath", "41%"],
+      ["Driest field", "Towes", "35%"],
       ["Most changed this week", "Towes", "-4%"],
     ],
   );
