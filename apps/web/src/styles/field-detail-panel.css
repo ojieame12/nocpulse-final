@@ -1191,11 +1191,19 @@
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08), 0 2px 10px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --text-primary: rgba(0, 0, 0, 0.82);
+  --text-secondary: rgba(0, 0, 0, 0.55);
+  --text-tertiary: rgba(0, 0, 0, 0.40);
+  --text-body: rgba(0, 0, 0, 0.60);
+  --text-muted: rgba(0, 0, 0, 0.40);
   --surface-white: rgba(255, 255, 255, 0.56);
   --surface-bg: rgba(248, 250, 248, 0.42);
   --color-slate-50: rgba(248, 250, 248, 0.38);
   --border-light: rgba(255, 255, 255, 0.48);
   --border-medium: rgba(214, 221, 214, 0.65);
+  --status-positive: #16a34a;
+  --status-warning: #f59e0b;
+  --status-danger: #ef4444;
 }
 
 [data-theme="light"] .fdp::before {
