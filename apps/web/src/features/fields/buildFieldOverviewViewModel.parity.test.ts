@@ -450,6 +450,12 @@ test("UI and PDF stay aligned on farmer-local spray window timing", () => {
   assert.equal(pdfSprayBlocks.table?.rows[0]?.cells[1], startLabel);
   assert.equal(pdfSprayBlocks.table?.rows[0]?.cells[2], endLabel);
   assert.equal(pdfSprayBlocks.card?.title, `Best window: ${startLabel} – ${endLabel}`);
+  assert.ok(pdfSprayBlocks.card?.body);
+  assert.match(
+    uiRecommendation?.whyNow ?? "",
+    new RegExp(pdfSprayBlocks.card.body.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+  );
+  assert.equal(pdfSprayBlocks.card?.action, uiRecommendation?.inspectFirst);
 });
 
 test("UI report cards and PDF stay aligned on daily forecast aggregation", () => {

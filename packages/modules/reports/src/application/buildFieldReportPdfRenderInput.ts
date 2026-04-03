@@ -3,6 +3,7 @@ import { STATUS, BRAND, SURFACE } from "@fieldpulse/pdf";
 import type { FieldAlert } from "@fieldpulse/module-alerts";
 import {
   describeSeedingAdvisoryNarrative,
+  describeSprayWindowAdvisoryNarrative,
   prairieDefaultRulePack,
   resolveCropRuleContext,
   resolveFieldAccessDecision,
@@ -1067,18 +1068,27 @@ export function buildFieldReportPdfRenderInput({
       });
 
       const best = sprayWindows[0]!;
+      const bestStartLabel = formatFieldLocalTime(best.startAt, {
+        fieldTimeZone: m.fieldTimeZone,
+        fieldLabelPoint: m.field.labelPoint,
+      });
+      const bestEndLabel = formatFieldLocalTime(best.endAt, {
+        fieldTimeZone: m.fieldTimeZone,
+        fieldLabelPoint: m.field.labelPoint,
+      });
+      const sprayNarrative = describeSprayWindowAdvisoryNarrative({
+        cropLabel: cropType ?? "This crop",
+        sprayWindowCount24h: sig?.sprayWindowCount24h ?? sprayWindows.length,
+        firstWindow: best,
+        startLabel: bestStartLabel,
+        endLabel: bestEndLabel,
+      });
       blocks.push({
         kind: "severity-card",
         severity: "info",
-        title: `Best window: ${formatFieldLocalTime(best.startAt, {
-          fieldTimeZone: m.fieldTimeZone,
-          fieldLabelPoint: m.field.labelPoint,
-        })} – ${formatFieldLocalTime(best.endAt, {
-          fieldTimeZone: m.fieldTimeZone,
-          fieldLabelPoint: m.field.labelPoint,
-        })}`,
-        body: `Wind up to ${Math.round(best.maxWindKph)} km/h, ${best.maxPrecipProbabilityPct !== null ? `${Math.round(best.maxPrecipProbabilityPct)}% rain risk` : "low rain risk"}, temperatures ${best.minAverageTempC.toFixed(0)}–${best.maxAverageTempC.toFixed(0)}°C.`,
-        action: "Confirm target crop stage and product label. Re-check wind on exposed field edges before committing.",
+        title: sprayNarrative.pdfCardTitle,
+        body: sprayNarrative.pdfBody,
+        action: sprayNarrative.pdfAction,
         marginTop: 6,
       });
     } else {

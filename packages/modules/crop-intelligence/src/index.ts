@@ -133,6 +133,11 @@ export {
   type SeedingAdvisoryNarrative,
 } from "./application/describeSeedingAdvisoryNarrative";
 export {
+  describeSprayWindowAdvisoryNarrative,
+  type DescribeSprayWindowAdvisoryNarrativeInput,
+  type SprayWindowAdvisoryNarrative,
+} from "./application/describeSprayWindowAdvisoryNarrative";
+export {
   resolveFieldAccessDecision,
   resolveSeedingAdvisoryDecision,
   type FieldAccessDecision,

@@ -1,3 +1,4 @@
+import { describeSprayWindowAdvisoryNarrative } from "@fieldpulse/module-crop-intelligence";
 import {
   findSprayWindows,
   formatFieldLocalTime,
@@ -27,10 +28,6 @@ export type SprayWindowRecommendationPresentation = {
     color: "green" | "yellow" | "red";
   }[];
 };
-
-function formatSignedRange(minValue: number, maxValue: number) {
-  return `${minValue.toFixed(0)}–${maxValue.toFixed(0)}°C`;
-}
 
 function findFirstSprayWindow(
   forecasts: readonly FieldWeatherForecast[],
@@ -76,37 +73,34 @@ export function resolveSprayWindowRecommendation(input: {
     fieldTimeZone: input.fieldTimeZone,
     fieldLabelPoint: input.fieldLabelPoint,
   });
-  const precipLabel =
-    firstWindow.maxPrecipProbabilityPct != null
-      ? `${Math.round(firstWindow.maxPrecipProbabilityPct)}% rain chance`
-      : "low rain chance";
-  const windowCountLabel =
-    sprayWindowCount24h === 1
-      ? "1 spray window"
-      : `${sprayWindowCount24h} spray windows`;
+  const narrative = describeSprayWindowAdvisoryNarrative({
+    cropLabel,
+    sprayWindowCount24h,
+    firstWindow,
+    startLabel,
+    endLabel,
+  });
 
   return {
-    title: "Spray window open",
-    severity: "medium",
-    urgency: "Ready",
-    dueDate: "Within 24h",
-    recommendation:
-      "Use the next spray window if field checks and product timing still line up, then keep watching wind and precipitation as the block approaches.",
-    explanation: `No confirmed finding is active yet. ${windowCountLabel} fit the current spray criteria in the next 24 hours, so this recommendation is advisory and based on hourly weather heuristics for ${cropLabel.toLowerCase()}.`,
-    whyNow: `The earliest 4-hour spray block runs around ${startLabel} to ${endLabel}, with wind up to ${Math.round(firstWindow.maxWindKph)} km/h, ${precipLabel}, and temperatures around ${formatSignedRange(firstWindow.minAverageTempC, firstWindow.maxAverageTempC)}.`,
-    inspectFirst:
-      "Confirm the target crop stage and product label first, then re-check wind exposure on the most open field edges before committing the full pass.",
+    title: narrative.uiTitle,
+    severity: narrative.uiSeverity,
+    urgency: narrative.urgency,
+    dueDate: narrative.dueDate,
+    recommendation: narrative.recommendation,
+    explanation: narrative.explanation,
+    whyNow: narrative.whyNow,
+    inspectFirst: narrative.inspectFirst,
     confidence: "Heuristic watchlist · weather-backed",
     signals: [
       {
-        label: windowCountLabel,
+        label: narrative.windowCountLabel,
         color: "green",
         detail: `${startLabel} to ${endLabel} · ${weatherSourceLabel}`,
       },
       {
         label: `Wind ≤ ${Math.round(firstWindow.maxWindKph)} km/h`,
         color: "green",
-        detail: `${precipLabel} · ${formatSignedRange(firstWindow.minAverageTempC, firstWindow.maxAverageTempC)}`,
+        detail: `${narrative.precipLabel} · ${narrative.temperatureRangeLabel}`,
       },
     ],
     tags: [
