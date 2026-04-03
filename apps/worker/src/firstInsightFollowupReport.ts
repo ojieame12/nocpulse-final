@@ -2,6 +2,7 @@ import { pathToFileURL } from "node:url";
 import { createSupabaseDatabaseClient, type DatabaseSchema } from "@fieldpulse/platform-db";
 import { createServerRuntime } from "@fieldpulse/platform-runtime";
 import { buildFirstInsightFunnelReport } from "./firstInsightFunnelReport.shared";
+import { buildLaunchVisibleFollowupReport } from "./launchVisibleFollowupReport";
 import { buildLaunchVisibleReadinessReport } from "./launchVisibleReadinessReport";
 import { runFieldQualityAudit } from "./fieldQualityAudit";
 import { loadWorkerEnv } from "./runtime/loadEnv";
@@ -22,6 +23,11 @@ type FollowupLaunchVisibleSummary = {
   scopedFieldCount: number;
   readyCount: number;
   hasEnoughReadyFields: boolean;
+  missingReadyFieldCount: number;
+  topBlockers: Array<{
+    reason: string;
+    count: number;
+  }>;
 };
 
 export type FirstInsightFollowupRow = {
@@ -48,6 +54,11 @@ export type FirstInsightFollowupReport = {
   generatedAt: string;
   requestCount: number;
   followupCount: number;
+  reasonCounts: Record<FirstInsightFollowupRow["followupReason"], number>;
+  topLaunchVisibleBlockers: Array<{
+    reason: string;
+    count: number;
+  }>;
   rows: FirstInsightFollowupRow[];
 };
 
@@ -72,6 +83,13 @@ export function buildFirstInsightFollowupReport(input: {
 }): FirstInsightFollowupReport {
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const rows: FirstInsightFollowupRow[] = [];
+  const reasonCounts: FirstInsightFollowupReport["reasonCounts"] = {
+    "grant-missing": 0,
+    "field-activity-missing": 0,
+    "launch-visible-weak": 0,
+    "insight-missing": 0,
+  };
+  const launchVisibleBlockerCounts = new Map<string, number>();
 
   for (const row of input.funnel.rows) {
     if (row.firstInsightAt) {
@@ -92,10 +110,28 @@ export function buildFirstInsightFollowupReport(input: {
       recommendedAction = "Run a guided add-field walkthrough and watch for intake or hydration dead-ends.";
     } else if (launchVisible && !launchVisible.hasEnoughReadyFields) {
       followupReason = "launch-visible-weak";
-      recommendedAction = "Tighten launch-visible curation before asking the grower to revisit first insight.";
+      const topBlocker = launchVisible.topBlockers[0] ?? null;
+      const blockerSummary =
+        topBlocker == null ? null : `${topBlocker.reason} (${topBlocker.count})`;
+      recommendedAction = [
+        `Promote or replace at least ${launchVisible.missingReadyFieldCount} ready launch-visible field(s) before asking the grower to revisit first insight.`,
+        blockerSummary ? `Top blocker: ${blockerSummary}.` : null,
+      ]
+        .filter((value): value is string => value != null)
+        .join(" ");
     } else {
       followupReason = "insight-missing";
       recommendedAction = "Inspect preview routing and run a real first-insight walkthrough on this workspace.";
+    }
+
+    reasonCounts[followupReason] += 1;
+    if (launchVisible && !launchVisible.hasEnoughReadyFields) {
+      for (const blocker of launchVisible.topBlockers) {
+        launchVisibleBlockerCounts.set(
+          blocker.reason,
+          (launchVisibleBlockerCounts.get(blocker.reason) ?? 0) + blocker.count,
+        );
+      }
     }
 
     rows.push({
@@ -125,6 +161,16 @@ export function buildFirstInsightFollowupReport(input: {
     generatedAt,
     requestCount: input.funnel.requestCount,
     followupCount: rows.length,
+    reasonCounts,
+    topLaunchVisibleBlockers: [...launchVisibleBlockerCounts.entries()]
+      .sort((left, right) => {
+        if (right[1] !== left[1]) {
+          return right[1] - left[1];
+        }
+        return left[0].localeCompare(right[0]);
+      })
+      .slice(0, 5)
+      .map(([reason, count]) => ({ reason, count })),
     rows,
   };
 }
@@ -268,10 +314,13 @@ async function main() {
       workspaceName: audit.fields[0]?.workspaceName ?? null,
       fields: audit.fields,
     });
+    const followup = buildLaunchVisibleFollowupReport({ readiness: report });
     launchVisibleByWorkspaceId.set(workspaceId, {
-      scopedFieldCount: report.scopedFieldCount,
-      readyCount: report.readyCount,
-      hasEnoughReadyFields: report.hasEnoughReadyFields,
+      scopedFieldCount: followup.scopedFieldCount,
+      readyCount: followup.readyCount,
+      hasEnoughReadyFields: followup.hasEnoughReadyFields,
+      missingReadyFieldCount: followup.missingReadyFieldCount,
+      topBlockers: followup.topBlockers,
     });
   }
 
@@ -291,8 +340,14 @@ async function main() {
       `Generated: ${report.generatedAt}`,
       `Requests scanned: ${report.requestCount}`,
       `Follow-up rows: ${report.followupCount}`,
+      `Reasons: grant ${report.reasonCounts["grant-missing"]}, intake ${report.reasonCounts["field-activity-missing"]}, curation ${report.reasonCounts["launch-visible-weak"]}, routing ${report.reasonCounts["insight-missing"]}`,
     ].join("\n"),
   );
+
+  if (report.topLaunchVisibleBlockers.length > 0) {
+    console.log("\nLaunch-visible blockers:");
+    console.table(report.topLaunchVisibleBlockers);
+  }
 
   console.table(
     report.rows.map((row) => ({

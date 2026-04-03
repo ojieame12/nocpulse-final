@@ -165,6 +165,92 @@ test("buildBetaReadinessAssessment returns NO-GO when queue and insight evidence
   assert.equal(result.nextActions.length > 0, true);
 });
 
+test("buildBetaReadinessAssessment points first-insight follow-up at launch-visible curation when ready fields are short", () => {
+  const result = buildBetaReadinessAssessment({
+    queueHealth: {
+      totalCount: 10,
+      queuedCount: 0,
+      runningCount: 0,
+      completedCount: 10,
+      failedCount: 0,
+      cancelledCount: 0,
+      staleRunningCount: 0,
+      cancellationRequestedCount: 0,
+      oldestQueuedAt: null,
+      oldestRunningAt: null,
+      latestUpdatedAt: "2026-04-02T12:00:00.000Z",
+    },
+    actionBrief: {
+      queuedCount: 0,
+      runningCount: 0,
+      completedCount: 12,
+      failedCount: 0,
+      cancelledCount: 0,
+    },
+    actionBriefReview: {
+      workspaceCount: 1,
+      alertCount: 4,
+      activeCount: 1,
+      resolvedCount: 2,
+      dismissedCount: 1,
+      acknowledgedCount: 3,
+      unacknowledgedActiveCount: 1,
+      averageHoursToAcknowledge: 4,
+      averageHoursToResolution: 12,
+      dismissalRate: 0.25,
+      resolutionRate: 0.5,
+    },
+    sourceIntegrity: {
+      fieldCount: 10,
+      sourceBackedLatestCount: 10,
+      seededFallbackCount: 0,
+      syntheticRasterCount: 0,
+      missingSoilContextCount: 0,
+      lowConfidenceCount: 0,
+    },
+    fieldQuality: {
+      generatedAt: "2026-04-02T12:00:00.000Z",
+      workspaceFilter: "tight-scope",
+      workspaceId: "workspace-3",
+      workspaceSlug: "tight-scope",
+      lookbackDays: 30,
+      fieldCount: 10,
+      readyCount: 1,
+      thinCount: 9,
+      fallbackCount: 0,
+      brokenCount: 0,
+      vegetationReadyCount: 1,
+      moistureReadyCount: 10,
+      sourceBackedLatestCount: 10,
+      seededFallbackCount: 0,
+      syntheticRasterCount: 0,
+      missingSoilContextCount: 0,
+      lowConfidenceCount: 0,
+      reasonCounts: {
+        "vegetation-thin": 9,
+      },
+    },
+    firstInsight: {
+      eventCount: 0,
+      uniqueActorCount: 0,
+      uniqueFieldCount: 0,
+      allowlistedEventCount: 0,
+      nonAllowlistedEventCount: 0,
+      averageWorkspaceSummaryComparisonCount: null,
+    },
+  });
+
+  const firstInsightGate = result.gates.find((gate) => gate.key === "first-insight");
+  assert.ok(firstInsightGate);
+  assert.match(firstInsightGate.summary, /short by 1 ready field/);
+  assert.equal(
+    result.nextActions.includes(
+      "Promote or replace at least 1 ready launch-visible field(s) before the next first-insight walkthrough.",
+    ),
+    true,
+  );
+});
+
 test("buildBetaReadinessAssessment returns NO-GO when action brief trust is weak despite healthy cadence", () => {
   const result = buildBetaReadinessAssessment({
     queueHealth: {

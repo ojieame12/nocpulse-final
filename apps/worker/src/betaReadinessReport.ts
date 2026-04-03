@@ -354,6 +354,11 @@ export function buildBetaReadinessAssessment(input: {
     nextActions.push("Keep launch-visible field curation tight and continue long-tail field-quality cleanup.");
   }
 
+  const minimumReadyFieldsForFirstInsight = 2;
+  const missingReadyFieldsForFirstInsight = Math.max(
+    0,
+    minimumReadyFieldsForFirstInsight - input.fieldQuality.readyCount,
+  );
   const firstInsightStatus: GateStatus =
     input.firstInsight.eventCount === 0
       ? "NO-GO"
@@ -370,10 +375,16 @@ export function buildBetaReadinessAssessment(input: {
         ? `${input.firstInsight.eventCount} first-insight event(s) recorded across ${input.firstInsight.uniqueActorCount} actor(s).`
         : firstInsightStatus === "WARN"
           ? `${input.firstInsight.eventCount} first-insight event(s) exist, but comparison depth is still limited.`
-          : "No first-insight evidence has been recorded yet for this scope.",
+          : missingReadyFieldsForFirstInsight > 0
+            ? `No first-insight evidence has been recorded yet; launch-visible curation is still short by ${missingReadyFieldsForFirstInsight} ready field(s).`
+            : "No first-insight evidence has been recorded yet for this scope.",
   });
   if (firstInsightStatus !== "GO") {
-    nextActions.push("Run a real grower walkthrough and inspect first-insight funnel drop-off before broader release.");
+    nextActions.push(
+      missingReadyFieldsForFirstInsight > 0
+        ? `Promote or replace at least ${missingReadyFieldsForFirstInsight} ready launch-visible field(s) before the next first-insight walkthrough.`
+        : "Run a real grower walkthrough and inspect first-insight funnel drop-off before broader release.",
+    );
   }
 
   let overallStatus: GateStatus = "GO";

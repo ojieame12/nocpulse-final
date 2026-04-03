@@ -34,6 +34,7 @@ test("buildFirstInsightFollowupReport classifies missing field activity after gr
 
   assert.equal(report.followupCount, 1);
   assert.equal(report.rows[0]?.followupReason, "field-activity-missing");
+  assert.equal(report.reasonCounts["field-activity-missing"], 1);
 });
 
 test("buildFirstInsightFollowupReport flags weak launch-visible curation before insight follow-up", () => {
@@ -64,11 +65,22 @@ test("buildFirstInsightFollowupReport flags weak launch-visible curation before 
       }],
     },
     launchVisibleByWorkspaceId: new Map([
-      ["w1", { scopedFieldCount: 5, readyCount: 1, hasEnoughReadyFields: false }],
+      ["w1", {
+        scopedFieldCount: 5,
+        readyCount: 1,
+        hasEnoughReadyFields: false,
+        missingReadyFieldCount: 1,
+        topBlockers: [{ reason: "vegetation-thin", count: 4 }],
+      }],
     ]),
   });
 
   assert.equal(report.rows[0]?.followupReason, "launch-visible-weak");
+  assert.match(
+    report.rows[0]?.recommendedAction ?? "",
+    /Promote or replace at least 1 ready launch-visible field\(s\)/,
+  );
+  assert.deepEqual(report.topLaunchVisibleBlockers, [{ reason: "vegetation-thin", count: 4 }]);
 });
 
 test("buildFirstInsightFollowupReport uses insight-missing when launch-visible fields are strong but insight still never surfaced", () => {
@@ -99,7 +111,13 @@ test("buildFirstInsightFollowupReport uses insight-missing when launch-visible f
       }],
     },
     launchVisibleByWorkspaceId: new Map([
-      ["w1", { scopedFieldCount: 5, readyCount: 3, hasEnoughReadyFields: true }],
+      ["w1", {
+        scopedFieldCount: 5,
+        readyCount: 3,
+        hasEnoughReadyFields: true,
+        missingReadyFieldCount: 0,
+        topBlockers: [],
+      }],
     ]),
   });
 
