@@ -15,6 +15,7 @@ import {
   type SeedingAdvisoryDecision,
 } from "@fieldpulse/module-crop-intelligence";
 import {
+  describeDailyForecastCondition,
   describeFrostRiskNarrative,
   describeWeatherSignalNarrative,
   findSprayWindows,
@@ -132,24 +133,6 @@ function inferAlertAction(alert: FieldAlert): string | undefined {
   if (t.includes("hail")) return "Assess crop damage risk and review insurance coverage.";
   if (t.includes("wind")) return "Delay field operations until wind subsides.";
   return undefined;
-}
-
-function inferDailyForecastConditions(input: {
-  airTemperatureMinC: number | null;
-  precipitationMm: number;
-  windSpeedKph: number | null;
-}): string {
-  const minT = input.airTemperatureMinC;
-  const precip = input.precipitationMm;
-  const wind = input.windSpeedKph ?? 0;
-
-  if (minT !== null && minT <= -10) return precip >= 2 ? "Snow likely" : "Deep frost";
-  if (minT !== null && minT <= 0) return precip >= 2 ? "Rain/snow mix" : "Frost risk";
-  if (precip >= 10) return "Heavy rain";
-  if (precip >= 2) return "Light rain";
-  if (wind >= 40) return "High wind";
-  if (precip > 0) return "Chance of showers";
-  return "Dry";
 }
 
 /** Derive a plain-language action from a finding. */
@@ -1030,7 +1013,7 @@ export function buildFieldReportPdfRenderInput({
       rows: forecastDays.map((f) => ({
         cells: [
           f.label,
-          inferDailyForecastConditions(f),
+          describeDailyForecastCondition(f),
           `${fmt(f.airTemperatureMinC)}°`,
           `${fmt(f.airTemperatureMaxC)}°`,
           `${fmt(f.precipitationMm)} mm`,

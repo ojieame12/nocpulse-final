@@ -344,6 +344,69 @@ test("buildFieldReportPdfRenderInput aggregates hourly forecast periods into dai
   ]);
 });
 
+test("buildFieldReportPdfRenderInput uses the shared daily forecast condition helper", () => {
+  const renderInput = buildFieldReportPdfRenderInput({
+    artifactKey: "test-artifact",
+    readModel: createReadModel({
+      cropType: "Canola",
+      surfacePct: 58,
+      signalSet: createSignalSet({
+        soilTemp6cmCurrentC: 5.2,
+        soilTemp6cmSustainedDays: 2,
+        frostRiskMinTempC7d: 1.5,
+        frostRiskNights7d: 1,
+        frostProbabilityPct7d: 25,
+      }),
+      forecasts: [
+        {
+          id: "forecast-a",
+          workspaceId: "workspace-1",
+          fieldId: "field-1",
+          forecastRunAt: "2026-04-03T12:00:00.000Z",
+          validAt: "2026-04-03T06:00:00.000Z",
+          sourceKey: "open-meteo:hourly-v1",
+          providerKey: "open-meteo",
+          airTemperatureMinC: -12,
+          airTemperatureMaxC: -2,
+          precipitationMm: 0,
+          windSpeedKph: 10,
+          relativeHumidityPct: null,
+          evapotranspirationMm: null,
+          precipitationProbabilityPct: 5,
+          createdAt: "2026-04-03T12:00:00.000Z",
+          updatedAt: "2026-04-03T12:00:00.000Z",
+        },
+        {
+          id: "forecast-b",
+          workspaceId: "workspace-1",
+          fieldId: "field-1",
+          forecastRunAt: "2026-04-03T12:00:00.000Z",
+          validAt: "2026-04-04T12:00:00.000Z",
+          sourceKey: "open-meteo:hourly-v1",
+          providerKey: "open-meteo",
+          airTemperatureMinC: 4,
+          airTemperatureMaxC: 9,
+          precipitationMm: 12,
+          windSpeedKph: 16,
+          relativeHumidityPct: null,
+          evapotranspirationMm: null,
+          precipitationProbabilityPct: 82,
+          createdAt: "2026-04-03T12:00:00.000Z",
+          updatedAt: "2026-04-03T12:00:00.000Z",
+        },
+      ],
+    }),
+  });
+
+  const forecastTable = renderInput.blocks.find(
+    (block) => block.kind === "table" && block.columns[0]?.label === "Day",
+  );
+
+  assert.equal(forecastTable?.kind, "table");
+  assert.equal(forecastTable.rows[0]?.cells[1], "Deep frost");
+  assert.equal(forecastTable.rows[1]?.cells[1], "Heavy rain");
+});
+
 test("buildFieldReportPdfRenderInput uses shared frost narrative copy in signal notes and frost metrics", () => {
   const renderInput = buildFieldReportPdfRenderInput({
     artifactKey: "test-artifact",
