@@ -187,6 +187,7 @@ test("generateWeatherRiskFindings creates an active critical frost finding for f
   assert.equal(metadata.cropKey, "corn");
   assert.equal(metadata.growthStage, "vegetative");
   assert.equal(metadata.riskType, "frost");
+  assert.equal(metadata.reasonCode, "frost-kill-threshold");
   assert.equal(metadata.frostRiskMinTempC, -2);
   assert.equal(metadata.damageTempC, 0);
   assert.equal(metadata.killTempC, -1.5);
@@ -259,6 +260,46 @@ test("generateWeatherRiskFindings resolves an existing atmospheric-demand findin
   assert.equal(metadata.cropKey, "lentils");
   assert.equal(metadata.growthStage, "flowering");
   assert.equal(metadata.riskType, "atmospheric-demand");
+  assert.equal(metadata.reasonCode, "atmospheric-demand-eased");
   assert.equal(metadata.peakForecastVpdKpa24h, 1.1);
   assert.equal(metadata.netWaterBalance24hMm, 0.8);
+});
+
+test("generateWeatherRiskFindings records elevated atmospheric-demand reason metadata for active demand", async () => {
+  const findings = new InMemoryFindingRepository();
+
+  const result = await generateWeatherRiskFindings({
+    weatherSignalSets: {
+      async getLatestByField() {
+        return createWeatherSignalSet({
+          frostRiskMinTempC: 3.5,
+          peakForecastVpdKpa24h: 1.9,
+          netWaterBalance24hMm: -2.4,
+          netWaterBalance72hMm: -4.1,
+        });
+      },
+    },
+    runs: new InMemoryRunRepository(),
+    findings,
+    input: {
+      workspaceId: WORKSPACE_ID,
+      fieldId: FIELD_ID,
+      requestedAt: REQUESTED_AT,
+      cropContext: {
+        cropType: "canola",
+        growthStage: "vegetative",
+      },
+    },
+    rulePack: prairieDefaultRulePack,
+  });
+
+  assert.equal(result.findings.length, 1);
+  const finding = result.findings[0]!;
+  const metadata = readMetadataRecord(finding.evidence.metadata);
+
+  assert.equal(finding.family, "weather_risk");
+  assert.equal(finding.status, "active");
+  assert.equal(finding.severity, "medium");
+  assert.equal(metadata.riskType, "atmospheric-demand");
+  assert.equal(metadata.reasonCode, "atmospheric-demand-elevated");
 });

@@ -59,6 +59,13 @@ type RiskKind = "frost" | "atmospheric-demand";
 
 type WeatherRiskAssessment = {
   kind: RiskKind;
+  reasonCode:
+    | "frost-risk-eased"
+    | "frost-damage-threshold"
+    | "frost-kill-threshold"
+    | "atmospheric-demand-eased"
+    | "atmospheric-demand-elevated"
+    | "atmospheric-demand-severe";
   severity: UpsertFieldIntelligenceFindingInput["severity"];
   status: UpsertFieldIntelligenceFindingInput["status"];
   title: string;
@@ -96,6 +103,7 @@ function buildFrostAssessment(input: {
 
     return {
       kind: "frost",
+      reasonCode: "frost-risk-eased",
       severity: "low",
       status: "resolved",
       title: "Frost risk eased",
@@ -125,6 +133,7 @@ function buildFrostAssessment(input: {
 
   return {
     kind: "frost",
+    reasonCode: severity === "critical" ? "frost-kill-threshold" : "frost-damage-threshold",
     severity,
     status: "active",
     title:
@@ -167,6 +176,7 @@ function buildAtmosphericDemandAssessment(input: {
 
     return {
       kind: "atmospheric-demand",
+      reasonCode: "atmospheric-demand-eased",
       severity: "low",
       status: "resolved",
       title: "Atmospheric demand eased",
@@ -200,6 +210,7 @@ function buildAtmosphericDemandAssessment(input: {
 
   return {
     kind: "atmospheric-demand",
+    reasonCode: critical ? "atmospheric-demand-severe" : "atmospheric-demand-elevated",
     severity,
     status: "active",
     title:
@@ -280,6 +291,7 @@ async function upsertAssessmentFinding(input: {
         gddBaseC: input.crop.gddBaseC,
         isGenericCrop: input.crop.isGenericCrop,
         signalVersion: input.signalSet.signalVersion,
+        reasonCode: input.assessment.reasonCode,
         ...input.assessment.metadata,
       },
     },
