@@ -147,7 +147,7 @@ export function AlertsPanel({
 
   const showResolved = filter === 'all' || filter === 'resolved';
 
-  async function mutateAlert(alertId: string, action: 'acknowledge' | 'dismiss') {
+  async function mutateAlert(alertId: string, action: 'acknowledge' | 'dismiss' | 'resolve') {
     if (!actionsEnabled || useDemoData) {
       return;
     }
@@ -181,18 +181,18 @@ export function AlertsPanel({
         return;
       }
 
-      const dismissedAlert = activeItems.find((item) => item.id === alertId) ?? null;
+      const clearedAlert = activeItems.find((item) => item.id === alertId) ?? null;
       setActiveItems((items) => items.filter((item) => item.id !== alertId));
 
-      if (dismissedAlert) {
+      if (clearedAlert) {
         setResolvedItemsState((items) => [
           {
-            id: dismissedAlert.id,
-            title: dismissedAlert.title,
-            subtitle: dismissedAlert.subtitle,
+            id: clearedAlert.id,
+            title: clearedAlert.title,
+            subtitle: clearedAlert.subtitle,
             time: 'just now',
-            trackedZoneIds: dismissedAlert.trackedZoneIds,
-            status: 'dismissed',
+            trackedZoneIds: clearedAlert.trackedZoneIds,
+            status: action === 'dismiss' ? 'dismissed' : 'resolved',
           },
           ...items,
         ]);
@@ -396,6 +396,22 @@ export function AlertsPanel({
                               : pendingAlertId === alert.id
                                 ? 'Saving…'
                                 : 'Mark reviewed'}
+                          </button>
+                          <button
+                            type="button"
+                            className="fdp__chip"
+                            disabled={pendingAlertId === alert.id}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void mutateAlert(alert.id, 'resolve');
+                            }}
+                            style={{
+                              fontSize: 9,
+                              cursor: pendingAlertId === alert.id ? 'default' : 'pointer',
+                              opacity: pendingAlertId === alert.id ? 0.6 : 1,
+                            }}
+                          >
+                            Resolve
                           </button>
                           <button
                             type="button"

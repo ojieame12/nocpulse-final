@@ -38,7 +38,7 @@ test("AlertsPanel can still opt into demo alerts explicitly", () => {
   assert.match(markup, /4 active · 1 critical · 6 this week/);
 });
 
-test("AlertsPanel renders review and dismiss actions for live active alerts", () => {
+test("AlertsPanel renders review, resolve, and dismiss actions for live active alerts", () => {
   const markup = renderToStaticMarkup(
     <AlertsPanel
       activeAlerts={[
@@ -60,6 +60,7 @@ test("AlertsPanel renders review and dismiss actions for live active alerts", ()
   );
 
   assert.match(markup, /Mark reviewed/);
+  assert.match(markup, /Resolve/);
   assert.match(markup, /Dismiss/);
 });
 
@@ -85,5 +86,6 @@ test("AlertsPanel hides live actions when alert mutations are disabled", () => {
   );
 
   assert.doesNotMatch(markup, /Mark reviewed/);
+  assert.doesNotMatch(markup, />Resolve</);
   assert.doesNotMatch(markup, /Dismiss/);
 });
