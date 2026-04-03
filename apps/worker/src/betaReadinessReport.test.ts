@@ -26,7 +26,11 @@ test("buildBetaReadinessAssessment returns GO when core beta gates are healthy",
     },
     actionBriefReview: {
       workspaceCount: 1,
+      reviewEligibleWorkspaceCount: 1,
+      unreviewableWorkspaceCount: 0,
+      totalAlertCount: 8,
       alertCount: 8,
+      unreviewableAlertCount: 0,
       activeCount: 1,
       resolvedCount: 5,
       dismissedCount: 2,
@@ -104,7 +108,11 @@ test("buildBetaReadinessAssessment returns NO-GO when queue and insight evidence
     },
     actionBriefReview: {
       workspaceCount: 0,
+      reviewEligibleWorkspaceCount: 0,
+      unreviewableWorkspaceCount: 0,
+      totalAlertCount: 0,
       alertCount: 0,
+      unreviewableAlertCount: 0,
       activeCount: 0,
       resolvedCount: 0,
       dismissedCount: 0,
@@ -189,7 +197,11 @@ test("buildBetaReadinessAssessment points first-insight follow-up at launch-visi
     },
     actionBriefReview: {
       workspaceCount: 1,
+      reviewEligibleWorkspaceCount: 1,
+      unreviewableWorkspaceCount: 0,
+      totalAlertCount: 4,
       alertCount: 4,
+      unreviewableAlertCount: 0,
       activeCount: 1,
       resolvedCount: 2,
       dismissedCount: 1,
@@ -275,7 +287,11 @@ test("buildBetaReadinessAssessment returns NO-GO when action brief trust is weak
     },
     actionBriefReview: {
       workspaceCount: 1,
+      reviewEligibleWorkspaceCount: 1,
+      unreviewableWorkspaceCount: 0,
+      totalAlertCount: 10,
       alertCount: 10,
+      unreviewableAlertCount: 0,
       activeCount: 6,
       resolvedCount: 1,
       dismissedCount: 3,
@@ -332,6 +348,95 @@ test("buildBetaReadinessAssessment returns NO-GO when action brief trust is weak
   assert.equal(
     result.nextActions.includes(
       "Inspect action-brief review behavior and tune thresholds or copy if alerts are piling up or getting dismissed.",
+    ),
+    true,
+  );
+});
+
+test("buildBetaReadinessAssessment downgrades action-brief trust to WARN when alerts exist but no reviewers are configured", () => {
+  const result = buildBetaReadinessAssessment({
+    queueHealth: {
+      totalCount: 10,
+      queuedCount: 0,
+      runningCount: 0,
+      completedCount: 10,
+      failedCount: 0,
+      cancelledCount: 0,
+      staleRunningCount: 0,
+      cancellationRequestedCount: 0,
+      oldestQueuedAt: null,
+      oldestRunningAt: null,
+      latestUpdatedAt: "2026-04-02T12:00:00.000Z",
+    },
+    actionBrief: {
+      queuedCount: 0,
+      runningCount: 0,
+      completedCount: 12,
+      failedCount: 0,
+      cancelledCount: 0,
+    },
+    actionBriefReview: {
+      workspaceCount: 1,
+      reviewEligibleWorkspaceCount: 0,
+      unreviewableWorkspaceCount: 1,
+      totalAlertCount: 16,
+      alertCount: 0,
+      unreviewableAlertCount: 16,
+      activeCount: 0,
+      resolvedCount: 0,
+      dismissedCount: 0,
+      acknowledgedCount: 0,
+      unacknowledgedActiveCount: 0,
+      averageHoursToAcknowledge: null,
+      averageHoursToResolution: null,
+      dismissalRate: null,
+      resolutionRate: null,
+    },
+    sourceIntegrity: {
+      fieldCount: 20,
+      sourceBackedLatestCount: 20,
+      seededFallbackCount: 0,
+      syntheticRasterCount: 0,
+      missingSoilContextCount: 0,
+      lowConfidenceCount: 0,
+    },
+    fieldQuality: {
+      generatedAt: "2026-04-02T12:00:00.000Z",
+      workspaceFilter: "share-only",
+      workspaceId: "workspace-share",
+      workspaceSlug: "share-only",
+      lookbackDays: 30,
+      fieldCount: 20,
+      readyCount: 12,
+      thinCount: 8,
+      fallbackCount: 0,
+      brokenCount: 0,
+      vegetationReadyCount: 12,
+      moistureReadyCount: 12,
+      sourceBackedLatestCount: 20,
+      seededFallbackCount: 0,
+      syntheticRasterCount: 0,
+      missingSoilContextCount: 0,
+      lowConfidenceCount: 0,
+      reasonCounts: {},
+    },
+    firstInsight: {
+      eventCount: 5,
+      uniqueActorCount: 2,
+      uniqueFieldCount: 3,
+      allowlistedEventCount: 5,
+      nonAllowlistedEventCount: 0,
+      averageWorkspaceSummaryComparisonCount: 3,
+    },
+  });
+
+  const gate = result.gates.find((entry) => entry.key === "action-brief-review");
+  assert.ok(gate);
+  assert.equal(gate.status, "WARN");
+  assert.match(gate.summary, /no workspace members can review them yet/i);
+  assert.equal(
+    result.nextActions.includes(
+      "Grant workspace access before using action-brief review as a trust gate for this scope.",
     ),
     true,
   );

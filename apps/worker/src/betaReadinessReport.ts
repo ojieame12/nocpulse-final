@@ -6,6 +6,7 @@ import {
 } from "@fieldpulse/platform-db";
 import { pathToFileURL } from "node:url";
 import {
+  resolveWorkspaceReviewerCounts,
   summarizeActionBriefReviewAlerts,
   type ActionBriefReviewAggregate,
 } from "./actionBriefReviewReport";
@@ -32,6 +33,11 @@ type WorkspaceRow = Pick<
 type AuditEventRow = Pick<
   DatabaseSchema["app"]["Tables"]["audit_events"]["Row"],
   "actor_user_id" | "workspace_id" | "resource_id" | "metadata" | "created_at"
+>;
+
+type WorkspaceMembershipRow = Pick<
+  DatabaseSchema["app"]["Tables"]["workspace_memberships"]["Row"],
+  "workspace_id" | "user_id"
 >;
 
 type GateStatus = "GO" | "WARN" | "NO-GO";
@@ -272,8 +278,10 @@ export function buildBetaReadinessAssessment(input: {
   const actionBriefReviewStatus: GateStatus =
     input.actionBrief.completedCount === 0
       ? "WARN"
-      : input.actionBriefReview.alertCount === 0
+      : input.actionBriefReview.totalAlertCount === 0
         ? "WARN"
+        : input.actionBriefReview.reviewEligibleWorkspaceCount === 0
+          ? "WARN"
         : input.actionBriefReview.unacknowledgedActiveCount === 0 && dismissalRate <= 0.5
           ? "GO"
           : input.actionBriefReview.unacknowledgedActiveCount >= 5 || dismissalRate >= 0.8
@@ -286,14 +294,20 @@ export function buildBetaReadinessAssessment(input: {
     summary:
       actionBriefReviewStatus === "GO"
         ? `${input.actionBriefReview.alertCount} action-brief alert(s) have review evidence with ${input.actionBriefReview.unacknowledgedActiveCount} unacknowledged active.`
-        : input.actionBriefReview.alertCount === 0
+        : input.actionBriefReview.totalAlertCount === 0
           ? "Action-brief alerts are running, but there is no review/dismissal evidence yet."
+          : input.actionBriefReview.reviewEligibleWorkspaceCount === 0
+            ? `${input.actionBriefReview.totalAlertCount} action-brief alert(s) exist, but no workspace members can review them yet.`
           : actionBriefReviewStatus === "WARN"
-            ? `Action-brief review evidence is mixed (${input.actionBriefReview.unacknowledgedActiveCount} unacknowledged active, ${formatPercent(dismissalRate)} dismissed).`
-            : `Action-brief trust is weak (${input.actionBriefReview.unacknowledgedActiveCount} unacknowledged active, ${formatPercent(dismissalRate)} dismissed).`,
+            ? `Action-brief review evidence is mixed (${input.actionBriefReview.unacknowledgedActiveCount} unacknowledged active, ${formatPercent(dismissalRate)} dismissed, ${input.actionBriefReview.unreviewableAlertCount} unreviewable).`
+            : `Action-brief trust is weak (${input.actionBriefReview.unacknowledgedActiveCount} unacknowledged active, ${formatPercent(dismissalRate)} dismissed, ${input.actionBriefReview.unreviewableAlertCount} unreviewable).`,
   });
   if (actionBriefReviewStatus !== "GO") {
-    nextActions.push("Inspect action-brief review behavior and tune thresholds or copy if alerts are piling up or getting dismissed.");
+    nextActions.push(
+      input.actionBriefReview.reviewEligibleWorkspaceCount === 0
+        ? "Grant workspace access before using action-brief review as a trust gate for this scope."
+        : "Inspect action-brief review behavior and tune thresholds or copy if alerts are piling up or getting dismissed.",
+    );
   }
 
   const sourceRiskCount =
@@ -497,7 +511,31 @@ async function buildActionBriefReviewEvidence(input: {
     "betaReadinessReport.actionBriefAlerts",
   ) as Parameters<typeof summarizeActionBriefReviewAlerts>[0];
 
-  return summarizeActionBriefReviewAlerts(alerts);
+  const workspaceIds = [
+    ...new Set(
+      alerts
+        .map((alert) => alert.workspace_id)
+        .filter((workspaceId): workspaceId is string => typeof workspaceId === "string"),
+    ),
+  ];
+  const memberships =
+    workspaceIds.length === 0
+      ? []
+      : (requireSupabaseData(
+          await input.client
+            .from("workspace_memberships")
+            .select("workspace_id,user_id")
+            .in("workspace_id", workspaceIds),
+          "betaReadinessReport.workspaceMemberships",
+        ) as readonly WorkspaceMembershipRow[]);
+  const reviewerCountByWorkspaceId = await resolveWorkspaceReviewerCounts({
+    client: input.client,
+    memberships,
+  });
+
+  return summarizeActionBriefReviewAlerts(alerts, {
+    reviewerCountByWorkspaceId,
+  });
 }
 
 async function main() {

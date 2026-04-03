@@ -14,6 +14,11 @@ type WorkspaceRow = Pick<
   "id" | "slug" | "name"
 >;
 
+type WorkspaceMembershipRow = Pick<
+  DatabaseSchema["app"]["Tables"]["workspace_memberships"]["Row"],
+  "workspace_id" | "user_id"
+>;
+
 type ActionBriefAlertRow = Pick<
   DatabaseSchema["app"]["Tables"]["field_alerts"]["Row"],
   | "workspace_id"
@@ -30,6 +35,8 @@ export type ActionBriefReviewWorkspaceSummary = {
   workspaceId: string;
   workspaceSlug: string | null;
   workspaceName: string | null;
+  memberCount: number;
+  reviewEligible: boolean;
   alertCount: number;
   activeCount: number;
   resolvedCount: number;
@@ -52,7 +59,11 @@ export type ActionBriefReviewReport = {
 
 export type ActionBriefReviewAggregate = {
   workspaceCount: number;
+  reviewEligibleWorkspaceCount: number;
+  unreviewableWorkspaceCount: number;
+  totalAlertCount: number;
   alertCount: number;
+  unreviewableAlertCount: number;
   activeCount: number;
   resolvedCount: number;
   dismissedCount: number;
@@ -86,14 +97,73 @@ function hoursBetween(startIso: string | null, endIso: string | null) {
   return (end - start) / (1000 * 60 * 60);
 }
 
+export async function resolveWorkspaceReviewerCounts(input: {
+  client: ReturnType<typeof createSupabaseDatabaseClient>;
+  memberships: readonly WorkspaceMembershipRow[];
+}) {
+  const reviewableUserIds = new Map<string, boolean>();
+  const uniqueUserIds = [
+    ...new Set(
+      input.memberships
+        .map((membership) => membership.user_id)
+        .filter((userId): userId is string => typeof userId === "string" && userId.length > 0),
+    ),
+  ];
+
+  await Promise.all(
+    uniqueUserIds.map(async (userId) => {
+      try {
+        const result = await input.client.auth.admin.getUserById(userId);
+        reviewableUserIds.set(userId, !result.error && Boolean(result.data?.user));
+      } catch {
+        reviewableUserIds.set(userId, false);
+      }
+    }),
+  );
+
+  const reviewerCountByWorkspaceId = new Map<string, number>();
+
+  for (const membership of input.memberships) {
+    if (!membership.workspace_id || !membership.user_id) {
+      continue;
+    }
+
+    if (!reviewableUserIds.get(membership.user_id)) {
+      continue;
+    }
+
+    reviewerCountByWorkspaceId.set(
+      membership.workspace_id,
+      (reviewerCountByWorkspaceId.get(membership.workspace_id) ?? 0) + 1,
+    );
+  }
+
+  return reviewerCountByWorkspaceId;
+}
+
 export function buildActionBriefReviewReport(input: {
   generatedAt?: string;
   workspaceFilter?: string | null;
   lookbackDays: number;
   workspaces: readonly WorkspaceRow[];
+  memberships?: readonly WorkspaceMembershipRow[];
+  reviewerCountByWorkspaceId?: ReadonlyMap<string, number>;
   alerts: readonly ActionBriefAlertRow[];
 }): ActionBriefReviewReport {
   const workspaceById = new Map(input.workspaces.map((workspace) => [workspace.id, workspace]));
+  const rawMemberCountByWorkspaceId = new Map<string, number>();
+
+  for (const membership of input.memberships ?? []) {
+    if (!membership.workspace_id || !membership.user_id) {
+      continue;
+    }
+
+    rawMemberCountByWorkspaceId.set(
+      membership.workspace_id,
+      (rawMemberCountByWorkspaceId.get(membership.workspace_id) ?? 0) + 1,
+    );
+  }
+
   const alertsByWorkspace = new Map<string, ActionBriefAlertRow[]>();
 
   for (const alert of input.alerts) {
@@ -105,6 +175,10 @@ export function buildActionBriefReviewReport(input: {
   const summaries = [...alertsByWorkspace.entries()]
     .map<ActionBriefReviewWorkspaceSummary>(([workspaceId, alerts]) => {
       const workspace = workspaceById.get(workspaceId) ?? null;
+      const memberCount =
+        input.reviewerCountByWorkspaceId
+          ? (input.reviewerCountByWorkspaceId.get(workspaceId) ?? 0)
+          : (rawMemberCountByWorkspaceId.get(workspaceId) ?? 0);
       const activeCount = alerts.filter((alert) => alert.status === "active").length;
       const resolvedCount = alerts.filter((alert) => alert.status === "resolved").length;
       const dismissedCount = alerts.filter((alert) => alert.status === "dismissed").length;
@@ -124,6 +198,8 @@ export function buildActionBriefReviewReport(input: {
         workspaceId,
         workspaceSlug: workspace?.slug ?? null,
         workspaceName: workspace?.name ?? null,
+        memberCount,
+        reviewEligible: memberCount > 0,
         alertCount: alerts.length,
         activeCount,
         resolvedCount,
@@ -161,11 +237,29 @@ export function buildActionBriefReviewReport(input: {
 
 export function summarizeActionBriefReviewAlerts(
   alerts: readonly ActionBriefAlertRow[],
+  options: {
+    reviewerCountByWorkspaceId?: ReadonlyMap<string, number>;
+  } = {},
 ): ActionBriefReviewAggregate {
+  const reviewerCountByWorkspaceId = options.reviewerCountByWorkspaceId ?? null;
   const acknowledgementDurations = alerts
+    .filter((alert) => {
+      if (!reviewerCountByWorkspaceId) {
+        return true;
+      }
+
+      return (reviewerCountByWorkspaceId.get(alert.workspace_id) ?? 1) > 0;
+    })
     .map((alert) => hoursBetween(alert.started_at, alert.acknowledged_at))
     .filter((value): value is number => value != null);
   const resolutionDurations = alerts
+    .filter((alert) => {
+      if (!reviewerCountByWorkspaceId) {
+        return true;
+      }
+
+      return (reviewerCountByWorkspaceId.get(alert.workspace_id) ?? 1) > 0;
+    })
     .map((alert) => hoursBetween(alert.started_at, alert.resolved_at))
     .filter((value): value is number => value != null);
 
@@ -174,18 +268,34 @@ export function summarizeActionBriefReviewAlerts(
       .map((alert) => alert.workspace_id)
       .filter((workspaceId): workspaceId is string => typeof workspaceId === "string"),
   );
+  const reviewEligibleWorkspaceIds = new Set(
+    [...workspaceIds].filter((workspaceId) =>
+      reviewerCountByWorkspaceId
+        ? (reviewerCountByWorkspaceId.get(workspaceId) ?? 0) > 0
+        : true,
+    ),
+  );
+  const measuredAlerts = alerts.filter((alert) =>
+    reviewerCountByWorkspaceId
+      ? (reviewerCountByWorkspaceId.get(alert.workspace_id) ?? 0) > 0
+      : true,
+  );
 
-  const activeCount = alerts.filter((alert) => alert.status === "active").length;
-  const resolvedCount = alerts.filter((alert) => alert.status === "resolved").length;
-  const dismissedCount = alerts.filter((alert) => alert.status === "dismissed").length;
-  const acknowledgedCount = alerts.filter((alert) => alert.acknowledged_at != null).length;
-  const unacknowledgedActiveCount = alerts.filter(
+  const activeCount = measuredAlerts.filter((alert) => alert.status === "active").length;
+  const resolvedCount = measuredAlerts.filter((alert) => alert.status === "resolved").length;
+  const dismissedCount = measuredAlerts.filter((alert) => alert.status === "dismissed").length;
+  const acknowledgedCount = measuredAlerts.filter((alert) => alert.acknowledged_at != null).length;
+  const unacknowledgedActiveCount = measuredAlerts.filter(
     (alert) => alert.status === "active" && alert.acknowledged_at == null,
   ).length;
 
   return {
     workspaceCount: workspaceIds.size,
-    alertCount: alerts.length,
+    reviewEligibleWorkspaceCount: reviewEligibleWorkspaceIds.size,
+    unreviewableWorkspaceCount: workspaceIds.size - reviewEligibleWorkspaceIds.size,
+    totalAlertCount: alerts.length,
+    alertCount: measuredAlerts.length,
+    unreviewableAlertCount: alerts.length - measuredAlerts.length,
     activeCount,
     resolvedCount,
     dismissedCount,
@@ -193,8 +303,14 @@ export function summarizeActionBriefReviewAlerts(
     unacknowledgedActiveCount,
     averageHoursToAcknowledge: average(acknowledgementDurations),
     averageHoursToResolution: average(resolutionDurations),
-    dismissalRate: alerts.length > 0 ? Number((dismissedCount / alerts.length).toFixed(4)) : null,
-    resolutionRate: alerts.length > 0 ? Number((resolvedCount / alerts.length).toFixed(4)) : null,
+    dismissalRate:
+      measuredAlerts.length > 0
+        ? Number((dismissedCount / measuredAlerts.length).toFixed(4))
+        : null,
+    resolutionRate:
+      measuredAlerts.length > 0
+        ? Number((resolvedCount / measuredAlerts.length).toFixed(4))
+        : null,
   };
 }
 
@@ -279,12 +395,29 @@ async function main() {
             if (result.error) throw result.error;
             return result.data ?? [];
           })) as readonly WorkspaceRow[]);
+  const memberships =
+    workspaceIds.length === 0
+      ? []
+      : ((await client
+          .from("workspace_memberships")
+          .select("workspace_id,user_id")
+          .in("workspace_id", workspaceIds)
+          .then((result) => {
+            if (result.error) throw result.error;
+            return result.data ?? [];
+          })) as readonly WorkspaceMembershipRow[]);
+  const reviewerCountByWorkspaceId = await resolveWorkspaceReviewerCounts({
+    client,
+    memberships,
+  });
 
   const report = buildActionBriefReviewReport({
     generatedAt: new Date().toISOString(),
     workspaceFilter: resolvedWorkspaceId ?? resolvedWorkspaceSlug,
     lookbackDays,
     workspaces,
+    memberships,
+    reviewerCountByWorkspaceId,
     alerts,
   });
 
@@ -299,12 +432,17 @@ async function main() {
       `Workspace filter: ${report.workspaceFilter ?? "all"}`,
       `Lookback: ${report.lookbackDays} day(s)`,
       `Workspaces: ${report.workspaceCount}`,
+      `Review-eligible workspaces: ${
+        report.summaries.filter((summary) => summary.reviewEligible).length
+      }`,
     ].join("\n"),
   );
 
   console.table(
     report.summaries.map((summary) => ({
       workspace: summary.workspaceName ?? summary.workspaceSlug ?? summary.workspaceId,
+      members: summary.memberCount,
+      reviewEligible: summary.reviewEligible ? "yes" : "no",
       alerts: summary.alertCount,
       active: summary.activeCount,
       resolved: summary.resolvedCount,
