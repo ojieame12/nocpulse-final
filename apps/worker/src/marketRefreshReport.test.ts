@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildMarketRefreshReport } from "./marketRefreshReport";
+import {
+  buildMarketRefreshReport,
+  describeMarketRefreshReportHealth,
+} from "./marketRefreshReport";
 import { SUPPORTED_MARKET_CROP_SYMBOLS } from "./marketRefreshQuotes";
 import { runMarketCadence } from "./marketCadence";
 
@@ -41,6 +44,9 @@ test("buildMarketRefreshReport defaults to all supported crop symbols and classi
   });
 
   assert.deepEqual(report.cropSymbols, [...SUPPORTED_MARKET_CROP_SYMBOLS]);
+  assert.equal(report.healthStatus, "degraded");
+  assert.match(report.healthSummary, /1 stale quote/i);
+  assert.match(report.healthSummary, /3 missing quotes/i);
   assert.equal(report.freshCount, 1);
   assert.equal(report.staleCount, 1);
   assert.equal(report.missingCount, 3);
@@ -83,6 +89,8 @@ test("buildMarketRefreshReport keeps investing daily settlements fresh through t
     report.entries.find((entry) => entry.cropSymbol === "CANOLA")?.status,
     "fresh",
   );
+  assert.equal(report.healthStatus, "degraded");
+  assert.match(report.healthSummary, /4 missing quotes/i);
 });
 
 test("buildMarketRefreshReport records per-symbol lookup failures without aborting the whole report", async () => {
@@ -99,6 +107,9 @@ test("buildMarketRefreshReport records per-symbol lookup failures without aborti
   });
 
   assert.equal(report.freshCount, 0);
+  assert.equal(report.healthStatus, "degraded");
+  assert.match(report.healthSummary, /4 missing quotes/i);
+  assert.match(report.healthSummary, /1 errored quote/i);
   assert.equal(report.staleCount, 0);
   assert.equal(report.missingCount, 4);
   assert.equal(report.errorCount, 1);
@@ -159,4 +170,19 @@ test("runMarketCadence defaults to all supported crop symbols when none are requ
       },
     },
   ]);
+});
+
+test("describeMarketRefreshReportHealth marks fully fresh coverage as healthy", () => {
+  const health = describeMarketRefreshReportHealth({
+    cropSymbols: ["CANOLA", "WHEAT"],
+    freshCount: 2,
+    staleCount: 0,
+    missingCount: 0,
+    errorCount: 0,
+  });
+
+  assert.deepEqual(health, {
+    status: "healthy",
+    summary: "2 / 2 requested quotes fresh",
+  });
 });

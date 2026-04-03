@@ -42,6 +42,8 @@ export type MarketRefreshReport = {
   staleBefore: string;
   staleAfterHours: number;
   cropSymbols: readonly string[];
+  healthStatus: "healthy" | "degraded";
+  healthSummary: string;
   freshCount: number;
   staleCount: number;
   missingCount: number;
@@ -55,6 +57,46 @@ function formatNormalizationLabel(snapshot: MarketSnapshotForReport) {
   }
 
   return `${snapshot.sourceClosePrice.toFixed(4)} ${snapshot.sourceCurrency}/${snapshot.sourceUnit} × FX ${snapshot.fxRateToCad.toFixed(4)}`;
+}
+
+export function describeMarketRefreshReportHealth(input: {
+  cropSymbols: readonly string[];
+  freshCount: number;
+  staleCount: number;
+  missingCount: number;
+  errorCount: number;
+}) {
+  const degradedParts: string[] = [];
+
+  if (input.staleCount > 0) {
+    degradedParts.push(
+      `${input.staleCount} stale quote${input.staleCount === 1 ? "" : "s"}`,
+    );
+  }
+
+  if (input.missingCount > 0) {
+    degradedParts.push(
+      `${input.missingCount} missing quote${input.missingCount === 1 ? "" : "s"}`,
+    );
+  }
+
+  if (input.errorCount > 0) {
+    degradedParts.push(
+      `${input.errorCount} errored quote${input.errorCount === 1 ? "" : "s"}`,
+    );
+  }
+
+  if (degradedParts.length === 0) {
+    return {
+      status: "healthy" as const,
+      summary: `${input.freshCount} / ${input.cropSymbols.length} requested quotes fresh`,
+    };
+  }
+
+  return {
+    status: "degraded" as const,
+    summary: degradedParts.join(", "),
+  };
 }
 
 export async function buildMarketRefreshReport(input: {
@@ -137,15 +179,29 @@ export async function buildMarketRefreshReport(input: {
     }),
   );
 
+  const freshCount = entries.filter((entry) => entry.status === "fresh").length;
+  const staleCount = entries.filter((entry) => entry.status === "stale").length;
+  const missingCount = entries.filter((entry) => entry.status === "missing").length;
+  const errorCount = entries.filter((entry) => entry.status === "error").length;
+  const health = describeMarketRefreshReportHealth({
+    cropSymbols,
+    freshCount,
+    staleCount,
+    missingCount,
+    errorCount,
+  });
+
   return {
     generatedAt,
     staleBefore,
     staleAfterHours,
     cropSymbols,
-    freshCount: entries.filter((entry) => entry.status === "fresh").length,
-    staleCount: entries.filter((entry) => entry.status === "stale").length,
-    missingCount: entries.filter((entry) => entry.status === "missing").length,
-    errorCount: entries.filter((entry) => entry.status === "error").length,
+    healthStatus: health.status,
+    healthSummary: health.summary,
+    freshCount,
+    staleCount,
+    missingCount,
+    errorCount,
     entries,
   };
 }
@@ -155,6 +211,7 @@ async function main() {
   const runtime = createServerRuntime(process.env);
   const args = parseCliArgs();
   const asJson = readBooleanFlag(args, "json");
+  const requireHealthy = readBooleanFlag(args, "require-healthy");
   const cropSymbols = readCsvFlag(args, "crop-symbols");
   const staleAfterHours = readNumberFlag(args, "stale-after-hours");
 
@@ -172,6 +229,12 @@ async function main() {
 
   if (asJson) {
     console.log(JSON.stringify(report, null, 2));
+    if (requireHealthy && report.healthStatus !== "healthy") {
+      console.error(
+        `[worker-market-refresh-report] market quote coverage degraded: ${report.healthSummary}`,
+      );
+      process.exitCode = 1;
+    }
     return;
   }
 
@@ -181,6 +244,8 @@ async function main() {
       `Stale before: ${report.staleBefore}`,
       `Supported symbols: ${SUPPORTED_MARKET_CROP_SYMBOLS.join(", ")}`,
       `Requested symbols: ${report.cropSymbols.join(", ")}`,
+      `Health: ${report.healthStatus}`,
+      `Health summary: ${report.healthSummary}`,
       `Fresh quotes: ${report.freshCount}`,
       `Stale quotes: ${report.staleCount}`,
       `Missing quotes: ${report.missingCount}`,
@@ -202,6 +267,10 @@ async function main() {
       error: entry.errorMessage ?? "",
     })),
   );
+
+  if (requireHealthy && report.healthStatus !== "healthy") {
+    throw new Error(`market quote coverage degraded: ${report.healthSummary}`);
+  }
 }
 
 const executedAsScript =

@@ -25,6 +25,7 @@ Environment overrides:
   FIELDPULSE_PROBE_SINCE    Default: 6
   FIELDPULSE_MARKET_CROP_SYMBOLS       Default: CANOLA,WHEAT,CORN,RYE,SOYBEAN
   FIELDPULSE_MARKET_STALE_HOURS        Default: 24
+  FIELDPULSE_MARKET_REQUIRE_HEALTHY    Default: 1
   FIELDPULSE_ACTION_BRIEF_WORKSPACE_ID  Optional workspace for action-brief runs.
   FIELDPULSE_ACTION_BRIEF_LIMIT         Optional per-workspace field limit.
   FIELDPULSE_ACTION_BRIEF_DRAIN_LIMIT   Default: 100
@@ -71,14 +72,20 @@ case "${JOB}" in
   market)
     MARKET_CROP_SYMBOLS="${FIELDPULSE_MARKET_CROP_SYMBOLS:-CANOLA,WHEAT,CORN,RYE,SOYBEAN}"
     MARKET_STALE_HOURS="${FIELDPULSE_MARKET_STALE_HOURS:-24}"
+    MARKET_REQUIRE_HEALTHY="${FIELDPULSE_MARKET_REQUIRE_HEALTHY:-1}"
     run_job \
       market \
       /bin/bash -o pipefail -c \
-      'corepack pnpm --filter @fieldpulse/worker market:cadence -- --crop-symbols "$1" && \
-       corepack pnpm --filter @fieldpulse/worker market:report -- --crop-symbols "$1" --stale-after-hours "$2"' \
+      'report_args=(--crop-symbols "$1" --stale-after-hours "$2"); \
+       if [[ "$3" != "0" && "${3,,}" != "false" ]]; then \
+         report_args+=(--require-healthy); \
+       fi; \
+       corepack pnpm --filter @fieldpulse/worker market:cadence -- --crop-symbols "$1" && \
+       corepack pnpm --filter @fieldpulse/worker market:report -- "${report_args[@]}"' \
       _ \
       "${MARKET_CROP_SYMBOLS}" \
-      "${MARKET_STALE_HOURS}"
+      "${MARKET_STALE_HOURS}" \
+      "${MARKET_REQUIRE_HEALTHY}"
     ;;
   probe)
     PROBE_LIMIT="${FIELDPULSE_PROBE_LIMIT:-50}"
