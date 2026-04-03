@@ -1464,6 +1464,10 @@ export function FieldPageShell({
     router.refresh();
   }, [activeFieldId, router, workspaceId]);
 
+  const handleAlertsChanged = useCallback(() => {
+    router.refresh();
+  }, [router]);
+
   const handleOnboardingTracked = useCallback((watch: PendingOnboardingWatch & {
     fieldEntries?: readonly FirstInsightFieldEntry[];
     trackedJobs?: readonly { dispatchId: string; fieldId: string; fieldLabel: string }[];
@@ -1681,6 +1685,7 @@ export function FieldPageShell({
         {...interactiveAlerts!}
         focusedZoneId={effectiveFocusedZoneId}
         onAlertSelect={setFocusedZoneId}
+        onAlertsChanged={handleAlertsChanged}
         onClose={() => setPanelView("detail")}
       />
     ) : panelView === "activity" ? (

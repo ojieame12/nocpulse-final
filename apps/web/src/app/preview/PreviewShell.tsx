@@ -1148,6 +1148,19 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
     applyFieldData(nextField);
   }, [activeFieldId, applyFieldData, fetchFieldOverview]);
 
+  const handleAlertsChanged = useCallback(async () => {
+    if (isPlaceholderFieldId(activeFieldId)) {
+      return;
+    }
+
+    const nextField = await fetchFieldOverview(activeFieldId, { force: true });
+    if (!nextField || nextField.fieldId !== activeFieldId) {
+      return;
+    }
+
+    applyFieldData(nextField);
+  }, [activeFieldId, applyFieldData, fetchFieldOverview]);
+
   useEffect(() => {
     if (isGuestSession) {
       return;
@@ -2383,6 +2396,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
           <AlertsPanel
             {...fieldData.alertsPanel}
             actionsEnabled={!isGuestSession}
+            onAlertsChanged={handleAlertsChanged}
             onClose={() => switchPanel('detail')}
           />
         ) : (

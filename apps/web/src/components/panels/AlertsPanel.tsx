@@ -39,6 +39,7 @@ export interface AlertsPanelProps {
   demoFallback?: boolean;
   actionsEnabled?: boolean;
   onAlertSelect?: (zoneId: string | null) => void;
+  onAlertsChanged?: (() => void | Promise<void>) | null;
   onClose?: () => void;
 }
 
@@ -105,6 +106,7 @@ export function AlertsPanel({
   demoFallback = false,
   actionsEnabled = true,
   onAlertSelect,
+  onAlertsChanged,
   onClose,
 }: AlertsPanelProps) {
   const useDemoData =
@@ -175,9 +177,10 @@ export function AlertsPanel({
           items.map((item) =>
             item.id === alertId
               ? { ...item, acknowledgedAt: new Date().toISOString() }
-              : item,
+            : item,
           ),
         );
+        void onAlertsChanged?.();
         return;
       }
 
@@ -197,6 +200,8 @@ export function AlertsPanel({
           ...items,
         ]);
       }
+
+      void onAlertsChanged?.();
     } catch (error) {
       console.error('[alerts-panel] failed to update alert', error);
     } finally {
