@@ -1,6 +1,7 @@
 import type { PdfRenderInput, PdfBlock, PdfBrandLogo, RGB } from "@fieldpulse/pdf";
 import { STATUS, BRAND, SURFACE } from "@fieldpulse/pdf";
 import type { FieldAlert } from "@fieldpulse/module-alerts";
+import { describeMoistureBandNarrative } from "@fieldpulse/module-moisture";
 import {
   describeFieldAccessDecisionNarrative,
   describeSeedingAdvisoryNarrative,
@@ -149,15 +150,6 @@ function inferDailyForecastConditions(input: {
   if (wind >= 40) return "High wind";
   if (precip > 0) return "Chance of showers";
   return "Dry";
-}
-
-/** Generate advisory note for moisture levels. */
-function moistureNote(rootPct: number | null, surfacePct: number | null): string {
-  if (rootPct === null) return "Insufficient data.";
-  if (rootPct < 20) return "Root zone critically dry. Irrigation urgent.";
-  if (rootPct < 30) return "Below optimal. Monitor for stress signs.";
-  if (rootPct > 80) return "Saturated. Risk of waterlogging.";
-  return "Within acceptable range for most crops.";
 }
 
 /** Derive a plain-language action from a finding. */
@@ -411,7 +403,7 @@ export function buildFieldReportPdfRenderInput({
             String(highConf.length),
             fmtPct(avgRoot(highConf)),
             fmtPct(avgSurf(highConf)),
-            moistureNote(avgRoot(highConf), avgSurf(highConf)),
+            describeMoistureBandNarrative(avgRoot(highConf)),
           ],
         });
       }
@@ -422,7 +414,7 @@ export function buildFieldReportPdfRenderInput({
             String(medConf.length),
             fmtPct(avgRoot(medConf)),
             fmtPct(avgSurf(medConf)),
-            moistureNote(avgRoot(medConf), avgSurf(medConf)),
+            describeMoistureBandNarrative(avgRoot(medConf)),
           ],
           accentColor: AMBER,
         });

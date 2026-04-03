@@ -53,6 +53,7 @@ export { computeKc } from "./domain/crop/computeKc";
 export { resolveStageWeights, type StageWeights } from "./domain/crop/resolveStageWeights";
 export { resolveRootDepthCm } from "./domain/crop/resolveRootDepthCm";
 export { describeMoistureEstimate } from "./application/describeMoistureEstimate";
+export { describeMoistureBandNarrative } from "./application/describeMoistureBandNarrative";
 export {
   computeDrainageMm,
   inferTextureClass,

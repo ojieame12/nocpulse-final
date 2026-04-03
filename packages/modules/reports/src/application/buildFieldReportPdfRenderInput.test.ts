@@ -449,3 +449,59 @@ test("buildFieldReportPdfRenderInput uses shared generic weather-signal narrativ
     "Minimal heat accumulation. Growth stalled.",
   );
 });
+
+test("buildFieldReportPdfRenderInput uses shared moisture-band narrative copy", () => {
+  const renderInput = buildFieldReportPdfRenderInput({
+    artifactKey: "test-artifact",
+    readModel: {
+      ...createReadModel({
+        cropType: "Canola",
+        surfacePct: 58,
+        signalSet: createSignalSet({
+          soilTemp6cmCurrentC: 5.2,
+          soilTemp6cmSustainedDays: 2,
+          frostRiskMinTempC7d: 1.5,
+          frostRiskNights7d: 1,
+          frostProbabilityPct7d: 25,
+        }),
+      }),
+      moisture: {
+        latestSnapshot: createSnapshot(14),
+        latestCells: [
+          {
+            id: "cell-1",
+            fieldId: "field-1",
+            workspaceId: "workspace-1",
+            rootZonePct: 18,
+            surfacePct: 12,
+            confidence: "high",
+            point: [0, 0],
+            polygon: null,
+            observedAt: "2026-04-03T12:00:00.000Z",
+            sourceKey: "test",
+            createdAt: "2026-04-03T12:00:00.000Z",
+          },
+        ],
+        latestCellCount: 1,
+        lowConfidenceCellCount: 0,
+        rootZoneMinPct: 18,
+        rootZoneMaxPct: 18,
+        rootZoneAvgPct: 18,
+        surfaceMinPct: 12,
+        surfaceMaxPct: 12,
+        surfaceAvgPct: 12,
+        recentSnapshots: [],
+      },
+    },
+  });
+
+  const moistureTable = renderInput.blocks.find(
+    (block) => block.kind === "table" && block.columns[0]?.label === "Confidence",
+  );
+
+  assert.equal(moistureTable?.kind, "table");
+  assert.equal(
+    moistureTable.rows.find((row) => row.cells[0] === "High")?.cells[4],
+    "Root zone critically dry. Irrigation urgent.",
+  );
+});
