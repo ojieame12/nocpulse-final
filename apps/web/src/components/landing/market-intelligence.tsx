@@ -1,10 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { LandingMarketIntelligenceViewModel } from "../../features/home/buildLandingMarketIntelligence";
 
-const SOURCES = ["ICE / CBOT Futures", "Johnston's Grain Bids", "Bank of Canada FX"];
+type MarketIntelligenceProps = LandingMarketIntelligenceViewModel;
 
-export function MarketIntelligence() {
+export function MarketIntelligence({
+  subtitle,
+  sourcePills,
+  leftLabel,
+  leftValue,
+  leftUnit,
+  leftSubLabel,
+  rightLabel,
+  rightValue,
+  rightUnit,
+  rightSubLabel,
+  rightValueColor,
+}: MarketIntelligenceProps) {
   const ref = useRef<HTMLElement>(null);
   const [visible, setVisible] = useState(false);
 
@@ -82,9 +95,7 @@ export function MarketIntelligence() {
             margin: "16px auto 0",
           }}
         >
-          Live commodity futures from ICE and CBOT. Western Canada cash bids.
-          Bank of Canada FX. Tied to your yield assumptions so you see per-acre
-          revenue alongside every agronomic decision.
+          {subtitle}
         </p>
 
         {/* Source pills */}
@@ -97,7 +108,7 @@ export function MarketIntelligence() {
             flexWrap: "wrap" as const,
           }}
         >
-          {SOURCES.map((s) => (
+          {sourcePills.map((s) => (
             <span
               key={s}
               style={{
@@ -138,7 +149,7 @@ export function MarketIntelligence() {
                 textTransform: "uppercase",
               }}
             >
-              Canola
+              {leftLabel}
             </p>
             <p
               style={{
@@ -149,7 +160,7 @@ export function MarketIntelligence() {
                 marginTop: 4,
               }}
             >
-              $682.40
+              {leftValue}
             </p>
             <p
               style={{
@@ -159,7 +170,17 @@ export function MarketIntelligence() {
                 marginTop: 4,
               }}
             >
-              CAD / tonne
+              {leftUnit}
+            </p>
+            <p
+              style={{
+                fontFamily: "var(--font-plex-mono), monospace",
+                fontSize: 10,
+                color: "var(--ds-text-on-dark-faint)",
+                marginTop: 4,
+              }}
+            >
+              {leftSubLabel}
             </p>
           </div>
 
@@ -184,18 +205,18 @@ export function MarketIntelligence() {
                 textTransform: "uppercase",
               }}
             >
-              Your Field · NW-12-34-05 W3
+              {rightLabel}
             </p>
             <p
               style={{
                 fontFamily: "var(--font-mackinac), Georgia, serif",
                 fontWeight: 300,
                 fontSize: "clamp(28px, 4vw, 36px)",
-                color: "var(--ds-green-300)",
+                color: rightValueColor,
                 marginTop: 4,
               }}
             >
-              $348 /ac
+              {rightValue}
             </p>
             <p
               style={{
@@ -205,7 +226,17 @@ export function MarketIntelligence() {
                 marginTop: 4,
               }}
             >
-              at 42 bu/ac yield assumption
+              {rightUnit}
+            </p>
+            <p
+              style={{
+                fontFamily: "var(--font-plex-mono), monospace",
+                fontSize: 10,
+                color: "var(--ds-text-on-dark-faint)",
+                marginTop: 4,
+              }}
+            >
+              {rightSubLabel}
             </p>
           </div>
         </div>
