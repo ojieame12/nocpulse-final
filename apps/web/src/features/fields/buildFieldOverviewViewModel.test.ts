@@ -20,6 +20,7 @@ import {
 } from "./buildFieldOverviewViewModel.shared";
 import { buildCropProps } from "./buildFieldOverviewViewModel.crop";
 import { buildActivityPanelModel } from "./buildFieldOverviewViewModel.panels";
+import { prepareFieldCropReportArtifact } from "@fieldpulse/module-reports";
 
 function createBaseReadModel() {
   return {
@@ -1129,6 +1130,183 @@ test("buildCropProps keeps independent weather alerts visible on limited fields"
   assert.equal(crop.diseaseRisks[0]?.name, "Disease model held back");
   assert.equal(crop.alerts.length, 1);
   assert.equal(crop.alerts[0]?.title, "Critical frost risk next 24h");
+});
+
+test("crop PDF preserves limited-field crop holdback messaging from the crop panel model", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    intake: {
+      legalLandDescription: "NW-25-010-17-W4",
+    },
+    summary: {
+      ...createBaseReadModel().summary,
+      cropType: "canola",
+      growthStage: "Pre Seed",
+      dataQuality: {
+        label: "Limited",
+        tone: "warning",
+        summary: "Optical validity is still thin for crop interpretation.",
+      },
+      sourceTagExtended: "Model estimate · weather + soil",
+      moistureDerivationMode: "modeled",
+      confidenceSub: "modeled",
+      updatedLabel: "UPDATED APR 3, 2026",
+      nextRain: "3d",
+      trend: "-2.1%",
+      precipitation: "0.0 mm",
+      rainChance: "20%",
+      sevenDayTotal: "4.0 mm",
+      confidenceBreakdown: {
+        freshness: "Recent weather feed",
+        agreement: "Optical support is limited",
+        resolution: "Field-scale estimate",
+        scaleFit: "Moderate",
+      },
+      dataSources: {
+        satellite: "Sentinel-2 preseason optical",
+        weather: "Open-Meteo",
+        soil: "Modeled soil profile",
+      },
+    },
+    findings: [],
+    alerts: [],
+    imagery: {},
+    weather: {
+      profile: {
+        latestObservation: null,
+      },
+      signals: null,
+    },
+  };
+
+  const crop = buildCropProps(readModel);
+  const artifact = prepareFieldCropReportArtifact({
+    fieldId: "field-123",
+    fieldName: "North Quarter Demo",
+    areaLabel: "64.2 ha",
+    crop,
+    summary: readModel.summary,
+    generatedAt: "2026-04-03T09:00:00.000Z",
+  });
+  const pdfText = Buffer.from(artifact.bytes).toString("utf8");
+
+  assert.equal(crop.diseaseRisks[0]?.name, "Disease model held back");
+  assert.equal(crop.alerts[0]?.title, "Field-dependent crop alerts held back");
+  assert.match(pdfText, /Disease model held back/i);
+  assert.match(pdfText, /Field-dependent crop alerts held back/i);
+  assert.match(pdfText, /TRUTH & FRESHNESS/i);
+  assert.match(pdfText, /Limited Context/i);
+});
+
+test("crop PDF preserves crop-panel weather pressure and threshold signals", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    intake: {
+      legalLandDescription: "SE-19-037-11-W3",
+    },
+    cropContext: {
+      cropType: "canola",
+      growthStage: "Pre Seed",
+      seasonYear: 2026,
+      accumulatedGdd: 96,
+    },
+    summary: {
+      ...createBaseReadModel().summary,
+      cropType: "canola",
+      growthStage: "Pre Seed",
+      dataQuality: {
+        label: "Ready",
+        tone: "positive",
+        summary: "Source-backed crop interpretation is current.",
+      },
+      sourceTagExtended: "Sentinel-1 backed · weather + soil",
+      moistureDerivationMode: "source-backed",
+      confidenceSub: "source-backed",
+      updatedLabel: "UPDATED APR 3, 2026",
+      nextRain: "1d",
+      trend: "-3.8%",
+      precipitation: "0.0 mm",
+      rainChance: "25%",
+      sevenDayTotal: "3.0 mm",
+    },
+    moisture: {
+      latestSnapshot: {
+        rootZonePct: 28.4,
+        confidence: "high",
+        sourceKey: "sentinel-hub-stats-v1:sentinel-1",
+      },
+      rootZoneAvgPct: 28.4,
+      surfaceAvgPct: 36.2,
+    },
+    imagery: {
+      latestOpticalRasterObservation: {
+        providerKey: "sentinel-2",
+        observedAt: "2026-03-29T09:30:00.000Z",
+        cells: [
+          { measurements: { ndvi: 0.42, ndre: 0.19 } },
+          { measurements: { ndvi: 0.44, ndre: 0.2 } },
+        ],
+      },
+      latestOpticalCapture: {
+        capturedAt: "2026-03-29T09:30:00.000Z",
+      },
+    },
+    weather: {
+      profile: {
+        latestObservation: {
+          soilMoisturePct: 62,
+          soilTemperature6cmC: 6.1,
+        },
+      },
+      signals: {
+        frostRiskMinTempC: -2.5,
+        frostRiskMinTempC7d: -2.5,
+        frostRiskNights7d: 1,
+        frostProbabilityPct7d: 43,
+        peakForecastVpdKpa24h: 2.1,
+        netWaterBalance24hMm: -2.2,
+        netWaterBalance72hMm: -3.8,
+        soilTemp6cmCurrentC: 6.1,
+        soilTemp6cmSustainedDays: 2,
+        recentPrecipTotal72hMm: 8,
+        freezeThawCycles7d: 1,
+        gdd72h: 12.3,
+        sourceKey: "open-meteo:derived",
+      },
+    },
+    findings: [],
+    alerts: [
+      {
+        id: "alert-2",
+        family: "weather_risk",
+        severity: "critical",
+        title: "Critical frost risk next 24h",
+        summary: "Forecast minimum breaches the frost threshold.",
+      },
+    ],
+  };
+
+  const crop = buildCropProps(readModel);
+  const artifact = prepareFieldCropReportArtifact({
+    fieldId: "field-234",
+    fieldName: "Sigurson",
+    areaLabel: "129.5 ha",
+    crop,
+    summary: readModel.summary,
+    generatedAt: "2026-04-03T09:00:00.000Z",
+  });
+  const pdfText = Buffer.from(artifact.bytes).toString("utf8");
+
+  assert.equal(crop.fieldTiles[0]?.label, "FROST RISK");
+  assert.equal(crop.fieldTiles[1]?.label, "CROP WATER DEMAND");
+  assert.equal(crop.thresholds[0]?.actual, "28.4%");
+  assert.match(crop.thresholds[0]?.notes ?? "", /within optimal range/i);
+  assert.equal(crop.alerts[0]?.title, "Critical frost risk next 24h");
+  assert.match(pdfText, /RECENT WEATHER PRESSURE/i);
+  assert.match(pdfText, /FROST RISK/i);
+  assert.match(pdfText, /CROP WATER DEMAND/i);
+  assert.match(pdfText, /28\.4%/i);
+  assert.match(pdfText, /Critical frost risk next 24h/i);
 });
 
 test("buildActivityPanelModel holds back field-dependent activity on limited fields", () => {
