@@ -76,6 +76,11 @@ export {
   type SprayWindowThresholds,
 } from "./application/resolveSprayWindows";
 export {
+  summarizeForecastDays,
+  type ForecastDaySummary,
+  type SummarizeForecastDaysOptions,
+} from "./application/summarizeForecastDays";
+export {
   replaceFieldWeatherForecastSet,
   type ReplaceFieldWeatherForecastSetUseCaseInput,
 } from "./application/replaceFieldWeatherForecastSet";

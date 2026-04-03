@@ -840,6 +840,69 @@ test("buildReportProps returns a full seven-day outlook when seven forecast days
   assert.equal(props.charts[2]?.series[0]?.points.length, 8);
 });
 
+test("buildReportProps aggregates hourly forecast periods into daily outlook rows", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    alerts: [],
+    findings: [],
+    zones: { zones: [] },
+    field: {
+      labelPoint: [-106.67, 52.13],
+    },
+    weather: {
+      profile: {
+        latestObservation: {
+          airTemperatureC: 6.5,
+          soilMoisturePct: 21.4,
+          windSpeedKph: 14,
+          providerKey: "open-meteo",
+        },
+        forecasts: [
+          {
+            validAt: "2026-04-03T06:00:00.000Z",
+            airTemperatureMaxC: 8,
+            airTemperatureMinC: 1,
+            precipitationProbabilityPct: 20,
+            precipitationMm: 0.4,
+            windSpeedKph: 15,
+          },
+          {
+            validAt: "2026-04-03T18:00:00.000Z",
+            airTemperatureMaxC: 12,
+            airTemperatureMinC: 4,
+            precipitationProbabilityPct: 55,
+            precipitationMm: 1.1,
+            windSpeedKph: 22,
+          },
+          {
+            validAt: "2026-04-04T12:00:00.000Z",
+            airTemperatureMaxC: 14,
+            airTemperatureMinC: 6,
+            precipitationProbabilityPct: 10,
+            precipitationMm: 0,
+            windSpeedKph: 18,
+          },
+        ],
+      },
+      signals: null,
+    },
+  };
+
+  const props = buildReportProps(
+    readModel,
+    "North Quarter Demo",
+    () => "just now",
+  );
+
+  assert.equal(props.forecast.length, 2);
+  assert.deepEqual(props.forecast[0], {
+    day: "Fri, Apr 3",
+    temp: "12/1",
+    precip: "55%",
+  });
+  assert.equal(props.charts[2]?.series[0]?.points.length, 3);
+});
+
 test("buildActionProps returns none state when no active intelligence or watchlist signals exist", () => {
   const readModel = {
     ...createBaseReadModel(),

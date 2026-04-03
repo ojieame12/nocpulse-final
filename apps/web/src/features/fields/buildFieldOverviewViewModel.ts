@@ -15,6 +15,7 @@ import {
   resolveCropRuleContext,
   prairieDefaultRulePack,
 } from "@fieldpulse/module-crop-intelligence";
+import { summarizeForecastDays } from "@fieldpulse/module-weather";
 import {
   RequestContextError,
 } from "../../server/runtime/resolveRequestContext";
@@ -809,13 +810,17 @@ export async function buildFieldOverviewViewModel(
       ? currentMoistureBaseline - previousMoistureBaseline
       : null;
   const latestObservation = readModel.weather.profile.latestObservation;
-  const forecast = readModel.weather.profile.forecasts.slice(0, 7);
+  const forecastPeriods = readModel.weather.profile.forecasts;
+  const forecastDays = summarizeForecastDays(forecastPeriods, {
+    fieldLabelPoint: field.labelPoint,
+    limitDays: 7,
+  });
   const weatherDataAvailability = readModel.weather.profile.dataAvailability ?? {
     latestObservation: true,
     forecasts: true,
   };
   const nextRainForecast =
-    forecast.find(
+    forecastPeriods.find(
       (entry) =>
         (entry.precipitationProbabilityPct ?? 0) >= 40 ||
         entry.precipitationMm > 0.5,
@@ -968,31 +973,31 @@ export async function buildFieldOverviewViewModel(
       : !weatherDataAvailability.forecasts
         ? "Forecast unavailable"
         : "No forecast signal",
-    rainChance: forecast[0]?.precipitationProbabilityPct != null
-      ? `${Math.round(forecast[0].precipitationProbabilityPct)}%`
+    rainChance: forecastDays[0]?.precipitationProbabilityPct != null
+      ? `${Math.round(forecastDays[0].precipitationProbabilityPct)}%`
       : "—",
     rainChanceSub: !weatherDataAvailability.forecasts
       ? "Forecast unavailable"
-      : forecast[0]
-        ? "Next forecast window"
+      : forecastDays[0]
+        ? "Next forecast day"
         : "No forecast",
-    sevenDayTotal: forecast.length > 0
-      ? `${forecast.reduce((sum, entry) => sum + entry.precipitationMm, 0).toFixed(1)} mm`
+    sevenDayTotal: forecastDays.length > 0
+      ? `${forecastDays.reduce((sum, entry) => sum + entry.precipitationMm, 0).toFixed(1)} mm`
       : "—",
     sevenDayTotalSub: !weatherDataAvailability.forecasts
       ? "Forecast unavailable"
-      : forecast.length > 0
-        ? "Loaded forecast window"
+      : forecastDays.length > 0
+        ? "Loaded 7-day forecast"
         : "No forecast",
     alerts: alertItems.slice(0, 3).map((alert) => ({
       label: alert.title,
       desc: alert.subtitle,
       severity: alert.severity === "critical" ? "danger" : "warning",
     })),
-    outlook: forecast.map((entry) => ({
-      day: new Date(entry.validAt).toLocaleDateString("en-US", { weekday: "short" }),
-      high: Math.round(entry.airTemperatureMaxC),
-      low: Math.round(entry.airTemperatureMinC),
+    outlook: forecastDays.map((entry) => ({
+      day: entry.label.split(",")[0] ?? entry.label,
+      high: entry.airTemperatureMaxC != null ? Math.round(entry.airTemperatureMaxC) : 0,
+      low: entry.airTemperatureMinC != null ? Math.round(entry.airTemperatureMinC) : 0,
       precip: entry.precipitationProbabilityPct != null
         ? `${Math.round(entry.precipitationProbabilityPct)}%`
         : `${entry.precipitationMm.toFixed(1)}mm`,

@@ -117,13 +117,14 @@ function createReadModel(input: {
   cropType: string;
   signalSet: FieldWeatherDerivedSignalSet;
   surfacePct: number;
+  forecasts?: FieldWeatherProfile["forecasts"];
 }): FieldReportReadModel {
   const profile: FieldWeatherProfile = {
     latestObservation: null,
-    forecasts: [],
+    forecasts: input.forecasts ?? [],
     dataAvailability: {
       latestObservation: false,
-      forecasts: false,
+      forecasts: (input.forecasts?.length ?? 0) > 0,
     },
   };
 
@@ -247,4 +248,97 @@ test("buildFieldReportPdfRenderInput surfaces a ready wheat verdict from the sha
   assert.equal(card?.kind, "severity-card");
   assert.equal(card?.title, "Seeding Window Open — Wheat");
   assert.match(card?.body ?? "", /field access is workable/i);
+});
+
+test("buildFieldReportPdfRenderInput aggregates hourly forecast periods into daily forecast rows", () => {
+  const renderInput = buildFieldReportPdfRenderInput({
+    artifactKey: "test-artifact",
+    readModel: createReadModel({
+      cropType: "Canola",
+      surfacePct: 58,
+      signalSet: createSignalSet({
+        soilTemp6cmCurrentC: 5.2,
+        soilTemp6cmSustainedDays: 2,
+        frostRiskMinTempC7d: 1.5,
+        frostRiskNights7d: 1,
+        frostProbabilityPct7d: 25,
+      }),
+      forecasts: [
+        {
+          id: "forecast-1",
+          workspaceId: "workspace-1",
+          fieldId: "field-1",
+          forecastRunAt: "2026-04-03T12:00:00.000Z",
+          validAt: "2026-04-03T06:00:00.000Z",
+          sourceKey: "open-meteo:hourly-v1",
+          providerKey: "open-meteo",
+          airTemperatureMinC: 1,
+          airTemperatureMaxC: 8,
+          precipitationMm: 0.4,
+          windSpeedKph: 15,
+          relativeHumidityPct: null,
+          evapotranspirationMm: null,
+          precipitationProbabilityPct: 20,
+          createdAt: "2026-04-03T12:00:00.000Z",
+          updatedAt: "2026-04-03T12:00:00.000Z",
+        },
+        {
+          id: "forecast-2",
+          workspaceId: "workspace-1",
+          fieldId: "field-1",
+          forecastRunAt: "2026-04-03T12:00:00.000Z",
+          validAt: "2026-04-03T18:00:00.000Z",
+          sourceKey: "open-meteo:hourly-v1",
+          providerKey: "open-meteo",
+          airTemperatureMinC: 4,
+          airTemperatureMaxC: 12,
+          precipitationMm: 1.1,
+          windSpeedKph: 22,
+          relativeHumidityPct: null,
+          evapotranspirationMm: null,
+          precipitationProbabilityPct: 55,
+          createdAt: "2026-04-03T12:00:00.000Z",
+          updatedAt: "2026-04-03T12:00:00.000Z",
+        },
+        {
+          id: "forecast-3",
+          workspaceId: "workspace-1",
+          fieldId: "field-1",
+          forecastRunAt: "2026-04-03T12:00:00.000Z",
+          validAt: "2026-04-04T12:00:00.000Z",
+          sourceKey: "open-meteo:hourly-v1",
+          providerKey: "open-meteo",
+          airTemperatureMinC: 6,
+          airTemperatureMaxC: 14,
+          precipitationMm: 0,
+          windSpeedKph: 18,
+          relativeHumidityPct: null,
+          evapotranspirationMm: null,
+          precipitationProbabilityPct: 10,
+          createdAt: "2026-04-03T12:00:00.000Z",
+          updatedAt: "2026-04-03T12:00:00.000Z",
+        },
+      ],
+    }),
+  });
+
+  const forecastHeader = renderInput.blocks.find(
+    (block) => block.kind === "section-header" && block.label === "Forecast",
+  );
+  const forecastTable = renderInput.blocks.find(
+    (block) => block.kind === "table" && block.columns[0]?.label === "Day",
+  );
+
+  assert.equal(forecastHeader?.kind, "section-header");
+  assert.equal(forecastHeader?.meta, "Next 2 days");
+  assert.equal(forecastTable?.kind, "table");
+  assert.equal(forecastTable?.rows.length, 2);
+  assert.deepEqual(forecastTable?.rows[0]?.cells.slice(1), [
+    "Chance of showers",
+    "1.0°",
+    "12.0°",
+    "1.5 mm",
+    "22.0 km/h",
+    "55%",
+  ]);
 });

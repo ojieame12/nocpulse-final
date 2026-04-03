@@ -3,6 +3,7 @@ import {
   resolveCropRuleContext,
 } from "@fieldpulse/module-crop-intelligence";
 import type { FieldRasterObservation } from "@fieldpulse/module-imagery";
+import { summarizeForecastDays } from "@fieldpulse/module-weather";
 import type {
   FieldReportProps,
   ReadingIconKey,
@@ -298,78 +299,19 @@ export function buildReportProps(
     },
   ];
 
-  const forecastByDay = new Map<
-    string,
-    {
-      label: string;
-      maxC: number | null;
-      minC: number | null;
-      precipProbabilityPct: number | null;
-      precipitationMm: number;
-    }
-  >();
-  for (const forecast of forecasts) {
-    const dateKey = new Date(forecast.validAt).toISOString().slice(0, 10);
-    const existing = forecastByDay.get(dateKey);
-    const label = new Date(forecast.validAt).toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
+  const forecastDays = summarizeForecastDays(forecasts, {
+    fieldLabelPoint: rm.field?.labelPoint ?? null,
+    limitDays: 7,
+  });
 
-    if (!existing) {
-      forecastByDay.set(dateKey, {
-        label,
-        maxC:
-          typeof forecast.airTemperatureMaxC === "number"
-            ? forecast.airTemperatureMaxC
-            : null,
-        minC:
-          typeof forecast.airTemperatureMinC === "number"
-            ? forecast.airTemperatureMinC
-            : null,
-        precipProbabilityPct:
-          typeof forecast.precipitationProbabilityPct === "number"
-            ? forecast.precipitationProbabilityPct
-            : null,
-        precipitationMm:
-          typeof forecast.precipitationMm === "number"
-            ? forecast.precipitationMm
-            : 0,
-      });
-      continue;
-    }
-
-    existing.maxC =
-      typeof forecast.airTemperatureMaxC === "number"
-        ? existing.maxC == null
-          ? forecast.airTemperatureMaxC
-          : Math.max(existing.maxC, forecast.airTemperatureMaxC)
-        : existing.maxC;
-    existing.minC =
-      typeof forecast.airTemperatureMinC === "number"
-        ? existing.minC == null
-          ? forecast.airTemperatureMinC
-          : Math.min(existing.minC, forecast.airTemperatureMinC)
-        : existing.minC;
-    existing.precipProbabilityPct =
-      typeof forecast.precipitationProbabilityPct === "number"
-        ? existing.precipProbabilityPct == null
-          ? forecast.precipitationProbabilityPct
-          : Math.max(existing.precipProbabilityPct, forecast.precipitationProbabilityPct)
-        : existing.precipProbabilityPct;
-    existing.precipitationMm +=
-      typeof forecast.precipitationMm === "number" ? forecast.precipitationMm : 0;
-  }
-
-  const forecastDays = [...forecastByDay.values()].slice(0, 7).map((day) => ({
+  const forecastDayCards = forecastDays.map((day) => ({
     day: day.label,
     temp:
-      day.maxC != null && day.minC != null
-        ? `${Math.round(day.maxC)}/${Math.round(day.minC)}`
+      day.airTemperatureMaxC != null && day.airTemperatureMinC != null
+        ? `${Math.round(day.airTemperatureMaxC)}/${Math.round(day.airTemperatureMinC)}`
         : "—",
-    precip: day.precipProbabilityPct != null
-      ? `${Math.round(day.precipProbabilityPct)}%`
+    precip: day.precipitationProbabilityPct != null
+      ? `${Math.round(day.precipitationProbabilityPct)}%`
       : `${day.precipitationMm.toFixed(1)}mm`,
   }));
 
@@ -544,10 +486,10 @@ export function buildReportProps(
       maxC: obs?.airTemperatureC ?? null,
       minC: obs?.airTemperatureC ?? null,
     },
-    ...[...forecastByDay.values()].slice(0, 7).map((entry) => ({
-      label: entry.label,
-      maxC: entry.maxC,
-      minC: entry.minC,
+    ...forecastDays.map((entry) => ({
+      label: entry.label.slice(0, 3),
+      maxC: entry.airTemperatureMaxC,
+      minC: entry.airTemperatureMinC,
     })),
   ];
   const latestOpticalPassDate = formatOpticalPassDate(
@@ -585,13 +527,13 @@ export function buildReportProps(
       ? "Weather observation and forecast data were unavailable for this field."
       : !weatherDataAvailability.latestObservation
         ? "Forecast days are available, but the latest live weather observation could not be loaded."
-        : !weatherDataAvailability.forecasts
+      : !weatherDataAvailability.forecasts
           ? "Latest weather observation is available, but the forecast window could not be loaded."
-      : obs == null && forecastByDay.size === 0
+      : obs == null && forecastDays.length === 0
       ? "No weather observation or forecast window is available for this field yet."
       : obs == null
         ? "Forecast days are available, but the latest live weather observation is missing."
-      : forecastByDay.size === 0
+      : forecastDays.length === 0
           ? "Latest weather observation is available, but no forecast window has been stored yet."
           : "No forecast temperature window is available yet.";
 
@@ -723,7 +665,7 @@ export function buildReportProps(
         : cropStagePresentation.displayStageLabel,
     cropParams,
     charts,
-    forecast: forecastDays,
+    forecast: forecastDayCards,
     alerts: alertItems,
     alertsEmptyStateTitle: activeAlertsAvailable ? undefined : "Alert data unavailable",
     alertsEmptyStateDescription: activeAlertsAvailable

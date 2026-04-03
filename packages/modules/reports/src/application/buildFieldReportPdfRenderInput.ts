@@ -14,7 +14,7 @@ import {
 import {
   findSprayWindows,
   formatFieldLocalTime,
-  type FieldWeatherForecast,
+  summarizeForecastDays,
 } from "@fieldpulse/module-weather";
 import type { FieldReportReadModel } from "../contracts/FieldReportReadModel";
 
@@ -219,11 +219,14 @@ function inferAlertAction(alert: FieldAlert): string | undefined {
   return undefined;
 }
 
-/** Infer a short weather description from forecast numeric data. */
-function inferForecastConditions(f: FieldWeatherForecast): string {
-  const minT = f.airTemperatureMinC;
-  const precip = f.precipitationMm ?? 0;
-  const wind = f.windSpeedKph ?? 0;
+function inferDailyForecastConditions(input: {
+  airTemperatureMinC: number | null;
+  precipitationMm: number;
+  windSpeedKph: number | null;
+}): string {
+  const minT = input.airTemperatureMinC;
+  const precip = input.precipitationMm;
+  const wind = input.windSpeedKph ?? 0;
 
   if (minT !== null && minT <= -10) return precip >= 2 ? "Snow likely" : "Deep frost";
   if (minT !== null && minT <= 0) return precip >= 2 ? "Rain/snow mix" : "Frost risk";
@@ -1121,20 +1124,23 @@ export function buildFieldReportPdfRenderInput({
      PAGE 3 — FORECAST
      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
-  const forecasts = m.weather.profile.forecasts.slice(0, 8);
-  if (forecasts.length > 0) {
+  const forecastDays = summarizeForecastDays(m.weather.profile.forecasts, {
+    fieldLabelPoint: m.field.labelPoint,
+    limitDays: 7,
+  });
+  if (forecastDays.length > 0) {
     blocks.push({ kind: "spacer", height: 6 });
     blocks.push({
       kind: "section-header",
       label: "Forecast",
-      meta: `Next ${forecasts.length} periods`,
+      meta: `Next ${forecastDays.length} day${forecastDays.length === 1 ? "" : "s"}`,
       accentColor: GREEN,
     });
 
     blocks.push({
       kind: "table",
       columns: [
-        { label: "Time", width: 0.18 },
+        { label: "Day", width: 0.18 },
         { label: "Conditions", width: 0.16 },
         { label: "Min", width: 0.09, align: "right" },
         { label: "Max", width: 0.09, align: "right" },
@@ -1143,10 +1149,10 @@ export function buildFieldReportPdfRenderInput({
         { label: "Chance", width: 0.12, align: "right" },
       ],
       headerBg: GREEN,
-      rows: forecasts.map((f) => ({
+      rows: forecastDays.map((f) => ({
         cells: [
-          fmtDate(f.validAt),
-          inferForecastConditions(f),
+          f.label,
+          inferDailyForecastConditions(f),
           `${fmt(f.airTemperatureMinC)}°`,
           `${fmt(f.airTemperatureMaxC)}°`,
           `${fmt(f.precipitationMm)} mm`,
@@ -1158,7 +1164,7 @@ export function buildFieldReportPdfRenderInput({
         accentColor:
           f.airTemperatureMinC !== null && f.airTemperatureMinC <= 0
             ? RED
-            : f.precipitationMm !== null && f.precipitationMm >= 10
+          : f.precipitationMm !== null && f.precipitationMm >= 10
               ? ([0.23, 0.51, 0.85] as RGB)
               : f.windSpeedKph !== null && f.windSpeedKph >= 40
                 ? AMBER
@@ -1168,7 +1174,7 @@ export function buildFieldReportPdfRenderInput({
     });
 
     // Precipitation sparkline from forecast data
-    const precipValues = forecasts
+    const precipValues = forecastDays
       .map((f) => f.precipitationMm ?? 0);
     if (precipValues.some((v) => v > 0)) {
       blocks.push({
@@ -1182,10 +1188,10 @@ export function buildFieldReportPdfRenderInput({
     }
 
     // Temperature window — High vs Low sparklines
-    const tempHighs = forecasts
+    const tempHighs = forecastDays
       .map((f) => f.airTemperatureMaxC)
       .filter((v): v is number => v !== null);
-    const tempLows = forecasts
+    const tempLows = forecastDays
       .map((f) => f.airTemperatureMinC)
       .filter((v): v is number => v !== null);
     if (tempHighs.length >= 2 && tempLows.length >= 2) {
