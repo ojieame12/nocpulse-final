@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Satellite, CloudSun, MapPin, Bell, BellOff, Ruler, Globe, User, Building2, Archive, RotateCcw } from 'lucide-react';
-import { Card, Lbl, LblM, Big, Sub, Mono } from './fieldDetailCardPrimitives';
+import { X, Bell, Ruler, Globe, Satellite, CloudSun, MapPin, Archive, RotateCcw } from 'lucide-react';
+import { Card, Lbl, Sub, Mono } from './fieldDetailCardPrimitives';
 import {
   normalizeWorkspaceSettings,
   type WorkspaceSettingsState,
@@ -50,57 +50,34 @@ interface SettingsPanelProps {
 
 function readPersistedSettings(storageKey: string): WorkspaceSettingsState | null {
   if (typeof window === 'undefined') return null;
-
   try {
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as Partial<WorkspaceSettingsState>;
-    if (!parsed) return null;
-
-    return normalizeWorkspaceSettings(parsed);
+    return normalizeWorkspaceSettings(JSON.parse(raw) as Partial<WorkspaceSettingsState>);
   } catch {
     return null;
   }
 }
 
 async function readApiResult<T>(response: Response): Promise<T> {
-  const payload = (await response.json()) as {
-    result?: T;
-    error?: { message?: string };
-  };
-
-  if (!response.ok) {
-    throw new Error(payload.error?.message ?? 'Request failed.');
-  }
-
-  if (!payload.result) {
-    throw new Error('Request completed without a result payload.');
-  }
-
+  const payload = (await response.json()) as { result?: T; error?: { message?: string } };
+  if (!response.ok) throw new Error(payload.error?.message ?? 'Request failed.');
+  if (!payload.result) throw new Error('Request completed without a result payload.');
   return payload.result;
 }
 
 /* ── Toggle ── */
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      style={{
-        width: 40, height: 22, borderRadius: 999, padding: 2,
-        background: checked ? 'var(--primary-green)' : 'var(--border-medium)',
-        border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center',
-        transition: 'background 200ms ease', flexShrink: 0,
-      }}
+      aria-label={label}
+      className="settings-toggle"
+      data-checked={checked}
     >
-      <div style={{
-        width: 18, height: 18, borderRadius: '50%', background: '#fff',
-        transform: checked ? 'translateX(18px)' : 'translateX(0)',
-        transition: 'transform 200ms cubic-bezier(.2,.8,.2,1)',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-      }} />
+      <div className="settings-toggle__thumb" />
     </button>
   );
 }
@@ -111,18 +88,14 @@ function Segment<T extends string>({ options, labels, value, onChange }: {
   options: readonly T[]; labels: string[]; value: T; onChange: (v: T) => void;
 }) {
   return (
-    <div style={{
-      display: 'flex', borderRadius: 10, padding: 2, gap: 2,
-      background: 'rgba(255,255,255,0.06)',
-    }}>
+    <div className="settings-segment">
       {options.map((opt, i) => (
-        <button key={opt} type="button" onClick={() => onChange(opt)} style={{
-          flex: 1, padding: '7px 14px', borderRadius: 8,
-          fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: value === opt ? 600 : 400,
-          color: value === opt ? '#fff' : 'var(--text-muted)',
-          background: value === opt ? 'var(--btn-fill-primary)' : 'transparent',
-          border: 'none', cursor: 'pointer', transition: 'all 200ms cubic-bezier(.2,.8,.2,1)',
-        }}>{labels[i]}</button>
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onChange(opt)}
+          className={`settings-segment__btn${value === opt ? ' settings-segment__btn--active' : ''}`}
+        >{labels[i]}</button>
       ))}
     </div>
   );
@@ -130,37 +103,14 @@ function Segment<T extends string>({ options, labels, value, onChange }: {
 
 /* ── Setting Row ── */
 
-function SettingRow({ label, desc, children }: { label: string; desc: string; children: React.ReactNode }) {
+function SettingRow({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <span className="fdp-big fdp-big--14">{label}</span>
-        <Sub>{desc}</Sub>
+    <div className="settings-row">
+      <div className="settings-row__text">
+        <span className="settings-row__label">{label}</span>
+        {desc && <span className="settings-row__desc">{desc}</span>}
       </div>
       {children}
-    </div>
-  );
-}
-
-/* ── Integration Row ── */
-
-function Integration({ icon: Icon, name, desc, status, color }: {
-  icon: typeof Satellite; name: string; desc: string; status: string; color: string;
-}) {
-  const isConnected = status.toLowerCase() === 'connected';
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: 10, background: color,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>
-        <Icon size={18} color="#fff" />
-      </div>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <span className="fdp-big fdp-big--14">{name}</span>
-        <Sub>{desc}</Sub>
-      </div>
-      <Mono color={isConnected ? 'var(--status-positive)' : 'var(--status-warning)'}>{status}</Mono>
     </div>
   );
 }
@@ -176,11 +126,6 @@ export function SettingsPanel({
   isOffline = false,
   onArchivedFieldRestored,
 }: SettingsPanelProps) {
-  const profileName = viewer?.displayName ?? 'John Draper';
-  const profileInitials = viewer?.initials ?? 'JD';
-  const profileRole = viewer?.workspaceRoleLabel ?? 'Owner';
-  const profileWorkspace = viewer?.workspaceName ?? 'Hope Creek Farms';
-  const profileEmail = viewer?.email ?? 'john@hopecreek.ca';
   const [emailAlerts, setEmailAlerts] = useState(true);
   const [healthWarnings, setHealthWarnings] = useState(true);
   const [sprayWindows, setSprayWindows] = useState(false);
@@ -194,385 +139,215 @@ export function SettingsPanel({
   const [restorePendingFieldId, setRestorePendingFieldId] = useState<string | null>(null);
   const hasCompletedInitialLoad = useRef(false);
   const storageKey = useMemo(
-    () =>
-      workspaceId
-        ? `fieldpulse:web:settings:${workspaceId}`
-        : 'fieldpulse:web:settings',
+    () => workspaceId ? `fieldpulse:web:settings:${workspaceId}` : 'fieldpulse:web:settings',
     [workspaceId],
   );
-  const canManageArchivedFields =
-    !!workspaceId &&
-    !!viewer?.workspaceRole &&
-    canManageWorkspace(viewer.workspaceRole);
+  const canManageArchivedFields = !!workspaceId && !!viewer?.workspaceRole && canManageWorkspace(viewer.workspaceRole);
 
+  // Load settings
   useEffect(() => {
     let cancelled = false;
-
     async function loadSettings() {
       const cached = readPersistedSettings(storageKey);
-
       try {
-        const query = workspaceId
-          ? `?workspaceId=${encodeURIComponent(workspaceId)}`
-          : '';
+        const query = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
         const result = await readApiResult<{ settings: WorkspaceSettingsState }>(
-          await fetch(`/api/settings${query}`, {
-            cache: 'no-store',
-          }),
+          await fetch(`/api/settings${query}`, { cache: 'no-store' }),
         );
-
         if (cancelled) return;
-
         const next = normalizeWorkspaceSettings(result.settings);
-        setEmailAlerts(next.emailAlerts);
-        setHealthWarnings(next.healthWarnings);
-        setSprayWindows(next.sprayWindows);
-        setWeeklyDigest(next.weeklyDigest);
-        setUnits(next.units);
-        setTempUnit(next.tempUnit);
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(storageKey, JSON.stringify(next));
-        }
+        setEmailAlerts(next.emailAlerts); setHealthWarnings(next.healthWarnings);
+        setSprayWindows(next.sprayWindows); setWeeklyDigest(next.weeklyDigest);
+        setUnits(next.units); setTempUnit(next.tempUnit);
+        if (typeof window !== 'undefined') window.localStorage.setItem(storageKey, JSON.stringify(next));
       } catch {
         if (!cached || cancelled) return;
-
-        setEmailAlerts(cached.emailAlerts);
-        setHealthWarnings(cached.healthWarnings);
-        setSprayWindows(cached.sprayWindows);
-        setWeeklyDigest(cached.weeklyDigest);
-        setUnits(cached.units);
-        setTempUnit(cached.tempUnit);
+        setEmailAlerts(cached.emailAlerts); setHealthWarnings(cached.healthWarnings);
+        setSprayWindows(cached.sprayWindows); setWeeklyDigest(cached.weeklyDigest);
+        setUnits(cached.units); setTempUnit(cached.tempUnit);
       } finally {
-        if (!cancelled) {
-          hasCompletedInitialLoad.current = true;
-          setSettingsLoaded(true);
-        }
+        if (!cancelled) { hasCompletedInitialLoad.current = true; setSettingsLoaded(true); }
       }
     }
-
     void loadSettings();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [storageKey, workspaceId]);
 
+  // Load archived fields
   useEffect(() => {
     let cancelled = false;
-    const activeWorkspaceId = workspaceId;
-
-    if (!canManageArchivedFields || !activeWorkspaceId) {
-      setArchivedFields([]);
-      setArchivedFieldsLoaded(false);
-      setArchivedFieldsError(null);
-      return;
+    if (!canManageArchivedFields || !workspaceId) {
+      setArchivedFields([]); setArchivedFieldsLoaded(false); setArchivedFieldsError(null); return;
     }
-
-    const workspaceIdForRequest = activeWorkspaceId;
-
     async function loadArchivedFields() {
       try {
         const result = await readApiResult<{ fields: ArchivedFieldListItem[] }>(
-          await fetch(
-            `/api/fields?status=archived&workspaceId=${encodeURIComponent(workspaceIdForRequest)}`,
-            {
-              cache: 'no-store',
-              headers: {
-                'x-fieldpulse-workspace-id': workspaceIdForRequest,
-              },
-            },
-          ),
+          await fetch(`/api/fields?status=archived&workspaceId=${encodeURIComponent(workspaceId!)}`, {
+            cache: 'no-store', headers: { 'x-fieldpulse-workspace-id': workspaceId! },
+          }),
         );
-
-        if (cancelled) {
-          return;
-        }
-
-        setArchivedFields(result.fields);
-        setArchivedFieldsError(null);
+        if (cancelled) return;
+        setArchivedFields(result.fields); setArchivedFieldsError(null);
       } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        setArchivedFieldsError(
-          error instanceof Error ? error.message : 'Unable to load archived fields.',
-        );
+        if (cancelled) return;
+        setArchivedFieldsError(error instanceof Error ? error.message : 'Unable to load archived fields.');
       } finally {
-        if (!cancelled) {
-          setArchivedFieldsLoaded(true);
-        }
+        if (!cancelled) setArchivedFieldsLoaded(true);
       }
     }
-
     void loadArchivedFields();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [canManageArchivedFields, workspaceId]);
 
+  // Save settings
   useEffect(() => {
-    if (!settingsLoaded || !hasCompletedInitialLoad.current || typeof window === 'undefined') {
-      return;
-    }
-
-    const nextSettings = normalizeWorkspaceSettings({
-      emailAlerts,
-      healthWarnings,
-      sprayWindows,
-      weeklyDigest,
-      units,
-      tempUnit,
-    });
-    window.localStorage.setItem(storageKey, JSON.stringify(nextSettings));
-
+    if (!settingsLoaded || !hasCompletedInitialLoad.current || typeof window === 'undefined') return;
+    const next = normalizeWorkspaceSettings({ emailAlerts, healthWarnings, sprayWindows, weeklyDigest, units, tempUnit });
+    window.localStorage.setItem(storageKey, JSON.stringify(next));
     const timeout = window.setTimeout(() => {
       void fetch('/api/settings', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          workspaceId: workspaceId ?? undefined,
-          settings: nextSettings,
-        }),
-      }).catch(() => {
-        // Keep the UI responsive and preserve the local cache if the network save fails.
-      });
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ workspaceId: workspaceId ?? undefined, settings: next }),
+      }).catch(() => {});
     }, 200);
-
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [
-    emailAlerts,
-    healthWarnings,
-    sprayWindows,
-    weeklyDigest,
-    units,
-    tempUnit,
-    settingsLoaded,
-    storageKey,
-    workspaceId,
-  ]);
+    return () => window.clearTimeout(timeout);
+  }, [emailAlerts, healthWarnings, sprayWindows, weeklyDigest, units, tempUnit, settingsLoaded, storageKey, workspaceId]);
 
   async function handleRestoreField(field: ArchivedFieldListItem) {
-    if (!canManageArchivedFields || restorePendingFieldId || isOffline) {
-      return;
-    }
-
+    if (!canManageArchivedFields || restorePendingFieldId || isOffline) return;
     setRestorePendingFieldId(field.id);
-
     try {
-      const result = await readApiResult<{
-        field: {
-          id: string;
-          workspaceId: string;
-          name: string;
-          areaHa: number;
-          legalLandDescription: string | null;
-        };
-      }>(
-        await fetch(`/api/fields/${field.id}/restore`, {
-          method: 'POST',
-          headers: {
-            'x-fieldpulse-workspace-id': field.workspaceId,
-          },
-        }),
+      const result = await readApiResult<{ field: { id: string; workspaceId: string; name: string; areaHa: number; legalLandDescription: string | null } }>(
+        await fetch(`/api/fields/${field.id}/restore`, { method: 'POST', headers: { 'x-fieldpulse-workspace-id': field.workspaceId } }),
       );
-
-      setArchivedFields((current) => current.filter((entry) => entry.id !== field.id));
+      setArchivedFields((c) => c.filter((e) => e.id !== field.id));
       setArchivedFieldsError(null);
       onArchivedFieldRestored?.(result.field);
     } catch (error) {
-      setArchivedFieldsError(
-        error instanceof Error ? error.message : 'Unable to restore this field.',
-      );
+      setArchivedFieldsError(error instanceof Error ? error.message : 'Unable to restore this field.');
     } finally {
       setRestorePendingFieldId(null);
     }
   }
 
   return (
-    <div className="fdp" style={{ position: 'absolute', top: 'var(--space-lg)', right: 'var(--space-lg)', bottom: 'var(--space-xl)' }}>
-      {/* ── Header ── */}
+    <div className="fdp">
+      {/* Header */}
       <div className="fdp__header">
         <div className="fdp__header-top">
-          <div>
-            <h1 className="fdp__field-name">Settings</h1>
-            <p className="fdp__field-meta">Workspace preferences & integrations</p>
-          </div>
+          <h1 className="fdp__field-name">Settings</h1>
           {onClose && (
-            <button type="button" onClick={onClose} style={{
-              background: 'var(--surface-white)', border: '1px solid var(--border-light)', borderRadius: '50%',
-              width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0, transition: 'all 200ms cubic-bezier(.2,.8,.2,1)',
-            }}><X size={14} /></button>
+            <button type="button" className="fdp__close" onClick={onClose} aria-label="Close">
+              <X size={14} />
+            </button>
           )}
         </div>
       </div>
 
-      {/* ── Body ── */}
-      <div style={{
-        flex: 1, overflowY: 'auto', padding: '6px 16px 16px',
-        display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, alignContent: 'start',
-      }}>
-        {/* ── Profile ── */}
+      {/* Body */}
+      <div className="fdp__body">
+
+        {/* Profile */}
         <Card span={-1}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--color-forest-700), var(--color-forest-900))',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 400,
-              color: '#fff', flexShrink: 0, letterSpacing: '-0.02em',
-            }}>{profileInitials}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-              <Big size={18}>{profileName}</Big>
-              <Sub>{profileRole} · {profileWorkspace}</Sub>
+          <div className="settings-profile">
+            <div className="settings-profile__avatar">
+              {viewer?.initials ?? 'NP'}
+            </div>
+            <div className="settings-profile__info">
+              <span className="settings-profile__name">{viewer?.displayName ?? 'NocPulse User'}</span>
+              <Mono>{viewer?.email ?? '—'}</Mono>
+              <Sub>{viewer?.workspaceRoleLabel ?? 'Member'} · {viewer?.workspaceName ?? 'Workspace'}</Sub>
             </div>
           </div>
         </Card>
 
-        <Card span={-1}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <User size={14} style={{ color: 'var(--text-muted)' }} />
-            <LblM>EMAIL</LblM>
-          </div>
-          <Mono>{profileEmail}</Mono>
-        </Card>
-
-        <FieldShareCard
-          workspaceId={workspaceId}
-          fieldId={fieldId}
-          fieldName={fieldName}
-        />
-
+        {/* Share + Access */}
+        <FieldShareCard workspaceId={workspaceId} fieldId={fieldId} fieldName={fieldName} />
         <WorkspaceAccessCard workspaceId={workspaceId} />
 
-        {canManageArchivedFields ? (
-          <Card span={-1} style={{ gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Archive size={14} style={{ color: 'var(--text-muted)' }} />
-              <Lbl>ARCHIVED FIELDS</Lbl>
-            </div>
-            {isOffline ? (
-              <Sub>Restore requires an online connection.</Sub>
-            ) : null}
-            {!archivedFieldsLoaded ? (
-              <Sub>Loading archived field history…</Sub>
-            ) : archivedFieldsError ? (
-              <Sub>{archivedFieldsError}</Sub>
-            ) : archivedFields.length === 0 ? (
-              <Sub>No archived fields in this workspace.</Sub>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {archivedFields.map((field) => (
-                  <div
-                    key={field.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                      padding: '8px 0',
-                      borderBottom: '1px solid var(--border-light)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                      <span className="fdp-big fdp-big--14">{field.name}</span>
-                      <Sub>
-                        {field.legalLandDescription?.trim()
-                          ? `${field.legalLandDescription} · ${field.areaHa.toFixed(1)} ha`
-                          : `${field.areaHa.toFixed(1)} ha`}
-                      </Sub>
-                      <Mono>{new Date(field.archivedAt).toLocaleDateString()}</Mono>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleRestoreField(field)}
-                      disabled={restorePendingFieldId === field.id || isOffline}
-                      title={isOffline ? 'Restore requires an online connection.' : undefined}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '7px 10px',
-                        borderRadius: 8,
-                        border: '1px solid var(--border-light)',
-                        background: 'var(--surface-white)',
-                        color: 'var(--text-primary)',
-                        cursor:
-                          restorePendingFieldId === field.id
-                            ? 'wait'
-                            : isOffline
-                              ? 'not-allowed'
-                              : 'pointer',
-                        opacity: restorePendingFieldId === field.id || isOffline ? 0.7 : 1,
-                        flexShrink: 0,
-                      }}
-                    >
-                      <RotateCcw size={12} />
-                      {restorePendingFieldId === field.id ? 'Restoring…' : 'Restore'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        ) : null}
-
-        {/* ── Notifications ── */}
-        <Card span={-1} style={{ gap: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <Bell size={14} style={{ color: 'var(--text-muted)' }} />
+        {/* Notifications */}
+        <Card span={-1}>
+          <div className="settings-section-header">
+            <Bell size={13} />
             <Lbl>NOTIFICATIONS</Lbl>
           </div>
-          <SettingRow label="Email Alerts" desc="Critical and high severity findings">
-            <Toggle checked={emailAlerts} onChange={setEmailAlerts} />
+          <SettingRow label="Email alerts" desc="Critical findings"><Toggle checked={emailAlerts} onChange={setEmailAlerts} label="Email alerts" /></SettingRow>
+          <SettingRow label="Health warnings" desc="Status changes"><Toggle checked={healthWarnings} onChange={setHealthWarnings} label="Health warnings" /></SettingRow>
+          <SettingRow label="Spray windows" desc="Application timing"><Toggle checked={sprayWindows} onChange={setSprayWindows} label="Spray windows" /></SettingRow>
+          <SettingRow label="Weekly digest" desc="Monday summary"><Toggle checked={weeklyDigest} onChange={setWeeklyDigest} label="Weekly digest" /></SettingRow>
+        </Card>
+
+        {/* Units */}
+        <Card span={-1}>
+          <div className="settings-section-header">
+            <Ruler size={13} />
+            <Lbl>UNITS</Lbl>
+          </div>
+          <SettingRow label="Distance & area">
+            <Segment options={['metric', 'imperial'] as const} labels={['Metric', 'Imperial']} value={units} onChange={setUnits} />
           </SettingRow>
-          <SettingRow label="Health Warnings" desc="Field status changes and crop-health drops">
-            <Toggle checked={healthWarnings} onChange={setHealthWarnings} />
-          </SettingRow>
-          <SettingRow label="Spray Windows" desc="Application timing notifications">
-            <Toggle checked={sprayWindows} onChange={setSprayWindows} />
-          </SettingRow>
-          <SettingRow label="Weekly Digest" desc="Summary email every Monday">
-            <Toggle checked={weeklyDigest} onChange={setWeeklyDigest} />
+          <SettingRow label="Temperature">
+            <Segment options={['celsius', 'fahrenheit'] as const} labels={['°C', '°F']} value={tempUnit} onChange={setTempUnit} />
           </SettingRow>
         </Card>
 
-        {/* ── Units ── */}
-        <Card span={-1} style={{ gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Ruler size={14} style={{ color: 'var(--text-muted)' }} />
-            <Lbl>MEASUREMENT UNITS</Lbl>
+        {/* Integrations */}
+        <Card span={-1}>
+          <div className="settings-section-header">
+            <Globe size={13} />
+            <Lbl>DATA SOURCES</Lbl>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Sub>Distance & area</Sub>
-            <Segment options={['metric', 'imperial'] as const} labels={['Metric (ha, km)', 'Imperial (ac, mi)']} value={units} onChange={setUnits} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Sub>Temperature</Sub>
-            <Segment options={['celsius', 'fahrenheit'] as const} labels={['Celsius (°C)', 'Fahrenheit (°F)']} value={tempUnit} onChange={setTempUnit} />
-          </div>
+          {[
+            { icon: Satellite, name: 'Sentinel Hub', sub: 'SAR + Optical', color: '#004726' },
+            { icon: CloudSun, name: 'Open-Meteo', sub: 'Weather + ERA5', color: '#3b82f6' },
+            { icon: MapPin, name: 'MapTiler', sub: 'Base maps', color: '#ef4444' },
+          ].map((s) => (
+            <div key={s.name} className="settings-integration">
+              <div className="settings-integration__icon" style={{ background: s.color }}>
+                <s.icon size={14} color="#fff" />
+              </div>
+              <div className="settings-integration__text">
+                <span className="settings-row__label">{s.name}</span>
+                <Sub>{s.sub}</Sub>
+              </div>
+              <Mono color="var(--status-positive)">Active</Mono>
+            </div>
+          ))}
         </Card>
 
-        {/* ── Integrations ── */}
-        <Card span={-1} style={{ gap: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <Globe size={14} style={{ color: 'var(--text-muted)' }} />
-            <Lbl>DATA INTEGRATIONS</Lbl>
-          </div>
-          <Integration icon={Satellite} name="Sentinel Hub" desc="Sentinel-1 (SAR) + Sentinel-2 (optical)" status="Connected" color="#004726" />
-          <Integration icon={CloudSun} name="Open-Meteo" desc="Weather forecasts + historical ERA5" status="Connected" color="#3b82f6" />
-          <Integration icon={MapPin} name="MapQuest" desc="Geocoding + base map tiles" status="Connected" color="#ef4444" />
-        </Card>
+        {/* Archived Fields */}
+        {canManageArchivedFields && (
+          <Card span={-1}>
+            <div className="settings-section-header">
+              <Archive size={13} />
+              <Lbl>ARCHIVED FIELDS</Lbl>
+            </div>
+            {!archivedFieldsLoaded ? <Sub>Loading…</Sub>
+              : archivedFieldsError ? <Sub>{archivedFieldsError}</Sub>
+              : archivedFields.length === 0 ? <Sub>No archived fields</Sub>
+              : archivedFields.map((field) => (
+                <div key={field.id} className="settings-archived-field">
+                  <div>
+                    <span className="settings-row__label">{field.name}</span>
+                    <Sub>{field.areaHa.toFixed(1)} ha{field.legalLandDescription ? ` · ${field.legalLandDescription}` : ''}</Sub>
+                  </div>
+                  <button
+                    type="button"
+                    className="settings-restore-btn"
+                    onClick={() => void handleRestoreField(field)}
+                    disabled={restorePendingFieldId === field.id || isOffline}
+                  >
+                    <RotateCcw size={11} />
+                    {restorePendingFieldId === field.id ? 'Restoring…' : 'Restore'}
+                  </button>
+                </div>
+              ))}
+          </Card>
+        )}
 
-        {/* ── Footer ── */}
-        <div style={{ gridColumn: '1 / -1', textAlign: 'center', paddingTop: 12, borderTop: '1px solid var(--border-light)' }}>
-          <Sub>Saved for this workspace{workspaceId ? ` · ${workspaceId}` : ''}</Sub>
+        {/* Footer */}
+        <div className="settings-footer">
+          <Sub>NocPulse · Agricultural Intelligence</Sub>
         </div>
       </div>
     </div>
