@@ -31,10 +31,16 @@ test("buildLandingMarketIntelligence summarizes stored market snapshots", async 
   } as any);
 
   assert.match(viewModel.subtitle, /Stored commodity snapshots/i);
+  assert.doesNotMatch(viewModel.subtitle, /Bank of Canada FX/i);
   assert.equal(viewModel.leftLabel, "Canola Snapshot");
   assert.equal(viewModel.leftValue, "$727.10");
   assert.equal(viewModel.leftUnit, "CAD / tonne");
   assert.match(viewModel.leftSubLabel, /Fresh/i);
+  assert.deepEqual(viewModel.sourcePills, [
+    "ICE / CBOT 1/4 fresh",
+    "Johnston's 0/1 fresh",
+    "Native CAD only",
+  ]);
   assert.equal(viewModel.rightLabel, "Coverage");
   assert.equal(viewModel.rightValue, "1 / 5");
   assert.equal(viewModel.rightUnit, "feeds fresh");
@@ -47,6 +53,7 @@ test("buildLandingMarketIntelligence returns a runtime-unavailable fallback when
   } as any);
 
   assert.match(viewModel.subtitle, /Supabase runtime is configured/i);
+  assert.deepEqual(viewModel.sourcePills, ["ICE / CBOT", "Johnston's", "USD → CAD"]);
   assert.equal(viewModel.leftValue, "—");
   assert.equal(viewModel.rightValue, "0 / 5");
 });

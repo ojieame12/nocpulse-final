@@ -19,10 +19,18 @@ export type LandingMarketIntelligenceViewModel = {
 };
 
 const DEFAULT_SOURCE_PILLS = [
-  "ICE / CBOT Settlements",
-  "Johnston's Grain Bids",
-  "Bank of Canada FX",
+  "ICE / CBOT",
+  "Johnston's",
+  "USD → CAD",
 ] as const;
+
+const MARKET_SOURCE_FAMILIES = {
+  CANOLA: "ICE / CBOT",
+  WHEAT: "ICE / CBOT",
+  CORN: "ICE / CBOT",
+  SOYBEAN: "ICE / CBOT",
+  RYE: "Johnston's",
+} as const;
 
 function formatCadPerTonne(value: number | null | undefined) {
   if (value == null) {
@@ -65,6 +73,44 @@ export function buildLandingMarketIntelligenceFallback(): LandingMarketIntellige
   };
 }
 
+function buildSourcePills(
+  snapshots: readonly {
+    cropSymbol: string;
+    snapshot: {
+      sourceCurrency: string;
+    } | null;
+    freshness: {
+      status: "fresh" | "stale" | "missing";
+    };
+  }[],
+) {
+  const familyLabels = ["ICE / CBOT", "Johnston's"] as const;
+
+  const sourceCoverage = familyLabels.map((familyLabel) => {
+    const entries = snapshots.filter(
+      (entry) =>
+        MARKET_SOURCE_FAMILIES[entry.cropSymbol as keyof typeof MARKET_SOURCE_FAMILIES] ===
+        familyLabel,
+    );
+    const freshCount = entries.filter((entry) => entry.freshness.status === "fresh").length;
+
+    if (entries.length === 0) {
+      return `${familyLabel} Missing`;
+    }
+
+    return `${familyLabel} ${freshCount}/${entries.length} fresh`;
+  });
+
+  const hasUsdNormalizedSnapshot = snapshots.some(
+    (entry) => entry.snapshot?.sourceCurrency === "USD",
+  );
+
+  return [
+    ...sourceCoverage,
+    hasUsdNormalizedSnapshot ? "USD → CAD normalized" : "Native CAD only",
+  ];
+}
+
 export async function buildLandingMarketIntelligence(
   runtime: ServerRuntime,
 ): Promise<LandingMarketIntelligenceViewModel> {
@@ -95,8 +141,8 @@ export async function buildLandingMarketIntelligence(
 
   return {
     subtitle:
-      "Stored commodity snapshots from ICE and CBOT settlements, Western Canada cash bids, and Bank of Canada FX. Freshness is surfaced directly so stale quotes do not read as live.",
-    sourcePills: [...DEFAULT_SOURCE_PILLS],
+      "Stored commodity snapshots from ICE and CBOT settlements plus Western Canada cash bids. USD-denominated quotes are normalized to CAD so stale snapshots do not read as live.",
+    sourcePills: buildSourcePills(snapshots),
     leftLabel: "Canola Snapshot",
     leftValue: formatCadPerTonne(canola?.snapshot?.closePriceCadPerTonne ?? null),
     leftUnit: "CAD / tonne",
