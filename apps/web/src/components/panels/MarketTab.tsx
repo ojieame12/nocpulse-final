@@ -1,5 +1,6 @@
 'use client';
 
+import React from "react";
 import { Info } from 'lucide-react';
 import { FieldMarketScenarioForm } from "./fieldMarketScenarioForm";
 
@@ -112,7 +113,7 @@ export function MarketTab({ field }: MarketTabProps) {
   const yieldRow = field.revenueRows.find((row) => row.label === "Expected Yield") ?? null;
   const priceAtHarvestRow = field.revenueRows.find((row) => row.label === "Price at Harvest") ?? null;
   const basisRow = field.revenueRows.find((row) => row.label === "Local Basis") ?? null;
-  const feedStatusLabel = resolveFeedStatusLabel(field, hasQuote);
+  const feedStatusLabel = resolveFeedStatusLabel(field);
   const historyStatusLabel =
     historyRow?.value === "No stored captures" ? "0 captures" : historyRow?.value ?? "N/A";
   const yieldStatusLabel =
@@ -402,7 +403,7 @@ function compactHint(value: string | null | undefined) {
     .replace("Use this crop in field revenue planning.", "Use this crop in field planning.");
 }
 
-function resolveFeedStatusLabel(field: FieldMarketProps, hasQuote: boolean) {
+function resolveFeedStatusLabel(field: FieldMarketProps) {
   if (field.feedStatusLabel) {
     return field.feedStatusLabel;
   }
@@ -415,19 +416,7 @@ function resolveFeedStatusLabel(field: FieldMarketProps, hasQuote: boolean) {
     return "Unsupported";
   }
 
-  if (hasQuote) {
-    return "Stored";
-  }
-
-  if (field.referenceStatusLabel.includes("feed connected")) {
-    return "Offline";
-  }
-
-  if (field.referenceStatusLabel.includes("quote yet")) {
-    return "Pending";
-  }
-
-  return "N/A";
+  return "Supported";
 }
 
 function buildMetricSummary(rows: readonly [string, string | null | undefined][]) {

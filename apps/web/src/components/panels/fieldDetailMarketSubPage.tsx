@@ -2,6 +2,7 @@
  * Market subpage for FieldDetailPanel. Extracted from SubPageView — pure render, no local state.
  */
 
+import React from "react";
 import type { FieldMarketProps } from "./MarketTab";
 import type { FieldNotesInspectionTarget } from "./NotesTab";
 import { Card, Lbl, LblM, Big, Sub, Mono } from "./fieldDetailCardPrimitives";
@@ -55,7 +56,7 @@ export function MarketSubPage({
   const yieldRow = findMarketRow(market?.revenueRows, "Expected Yield");
   const priceAtHarvestRow = findMarketRow(market?.revenueRows, "Price at Harvest");
   const basisRow = findMarketRow(market?.revenueRows, "Local Basis");
-  const feedStatusLabel = resolveFeedStatusLabel(market, hasQuote);
+  const feedStatusLabel = resolveFeedStatusLabel(market);
   const historyStatusLabel = resolveHistoryStatusLabel(historyRow?.value);
   const yieldStatusLabel = resolveYieldStatusLabel(yieldRow?.value);
   const quoteStatusLabel = resolveQuoteStatusLabel(priceAtHarvestRow?.value);
@@ -515,7 +516,7 @@ function findMarketRow(
   return rows?.find((row) => row.label === label) ?? null;
 }
 
-function resolveFeedStatusLabel(market: FieldMarketProps | null, hasQuote: boolean) {
+function resolveFeedStatusLabel(market: FieldMarketProps | null) {
   if (!market) {
     return "N/A";
   }
@@ -532,19 +533,7 @@ function resolveFeedStatusLabel(market: FieldMarketProps | null, hasQuote: boole
     return "Unsupported";
   }
 
-  if (hasQuote) {
-    return "Stored";
-  }
-
-  if (market.referenceStatusLabel.includes("feed connected")) {
-    return "Offline";
-  }
-
-  if (market.referenceStatusLabel.includes("quote yet")) {
-    return "Pending";
-  }
-
-  return "N/A";
+  return "Supported";
 }
 
 function resolveHistoryStatusLabel(value: string | null | undefined) {
