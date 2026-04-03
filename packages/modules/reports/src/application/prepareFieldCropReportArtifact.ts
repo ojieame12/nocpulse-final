@@ -3,7 +3,10 @@ import {
   describeAgronomicTruthBasis,
   formatAgronomicSourceBasisLabel,
 } from "@fieldpulse/module-crop-intelligence";
-import { inferCropAlertFollowUpAction } from "./inferReportFollowUpAction";
+import {
+  inferCropAlertFollowUpAction,
+  inferDiseaseRiskFollowUpAction,
+} from "./inferReportFollowUpAction";
 
 export type CropReportGrowthSegment = {
   label: string;
@@ -197,30 +200,6 @@ function deriveTruthSource(summary: FieldCropReportSummary): string | undefined 
     derivationMode: summary.moistureDerivationMode,
     confidenceSub: summary.confidenceSub,
   });
-}
-
-function inferDiseaseAction(name: string, sev: "critical" | "warning" | "info") {
-  const n = name.toLowerCase();
-  if (sev === "info") return undefined;
-  if (n.includes("sclerotinia")) {
-    return "Scout canopy for sclerotinia symptoms. Consult agronomist on fungicide timing if at petal stage.";
-  }
-  if (n.includes("fusarium")) {
-    return "Monitor heads for fusarium symptoms. Consider fungicide if heading stage and conditions persist.";
-  }
-  if (n.includes("rust") || n.includes("stripe")) {
-    return "Scout lower canopy for rust pustules. Apply foliar fungicide if spread is confirmed.";
-  }
-  if (n.includes("blackleg")) {
-    return "Inspect stem bases for lesions. Plan resistant variety selection for next rotation.";
-  }
-  if (n.includes("clubroot")) {
-    return "Avoid equipment movement from affected areas. Use resistant cultivars in future rotations.";
-  }
-  if (sev === "critical") {
-    return "Scout affected areas immediately. Consult agronomist for treatment options.";
-  }
-  return "Monitor for symptoms. Scout during next field walk.";
 }
 
 function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
@@ -564,7 +543,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
         severity,
         title: `${risk.name} — ${risk.pct}`,
         body: risk.desc,
-        action: risk.recommendedAction ?? inferDiseaseAction(risk.name, severity),
+        action: risk.recommendedAction ?? inferDiseaseRiskFollowUpAction(risk.name, severity),
         marginTop: 4,
       });
     }

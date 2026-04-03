@@ -44,3 +44,30 @@ export function inferCropAlertFollowUpAction(
   if (text.includes("vpd") || text.includes("atmospheric")) return "Monitor crop water demand. Consider irrigation timing.";
   return undefined;
 }
+
+export function inferDiseaseRiskFollowUpAction(
+  name: string,
+  severity: "critical" | "warning" | "info",
+): string | undefined {
+  const text = name.toLowerCase();
+  if (severity === "info") return undefined;
+  if (text.includes("sclerotinia")) {
+    return "Scout canopy for sclerotinia symptoms. Consult agronomist on fungicide timing if at petal stage.";
+  }
+  if (text.includes("fusarium")) {
+    return "Monitor heads for fusarium symptoms. Consider fungicide if heading stage and conditions persist.";
+  }
+  if (text.includes("rust") || text.includes("stripe")) {
+    return "Scout lower canopy for rust pustules. Apply foliar fungicide if spread is confirmed.";
+  }
+  if (text.includes("blackleg")) {
+    return "Inspect stem bases for lesions. Plan resistant variety selection for next rotation.";
+  }
+  if (text.includes("clubroot")) {
+    return "Avoid equipment movement from affected areas. Use resistant cultivars in future rotations.";
+  }
+  if (severity === "critical") {
+    return "Scout affected areas immediately. Consult agronomist for treatment options.";
+  }
+  return "Monitor for symptoms. Scout during next field walk.";
+}

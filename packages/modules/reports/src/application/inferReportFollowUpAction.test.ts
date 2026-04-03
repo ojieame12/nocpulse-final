@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   inferCropAlertFollowUpAction,
+  inferDiseaseRiskFollowUpAction,
   inferFieldAlertFollowUpAction,
   inferFieldFindingFollowUpAction,
 } from "./inferReportFollowUpAction";
@@ -43,5 +44,20 @@ test("inferCropAlertFollowUpAction returns compact atmospheric-demand guidance",
   assert.equal(
     inferCropAlertFollowUpAction("Atmospheric demand elevated"),
     "Monitor crop water demand. Consider irrigation timing.",
+  );
+});
+
+test("inferDiseaseRiskFollowUpAction returns compact crop-disease guidance", () => {
+  assert.equal(
+    inferDiseaseRiskFollowUpAction("Sclerotinia", "warning"),
+    "Scout canopy for sclerotinia symptoms. Consult agronomist on fungicide timing if at petal stage.",
+  );
+  assert.equal(
+    inferDiseaseRiskFollowUpAction("Unknown disease pressure", "critical"),
+    "Scout affected areas immediately. Consult agronomist for treatment options.",
+  );
+  assert.equal(
+    inferDiseaseRiskFollowUpAction("Sclerotinia", "info"),
+    undefined,
   );
 });

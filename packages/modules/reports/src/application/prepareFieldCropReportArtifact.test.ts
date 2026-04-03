@@ -205,3 +205,60 @@ test("prepareFieldCropReportArtifact includes truth and weather pressure context
   assert.match(pdfText, /Modeled \\267 weather \+ soil/i);
   assert.match(pdfText, /source-backed, modeled, or still pending/i);
 });
+
+test("prepareFieldCropReportArtifact uses the shared disease fallback action helper", () => {
+  const crop: FieldCropReportProps = {
+    cropName: "Canola",
+    lld: "SE-19-037-11-W3",
+    growthSegments: [],
+    accumulatedGddLabel: "182",
+    gddUnitLabel: "base 5°C",
+    thresholdStageLabel: "Flowering",
+    thresholds: [],
+    healthIndexTitle: "Crop Signal",
+    healthIndex: {
+      value: 0.61,
+      label: "Watch",
+      subLabel: "Preseason optical context",
+      fillColor: "#f59e0b",
+      metrics: [],
+    },
+    moistureBalanceTitle: "Moisture Balance",
+    moistureBalance: {
+      value: 0.48,
+      label: "Tightening",
+      subLabel: "Root moisture 28.4%",
+      fillColor: "#3b82f6",
+      metrics: [],
+    },
+    fieldTiles: [],
+    diseaseRisks: [
+      {
+        name: "Sclerotinia",
+        desc: "Humidity remains elevated.",
+        pct: "62%",
+      },
+    ],
+    provenanceRows: [],
+    provenanceChips: [],
+    alerts: [],
+    footer: null,
+  };
+
+  const artifact = prepareFieldCropReportArtifact({
+    fieldId: "field-123",
+    fieldName: "Krants",
+    areaLabel: "64.7 ha",
+    crop,
+    summary: {
+      crop: "Canola",
+      cropStage: "Flowering",
+    },
+    generatedAt: "2026-03-30T09:00:00.000Z",
+  });
+
+  const pdfText = Buffer.from(artifact.bytes).toString("utf8");
+  assert.match(pdfText, /Scout canopy for sclerotinia symptoms\./i);
+  assert.match(pdfText, /fungicide timing if at/i);
+  assert.match(pdfText, /petal stage\./i);
+});
