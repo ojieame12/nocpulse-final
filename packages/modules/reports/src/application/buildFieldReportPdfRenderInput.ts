@@ -27,6 +27,13 @@ import {
   inferFieldAlertFollowUpAction,
   inferFieldFindingFollowUpAction,
 } from "./inferReportFollowUpAction";
+import {
+  formatReportDate as fmtDate,
+  formatReportDateStamp,
+  formatReportDateTime as fmtDateTime,
+  formatReportNumber as fmt,
+  formatReportPercent as fmtPct,
+} from "./reportFormat";
 import { normalizeReportSeverity, type ReportSeverity } from "./reportSeverity";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -50,47 +57,6 @@ const RED = STATUS.critical;
 const AMBER = STATUS.warning;
 const TEAL = STATUS.info;
 const SLATE = SURFACE.border;
-
-/* ── Helpers ── */
-
-function fmt(value: number | null, digits = 1) {
-  if (value === null || Number.isNaN(value)) return "—";
-  return value.toFixed(digits);
-}
-
-function fmtPct(value: number | null, digits = 1) {
-  if (value === null || Number.isNaN(value)) return "—";
-  return `${value.toFixed(digits)}%`;
-}
-
-function fmtDate(value: string | null) {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleDateString("en-CA", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  } catch {
-    return value.slice(0, 10);
-  }
-}
-
-function fmtDateTime(value: string | null) {
-  if (!value) return "—";
-  try {
-    const d = new Date(value);
-    return d.toLocaleDateString("en-CA", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return value.replace("T", " ").slice(0, 16);
-  }
-}
 
 /* ── Seeding Intelligence Helpers ── */
 
@@ -1223,7 +1189,7 @@ export function buildFieldReportPdfRenderInput({
   return {
     artifactKey,
     title: `Field Report: ${m.field.name}`,
-    subject: `NocPulse field report for ${m.field.name} — ${m.reportDate.slice(0, 10)}`,
+    subject: `NocPulse field report for ${m.field.name} — ${formatReportDateStamp(m.reportDate)}`,
     author: "NocPulse",
     brandLogo,
     blocks,

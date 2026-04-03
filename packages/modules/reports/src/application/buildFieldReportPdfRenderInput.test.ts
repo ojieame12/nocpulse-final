@@ -667,3 +667,22 @@ test("buildFieldReportPdfRenderInput uses the shared fallback action helper for 
   assert.equal(frostAlertCard?.severity, "critical");
   assert.equal(stressFindingCard?.severity, "warning");
 });
+
+test("buildFieldReportPdfRenderInput uses the shared report date stamp in the subject", () => {
+  const renderInput = buildFieldReportPdfRenderInput({
+    artifactKey: "test-artifact",
+    readModel: createReadModel({
+      cropType: "Canola",
+      surfacePct: 58,
+      signalSet: createSignalSet({
+        soilTemp6cmCurrentC: 5.2,
+        soilTemp6cmSustainedDays: 2,
+        frostRiskMinTempC7d: 1.5,
+        frostRiskNights7d: 1,
+        frostProbabilityPct7d: 25,
+      }),
+    }),
+  });
+
+  assert.equal(renderInput.subject, "NocPulse field report for North Quarter — 2026-04-03");
+});

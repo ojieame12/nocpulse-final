@@ -1,5 +1,6 @@
 import { renderPdfDocument } from "@fieldpulse/pdf";
 import { buildFieldReportPdfRenderInput } from "./buildFieldReportPdfRenderInput";
+import { formatReportDateStamp } from "./reportFormat";
 import type { RenderFieldReportInput } from "../contracts/RenderFieldReportInput";
 import type { RenderFieldReportResult } from "../contracts/RenderFieldReportResult";
 
@@ -21,7 +22,7 @@ export function prepareFieldReportArtifact(
   input: RenderFieldReportInput,
 ): PreparedFieldReportArtifact {
   const { readModel } = input;
-  const reportDate = readModel.reportDate.slice(0, 10);
+  const reportDate = formatReportDateStamp(readModel.reportDate);
   const fieldSlug = slugify(readModel.field.name);
   const artifactId = `${readModel.field.id}:${reportDate}`;
   const artifactKey = `reports/${readModel.field.workspaceId}/${fieldSlug}/${reportDate}.pdf`;

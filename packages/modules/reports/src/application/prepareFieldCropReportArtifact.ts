@@ -11,6 +11,7 @@ import {
   inferCropAlertSeverity,
   inferCropDiseaseRiskSeverity,
 } from "./reportSeverity";
+import { formatReportDateStamp } from "./reportFormat";
 
 export type CropReportGrowthSegment = {
   label: string;
@@ -218,7 +219,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
   blocks.push({
     kind: "text",
     style: "caption",
-    text: `${cropName} · ${stageLabel} · ${generatedAt.slice(0, 10)}`,
+    text: `${cropName} · ${stageLabel} · ${formatReportDateStamp(generatedAt)}`,
   });
 
   if (c) {
@@ -624,7 +625,7 @@ export function prepareFieldCropReportArtifact(
 ): PreparedFieldCropReportArtifact {
   const blocks = buildBlocks(input);
   const generatedAt = input.generatedAt ?? new Date().toISOString();
-  const now = generatedAt.slice(0, 10);
+  const now = formatReportDateStamp(generatedAt);
 
   const renderInput: PdfRenderInput = {
     artifactKey: `crop-reports/${slugify(input.fieldName)}/${now}.pdf`,
