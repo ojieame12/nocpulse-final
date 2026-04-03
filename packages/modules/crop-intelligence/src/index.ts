@@ -128,6 +128,14 @@ export {
   GROWTH_STAGE_ORDER,
 } from "./application/resolveCropRuleContext";
 export {
+  resolveFieldAccessDecision,
+  resolveSeedingAdvisoryDecision,
+  type FieldAccessDecision,
+  type FieldAccessVerdict,
+  type SeedingAdvisoryDecision,
+  type SeedingAdvisoryReasonCode,
+} from "./application/resolveSeedingAdvisoryDecision";
+export {
   syncFindingZones,
   type SyncFindingZoneInput,
   type SyncFindingZonesInput,

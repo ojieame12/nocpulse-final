@@ -1,4 +1,9 @@
-import type { SeedingThresholdRulePack } from "@fieldpulse/module-crop-intelligence";
+import {
+  resolveFieldAccessDecision,
+  resolveSeedingAdvisoryDecision,
+  type FieldAccessVerdict,
+  type SeedingThresholdRulePack,
+} from "@fieldpulse/module-crop-intelligence";
 import type { CropStagePresentation } from "./buildFieldOverviewViewModel.cropSignals";
 
 export type SpringMetricTone = "danger" | "warning" | "positive" | "info";
@@ -38,6 +43,12 @@ export type SeedingRecommendationPresentation = {
     color: SpringSignalColor;
   }[];
 };
+
+function toFieldAccessVerdict(value: FieldAccessPresentation["value"]): FieldAccessVerdict {
+  if (value === "Wait") return "wait";
+  if (value === "Marginal") return "marginal";
+  return "workable";
+}
 
 function signalColor(tone: SpringMetricTone): SpringSignalColor {
   switch (tone) {
@@ -160,100 +171,32 @@ export function resolveFieldAccessPresentation(input: {
     | "freezeThawBlockCount"
   > | null;
 }): FieldAccessPresentation | null {
-  const surfaceMoisturePct =
-    typeof input.surfaceMoisturePct === "number" &&
-    Number.isFinite(input.surfaceMoisturePct)
-      ? input.surfaceMoisturePct
-      : null;
-  const recentPrecipTotal72hMm =
-    typeof input.recentPrecipTotal72hMm === "number" &&
-    Number.isFinite(input.recentPrecipTotal72hMm)
-      ? input.recentPrecipTotal72hMm
-      : null;
-  const freezeThawCycles7d =
-    typeof input.freezeThawCycles7d === "number" &&
-    Number.isFinite(input.freezeThawCycles7d)
-      ? input.freezeThawCycles7d
-      : null;
+  const decision = resolveFieldAccessDecision({
+    surfaceMoisturePct: input.surfaceMoisturePct,
+    recentPrecipTotal72hMm: input.recentPrecipTotal72hMm,
+    freezeThawCycles7d: input.freezeThawCycles7d,
+    thresholds: input.thresholds,
+  });
 
-  if (
-    surfaceMoisturePct == null &&
-    recentPrecipTotal72hMm == null &&
-    freezeThawCycles7d == null
-  ) {
+  if (decision == null) {
     return null;
-  }
-
-  const thresholds = input.thresholds;
-  const surfaceMoistureMaxPct =
-    typeof thresholds?.surfaceMoistureMaxPct === "number" &&
-    Number.isFinite(thresholds.surfaceMoistureMaxPct)
-      ? thresholds.surfaceMoistureMaxPct
-      : 85;
-  const recentPrecipWarnMm72h =
-    typeof thresholds?.recentPrecipWarnMm72h === "number" &&
-    Number.isFinite(thresholds.recentPrecipWarnMm72h)
-      ? thresholds.recentPrecipWarnMm72h
-      : 10;
-  const recentPrecipBlockMm72h =
-    typeof thresholds?.recentPrecipBlockMm72h === "number" &&
-    Number.isFinite(thresholds.recentPrecipBlockMm72h)
-      ? thresholds.recentPrecipBlockMm72h
-      : 20;
-  const freezeThawWarnCount =
-    typeof thresholds?.freezeThawWarnCount === "number" &&
-    Number.isFinite(thresholds.freezeThawWarnCount)
-      ? thresholds.freezeThawWarnCount
-      : 2;
-  const freezeThawBlockCount =
-    typeof thresholds?.freezeThawBlockCount === "number" &&
-    Number.isFinite(thresholds.freezeThawBlockCount)
-      ? thresholds.freezeThawBlockCount
-      : 4;
-
-  const detail = [
-    surfaceMoisturePct != null ? `Surface ${surfaceMoisturePct.toFixed(0)}%` : null,
-    recentPrecipTotal72hMm != null
-      ? `P72h ${recentPrecipTotal72hMm.toFixed(0)}mm`
-      : null,
-    freezeThawCycles7d != null
-      ? `${freezeThawCycles7d} thaw cycle${freezeThawCycles7d === 1 ? "" : "s"}`
-      : null,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .join(" · ");
-
-  const notWorkable =
-    (surfaceMoisturePct != null && surfaceMoisturePct > surfaceMoistureMaxPct) ||
-    (recentPrecipTotal72hMm != null && recentPrecipTotal72hMm >= recentPrecipBlockMm72h) ||
-    (freezeThawCycles7d != null && freezeThawCycles7d >= freezeThawBlockCount);
-  if (notWorkable) {
-    return {
-      label: "FIELD ACCESS",
-      value: "Wait",
-      sub: detail || "Field access still tightening",
-      tone: "danger",
-    };
-  }
-
-  const marginal =
-    (surfaceMoisturePct != null && surfaceMoisturePct >= surfaceMoistureMaxPct - 15) ||
-    (recentPrecipTotal72hMm != null && recentPrecipTotal72hMm >= recentPrecipWarnMm72h) ||
-    (freezeThawCycles7d != null && freezeThawCycles7d >= freezeThawWarnCount);
-  if (marginal) {
-    return {
-      label: "FIELD ACCESS",
-      value: "Marginal",
-      sub: detail || "Use caution with equipment timing",
-      tone: "warning",
-    };
   }
 
   return {
     label: "FIELD ACCESS",
-    value: "Workable",
-    sub: detail || "Ground conditions are favorable",
-    tone: "positive",
+    value:
+      decision.verdict === "wait"
+        ? "Wait"
+        : decision.verdict === "marginal"
+          ? "Marginal"
+          : "Workable",
+    sub: decision.detailSummary,
+    tone:
+      decision.verdict === "wait"
+        ? "danger"
+        : decision.verdict === "marginal"
+          ? "warning"
+          : "positive",
   };
 }
 
@@ -276,67 +219,43 @@ export function resolveSeedingRecommendation(input: {
     return null;
   }
 
-  const soilTempCurrent =
-    typeof input.soilTemp6cmCurrentC === "number" && Number.isFinite(input.soilTemp6cmCurrentC)
-      ? input.soilTemp6cmCurrentC
-      : null;
-  const soilTempSustainedDays =
-    typeof input.soilTemp6cmSustainedDays === "number" &&
-    Number.isFinite(input.soilTemp6cmSustainedDays)
-      ? input.soilTemp6cmSustainedDays
-      : null;
-  const surfaceMoisturePct =
-    typeof input.surfaceMoisturePct === "number" && Number.isFinite(input.surfaceMoisturePct)
-      ? input.surfaceMoisturePct
-      : null;
-  const frostRiskMinTempC7d =
-    typeof input.frostRiskMinTempC7d === "number" &&
-    Number.isFinite(input.frostRiskMinTempC7d)
-      ? input.frostRiskMinTempC7d
-      : null;
-  const frostRiskNights7d =
-    typeof input.frostRiskNights7d === "number" &&
-    Number.isFinite(input.frostRiskNights7d)
-      ? input.frostRiskNights7d
-      : 0;
-  const frostProbabilityPct7d =
-    typeof input.frostProbabilityPct7d === "number" &&
-    Number.isFinite(input.frostProbabilityPct7d)
-      ? input.frostProbabilityPct7d
-      : null;
-  const weatherSourceLabel = input.weatherSourceLabel?.trim() || "weather-backed";
-  const frostProbabilityLabel = formatProbabilityLabel(frostProbabilityPct7d);
-
-  if (
-    soilTempCurrent == null &&
-    surfaceMoisturePct == null &&
-    input.fieldAccessPresentation == null &&
-    frostRiskMinTempC7d == null &&
-    frostRiskNights7d === 0
-  ) {
+  const decision = resolveSeedingAdvisoryDecision({
+    seedingThresholds: input.seedingThresholds,
+    frostThresholds: {
+      damageTempC: input.frostDamageTempC,
+      killTempC: input.frostKillTempC,
+    },
+    soilTemp6cmCurrentC: input.soilTemp6cmCurrentC,
+    soilTemp6cmSustainedDays: input.soilTemp6cmSustainedDays,
+    surfaceMoisturePct: input.surfaceMoisturePct,
+    fieldAccessVerdict:
+      input.fieldAccessPresentation == null
+        ? null
+        : toFieldAccessVerdict(input.fieldAccessPresentation.value),
+    frostRiskMinTempC7d: input.frostRiskMinTempC7d,
+    frostRiskNights7d: input.frostRiskNights7d,
+    frostProbabilityPct7d: input.frostProbabilityPct7d,
+  });
+  if (decision == null) {
     return null;
   }
 
-  const thresholdC = input.seedingThresholds.soilTempMinC;
-  const requiredDays = input.seedingThresholds.sustainedDays;
-  const soilReady =
-    soilTempCurrent != null &&
-    soilTempCurrent >= thresholdC &&
-    (soilTempSustainedDays ?? 0) >= requiredDays;
-  const tooDry =
-    surfaceMoisturePct != null &&
-    surfaceMoisturePct < input.seedingThresholds.surfaceMoistureMinPct;
-  const tooWet =
-    surfaceMoisturePct != null &&
-    surfaceMoisturePct > input.seedingThresholds.surfaceMoistureMaxPct;
-  const fieldAccessBlocked =
-    input.fieldAccessPresentation?.value === "Wait" || tooWet;
-  const fieldAccessMarginal = input.fieldAccessPresentation?.value === "Marginal";
-  const frostKillRisk =
-    frostRiskMinTempC7d != null && frostRiskMinTempC7d <= input.frostKillTempC;
-  const frostDamageRisk =
-    frostRiskMinTempC7d != null && frostRiskMinTempC7d <= input.frostDamageTempC;
-  const frostBlocked = frostDamageRisk || frostRiskNights7d > 0;
+  const soilTempCurrent = decision.soilTempCurrentC;
+  const soilTempSustainedDays = decision.soilTempSustainedDays;
+  const surfaceMoisturePct = decision.surfaceMoisturePct;
+  const frostRiskMinTempC7d = decision.frostRiskMinTempC7d;
+  const frostRiskNights7d = decision.frostRiskNights7d;
+  const frostProbabilityPct7d = decision.frostProbabilityPct7d;
+  const weatherSourceLabel = input.weatherSourceLabel?.trim() || "weather-backed";
+  const frostProbabilityLabel = formatProbabilityLabel(frostProbabilityPct7d);
+  const thresholdC = decision.thresholdC;
+  const requiredDays = decision.requiredDays;
+  const soilReady = decision.soilReady;
+  const tooDry = decision.tooDry;
+  const fieldAccessBlocked = decision.fieldAccessBlocked;
+  const fieldAccessMarginal = decision.fieldAccessMarginal;
+  const frostKillRisk = decision.frostKillRisk;
+  const frostBlocked = decision.frostBlocked;
   const cropLabel = input.cropLabel.trim().length > 0 ? input.cropLabel : "This crop";
   const frostSignal: SeedingRecommendationPresentation["signals"][number] | null =
     frostRiskMinTempC7d != null

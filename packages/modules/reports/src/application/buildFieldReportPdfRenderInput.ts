@@ -1,8 +1,16 @@
 import type { PdfRenderInput, PdfBlock, PdfBrandLogo, RGB } from "@fieldpulse/pdf";
 import { STATUS, BRAND, SURFACE } from "@fieldpulse/pdf";
 import type { FieldAlert } from "@fieldpulse/module-alerts";
-import type { FieldIntelligenceFinding } from "@fieldpulse/module-crop-intelligence";
-import type { FieldZoneActivityItem } from "@fieldpulse/module-crop-intelligence";
+import {
+  prairieDefaultRulePack,
+  resolveCropRuleContext,
+  resolveFieldAccessDecision,
+  resolveSeedingAdvisoryDecision,
+  type FieldAccessDecision,
+  type FieldIntelligenceFinding,
+  type FieldZoneActivityItem,
+  type SeedingAdvisoryDecision,
+} from "@fieldpulse/module-crop-intelligence";
 import {
   findSprayWindows,
   formatFieldLocalTime,
@@ -87,91 +95,117 @@ function sevToColor(severity: string): RGB {
 
 /* ── Seeding Intelligence Helpers ── */
 
-/** Crop-specific minimum soil temperature for safe seeding (°C at 5–6 cm). */
-function seedingTempThreshold(cropType: string | null): number {
-  const c = (cropType ?? "").toLowerCase();
-  if (c.includes("canola") || c.includes("mustard")) return 7;
-  if (c.includes("flax") || c.includes("lentil")) return 7;
-  if (c.includes("wheat") || c.includes("barley") || c.includes("oat")) return 5;
-  if (c.includes("pea") || c.includes("chickpea")) return 5;
-  if (c.includes("corn") || c.includes("soybean") || c.includes("sunflower")) return 10;
-  return 5; // conservative default
+function formatFieldAccessVerdict(decision: FieldAccessDecision): string {
+  return decision.verdict === "wait"
+    ? "Wait"
+    : decision.verdict === "marginal"
+      ? "Marginal"
+      : "Workable";
 }
 
-/** Determine seeding recommendation from soil temp, frost, moisture, and freeze-thaw. */
-function seedingRecommendation(opts: {
-  soilTempC: number | null;
-  sustainedDays: number | null;
-  frostProbPct7d: number | null;
-  frostNights7d: number | null;
-  surfaceMoisturePct: number | null;
-  freezeThawCycles7d: number | null;
-  cropType: string | null;
-}): { verdict: "Seed Now" | "Hold" | "Too Early"; explanation: string } {
-  const threshold = seedingTempThreshold(opts.cropType);
-  const cropLabel = opts.cropType ?? "crop";
-
-  // Too Early checks
-  if (opts.soilTempC === null) {
-    return { verdict: "Too Early", explanation: "Soil temperature data unavailable. Wait for weather station readings." };
-  }
-  if (opts.soilTempC < threshold) {
-    return { verdict: "Too Early", explanation: `Soil at 6 cm is ${opts.soilTempC.toFixed(1)}°C — ${cropLabel} needs sustained ≥${threshold}°C. Wait for warmer conditions.` };
-  }
-  if ((opts.sustainedDays ?? 0) < 3) {
-    return { verdict: "Hold", explanation: `Soil is ${opts.soilTempC.toFixed(1)}°C but has only been above ${threshold}°C for ${opts.sustainedDays ?? 0} day(s). Need 3+ sustained days.` };
+function explainFieldAccessDecision(decision: FieldAccessDecision): string {
+  if (decision.verdict === "wait") {
+    const reasons: string[] = [];
+    if (decision.blockedBySurfaceMoisture && decision.surfaceMoisturePct != null) {
+      reasons.push(
+        `Surface moisture at ${decision.surfaceMoisturePct.toFixed(0)}% — soil saturated. Equipment access will cause compaction.`,
+      );
+    }
+    if (decision.blockedByRecentPrecip && decision.recentPrecipTotal72hMm != null) {
+      reasons.push(
+        `${decision.recentPrecipTotal72hMm.toFixed(0)} mm precipitation in the last 72 h. Fields need time to dry.`,
+      );
+    }
+    if (decision.blockedByFreezeThaw && decision.freezeThawCycles7d != null) {
+      reasons.push(
+        `${decision.freezeThawCycles7d} freeze-thaw cycles. Top soil is unstable and prone to rutting.`,
+      );
+    }
+    return reasons.join(" ");
   }
 
-  // Hold checks
-  if (opts.frostProbPct7d !== null && opts.frostProbPct7d > 40) {
-    return { verdict: "Hold", explanation: `Soil temp OK but ${opts.frostProbPct7d.toFixed(0)}% frost probability in the next 7 days. Delay seeding until frost risk subsides.` };
-  }
-  if (opts.frostNights7d !== null && opts.frostNights7d >= 3) {
-    return { verdict: "Hold", explanation: `${opts.frostNights7d} frost-risk nights forecast in the next 7 days. High risk of seedling damage.` };
-  }
-  if (opts.surfaceMoisturePct !== null && opts.surfaceMoisturePct > 85) {
-    return { verdict: "Hold", explanation: `Surface moisture at ${opts.surfaceMoisturePct.toFixed(0)}% — field likely too wet for equipment. Wait for drying.` };
-  }
-  if (opts.freezeThawCycles7d !== null && opts.freezeThawCycles7d >= 3) {
-    return { verdict: "Hold", explanation: `${opts.freezeThawCycles7d} freeze-thaw cycles in the past 7 days. Soil structure unstable — risk of crusting after seeding.` };
+  if (decision.verdict === "marginal") {
+    const warnings: string[] = [];
+    if (decision.warnedBySurfaceMoisture && decision.surfaceMoisturePct != null) {
+      warnings.push(`surface moisture elevated (${decision.surfaceMoisturePct.toFixed(0)}%)`);
+    }
+    if (decision.warnedByRecentPrecip && decision.recentPrecipTotal72hMm != null) {
+      warnings.push(`${decision.recentPrecipTotal72hMm.toFixed(0)} mm rain in 72 h`);
+    }
+    if (decision.warnedByFreezeThaw && decision.freezeThawCycles7d != null) {
+      warnings.push(`${decision.freezeThawCycles7d} freeze-thaw cycles`);
+    }
+    return `Caution: ${warnings.join("; ")}. Scout field edges before committing equipment.`;
   }
 
-  // Seed Now
-  return { verdict: "Seed Now", explanation: `Soil at 6 cm is ${opts.soilTempC.toFixed(1)}°C (sustained ${opts.sustainedDays ?? "?"} days), frost risk is low, and field access looks workable. Conditions favor seeding.` };
+  return "Field conditions are workable. Soil is firm enough for equipment traffic.";
 }
 
-/** Determine field workability verdict. */
-function fieldWorkability(opts: {
-  surfaceMoisturePct: number | null;
-  recentPrecip72hMm: number | null;
-  freezeThawCycles7d: number | null;
-}): { verdict: "Fit" | "Marginal" | "Unfit"; explanation: string } {
-  if (opts.surfaceMoisturePct !== null && opts.surfaceMoisturePct > 85) {
-    return { verdict: "Unfit", explanation: `Surface moisture at ${opts.surfaceMoisturePct.toFixed(0)}% — soil saturated. Equipment access will cause compaction.` };
-  }
-  if (opts.recentPrecip72hMm !== null && opts.recentPrecip72hMm > 25) {
-    return { verdict: "Unfit", explanation: `${opts.recentPrecip72hMm.toFixed(0)} mm precipitation in the last 72 h. Fields need time to dry.` };
-  }
-  if (opts.freezeThawCycles7d !== null && opts.freezeThawCycles7d >= 4) {
-    return { verdict: "Unfit", explanation: `${opts.freezeThawCycles7d} freeze-thaw cycles. Top soil is unstable and prone to rutting.` };
+function buildPdfSeedingRecommendation(input: {
+  decision: SeedingAdvisoryDecision;
+  cropLabel: string;
+  frostDamageTempC: number;
+  fieldAccessExplanation: string;
+}): { severity: "critical" | "warning" | "info"; title: string; body: string; action: string } {
+  const cropLabel = input.cropLabel.trim().length > 0 ? input.cropLabel : "Crop";
+  const d = input.decision;
+
+  if (d.verdict === "too-early") {
+    const body =
+      d.reasonCode === "missing-soil-temp"
+        ? "Soil temperature data unavailable. Wait for weather station readings."
+        : d.reasonCode === "soil-below-threshold" && d.soilTempCurrentC != null
+          ? `Soil at 6 cm is ${d.soilTempCurrentC.toFixed(1)}°C — ${cropLabel} needs sustained ≥${d.thresholdC}°C. Wait for warmer conditions.`
+          : `Soil is ${d.soilTempCurrentC?.toFixed(1) ?? "—"}°C but has only been above ${d.thresholdC}°C for ${d.soilTempSustainedDays ?? 0} day(s). Need ${d.requiredDays}+ sustained days.`;
+    return {
+      severity: "critical",
+      title: `Too Early to Seed — ${cropLabel}`,
+      body,
+      action: "Wait for sustained warming. Track soil temperature daily.",
+    };
   }
 
-  const warnings: string[] = [];
-  if (opts.surfaceMoisturePct !== null && opts.surfaceMoisturePct > 70) {
-    warnings.push(`surface moisture elevated (${opts.surfaceMoisturePct.toFixed(0)}%)`);
-  }
-  if (opts.recentPrecip72hMm !== null && opts.recentPrecip72hMm > 10) {
-    warnings.push(`${opts.recentPrecip72hMm.toFixed(0)} mm rain in 72 h`);
-  }
-  if (opts.freezeThawCycles7d !== null && opts.freezeThawCycles7d >= 2) {
-    warnings.push(`${opts.freezeThawCycles7d} freeze-thaw cycles`);
+  if (d.verdict === "hold") {
+    if (d.reasonCode === "frost-risk") {
+      const body =
+        d.frostRiskMinTempC7d != null
+          ? `The lowest forecast low is ${d.frostRiskMinTempC7d.toFixed(1)}°C with ${d.frostRiskNights7d} frost-risk night${d.frostRiskNights7d === 1 ? "" : "s"} in the next 7 days${d.frostProbabilityPct7d != null ? ` and ${Math.round(d.frostProbabilityPct7d)}% probability of dropping below the crop damage threshold.` : "."}`
+          : `Frost-sensitive nights are still present in the next 7 days.`;
+      return {
+        severity: d.frostKillRisk ? "critical" : "warning",
+        title: d.frostKillRisk
+          ? `Hold Seeding for Kill-Risk Frost — ${cropLabel}`
+          : `Hold Seeding for Frost Risk — ${cropLabel}`,
+        body,
+        action: "Re-check conditions in 2–3 days. Monitor the 7-day forecast.",
+      };
+    }
+
+    return {
+      severity: input.decision.fieldAccessBlocked && !input.decision.tooDry ? "critical" : "warning",
+      title:
+        input.decision.reasonCode === "surface-too-dry"
+          ? `Hold Seeding for Surface Moisture — ${cropLabel}`
+          : input.decision.fieldAccessBlocked
+            ? `Hold Seeding for Field Access — ${cropLabel}`
+            : `Hold Seeding for Field Fit — ${cropLabel}`,
+      body:
+        input.decision.reasonCode === "surface-too-dry" && input.decision.surfaceMoisturePct != null
+          ? `Surface moisture is ${input.decision.surfaceMoisturePct.toFixed(0)}%, below the crop germination floor.`
+          : input.fieldAccessExplanation,
+      action: "Re-check conditions in 2–3 days. Monitor the 7-day forecast.",
+    };
   }
 
-  if (warnings.length > 0) {
-    return { verdict: "Marginal", explanation: `Caution: ${warnings.join("; ")}. Scout field edges before committing equipment.` };
-  }
-
-  return { verdict: "Fit", explanation: "Field conditions are workable. Soil is firm enough for equipment traffic." };
+  return {
+    severity: "info",
+    title: `Seeding Window Open — ${cropLabel}`,
+    body:
+      d.frostRiskMinTempC7d != null
+        ? `Soil @ 6 cm has cleared ${d.thresholdC}°C for ${d.soilTempSustainedDays ?? d.requiredDays}d, field access is workable, and the next 7 days stay above the ${input.frostDamageTempC.toFixed(1)}°C damage threshold${d.frostProbabilityPct7d != null ? ` with only ${Math.round(d.frostProbabilityPct7d)}% probability of crossing it.` : "."}`
+        : `Soil @ 6 cm has cleared ${d.thresholdC}°C for ${d.soilTempSustainedDays ?? d.requiredDays}d and field access is workable.`,
+    action: "Conditions favor seeding. Confirm with local soil probe before committing.",
+  };
 }
 
 /** Derive a plain-language recommended action from an alert title. */
@@ -279,6 +313,17 @@ export function buildFieldReportPdfRenderInput({
   const obs = m.weather.profile.latestObservation;
   const sig = m.weather.signals;
   const crop = m.cropContext;
+  const cropType = crop?.cropType ?? m.summary.cropType ?? null;
+  const growthStage = crop?.growthStage ?? m.summary.growthStage ?? null;
+  const cropRuleContext = resolveCropRuleContext({
+    rulePack: prairieDefaultRulePack,
+    cropContext: {
+      cropType,
+      growthStage,
+    },
+  });
+  const seedingThresholds = cropRuleContext.seedingThresholds;
+  const frostThresholds = cropRuleContext.weatherRisk.frost;
 
   /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
      PAGE 1 — COVER
@@ -671,7 +716,7 @@ export function buildFieldReportPdfRenderInput({
 
     // Add soil temperature row if available
     if (sig.soilTemp6cmCurrentC !== null) {
-      const soilThreshold = seedingTempThreshold(crop?.cropType ?? m.summary.cropType ?? null);
+      const soilThreshold = seedingThresholds.soilTempMinC;
       signalRows.push({
         label: "Soil Temp (6 cm)",
         value: `${fmt(sig.soilTemp6cmCurrentC)}°C`,
@@ -808,24 +853,26 @@ export function buildFieldReportPdfRenderInput({
 
     /* ── Seeding Intelligence ── */
 
-    const cropType = crop?.cropType ?? m.summary.cropType ?? null;
     const hasSoilTemp = sig.soilTemp6cmCurrentC !== null;
-    const growthStage = (crop?.growthStage ?? m.summary.growthStage ?? "").toLowerCase();
-    const isPreSeed = !growthStage || growthStage === "pre-seed" || growthStage.includes("pre");
+    const growthStageLabel = (growthStage ?? "").toLowerCase();
+    const isPreSeed =
+      !growthStageLabel ||
+      growthStageLabel === "pre-seed" ||
+      growthStageLabel.includes("pre");
 
     if (hasSoilTemp || isPreSeed) {
       blocks.push({ kind: "spacer", height: 6 });
       blocks.push({
         kind: "section-header",
         label: "Seeding Intelligence",
-        meta: cropType ? `${cropType} — ${seedingTempThreshold(cropType)}°C min` : "Spring assessment",
+        meta: cropType ? `${cropType} — ${seedingThresholds.soilTempMinC}°C min` : "Spring assessment",
         accentColor: GREEN,
       });
 
       // Soil temperature metrics
       const seedMetrics: { label: string; value: string; sub?: string; valueColor?: RGB }[] = [];
 
-      const threshold = seedingTempThreshold(cropType);
+      const threshold = seedingThresholds.soilTempMinC;
       if (sig.soilTemp6cmCurrentC !== null) {
         seedMetrics.push({
           label: "Soil Temp (6 cm)",
@@ -849,16 +896,22 @@ export function buildFieldReportPdfRenderInput({
       }
 
       // Field workability
-      const workability = fieldWorkability({
+      const accessDecision = resolveFieldAccessDecision({
         surfaceMoisturePct: snap?.surfacePct ?? null,
-        recentPrecip72hMm: sig.recentPrecipTotal72hMm,
+        recentPrecipTotal72hMm: sig.recentPrecipTotal72hMm,
         freezeThawCycles7d: sig.freezeThawCycles7d,
+        thresholds: seedingThresholds,
       });
       seedMetrics.push({
         label: "Field Access",
-        value: workability.verdict,
-        sub: workability.explanation,
-        valueColor: workability.verdict === "Unfit" ? RED : workability.verdict === "Marginal" ? AMBER : undefined,
+        value: accessDecision ? formatFieldAccessVerdict(accessDecision) : "—",
+        sub: accessDecision ? explainFieldAccessDecision(accessDecision) : "Field access not available",
+        valueColor:
+          accessDecision?.verdict === "wait"
+            ? RED
+            : accessDecision?.verdict === "marginal"
+              ? AMBER
+              : undefined,
       });
 
       blocks.push({
@@ -869,32 +922,37 @@ export function buildFieldReportPdfRenderInput({
       });
 
       // Seeding recommendation — the hero element
-      const rec = seedingRecommendation({
-        soilTempC: sig.soilTemp6cmCurrentC,
-        sustainedDays: sig.soilTemp6cmSustainedDays,
-        frostProbPct7d: sig.frostProbabilityPct7d,
-        frostNights7d: sig.frostRiskNights7d,
+      const seedingDecision = resolveSeedingAdvisoryDecision({
+        seedingThresholds,
+        frostThresholds,
+        soilTemp6cmCurrentC: sig.soilTemp6cmCurrentC,
+        soilTemp6cmSustainedDays: sig.soilTemp6cmSustainedDays,
         surfaceMoisturePct: snap?.surfacePct ?? null,
-        freezeThawCycles7d: sig.freezeThawCycles7d,
-        cropType,
+        fieldAccessVerdict: accessDecision?.verdict ?? null,
+        frostRiskMinTempC7d: sig.frostRiskMinTempC7d,
+        frostRiskNights7d: sig.frostRiskNights7d,
+        frostProbabilityPct7d: sig.frostProbabilityPct7d,
       });
+      if (seedingDecision) {
+        const seedingCard = buildPdfSeedingRecommendation({
+          decision: seedingDecision,
+          cropLabel: cropType ?? "Crop",
+          frostDamageTempC: frostThresholds.damageTempC,
+          fieldAccessExplanation:
+            accessDecision == null
+              ? "Field access conditions are not yet available."
+              : explainFieldAccessDecision(accessDecision),
+        });
 
-      blocks.push({
-        kind: "severity-card",
-        severity: rec.verdict === "Seed Now" ? "info" : rec.verdict === "Hold" ? "warning" : "critical",
-        title: rec.verdict === "Seed Now"
-          ? `Seeding Window Open — ${cropType ?? "Crop"}`
-          : rec.verdict === "Hold"
-            ? `Seeding On Hold — ${cropType ?? "Crop"}`
-            : `Too Early to Seed — ${cropType ?? "Crop"}`,
-        body: rec.explanation,
-        action: rec.verdict === "Seed Now"
-          ? "Conditions favor seeding. Confirm with local soil probe before committing."
-          : rec.verdict === "Hold"
-            ? "Re-check conditions in 2–3 days. Monitor the 7-day forecast."
-            : "Wait for sustained warming. Track soil temperature daily.",
-        marginTop: 6,
-      });
+        blocks.push({
+          kind: "severity-card",
+          severity: seedingCard.severity,
+          title: seedingCard.title,
+          body: seedingCard.body,
+          action: seedingCard.action,
+          marginTop: 6,
+        });
+      }
 
       // Soil temp progress bar
       if (sig.soilTemp6cmCurrentC !== null) {
