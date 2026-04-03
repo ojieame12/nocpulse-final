@@ -16,6 +16,7 @@ import {
   Waves,
   BarChart3,
   ShieldCheck,
+  Snowflake,
 } from 'lucide-react';
 import { DonutChart, SectionHeader } from '../ui';
 import { Button } from '../ui/Button';
@@ -113,6 +114,22 @@ export interface FieldSummaryProps {
     soil: string | null;
   } | null;
   dataQuality?: FieldDataQualitySummary | null;
+
+  // Frost risk (conditionally surfaced)
+  frostRisk?: {
+    /** 7-day minimum temperature forecast (°C). */
+    minTempC: number;
+    /** Count of frost-risk nights in next 7 days. */
+    frostNights: number;
+    /** Probability of a frost event (0–100). */
+    probabilityPct: number | null;
+    /** Freeze-thaw cycle count (past 7 days). */
+    freezeThawCycles: number | null;
+    /** Verdict: 'clear' | 'watch' | 'protect'. */
+    verdict: 'clear' | 'watch' | 'protect';
+    /** Human sub-label for the verdict badge. */
+    verdictSub: string;
+  } | null;
 }
 
 /* ── Layer Pills ── */
@@ -325,6 +342,80 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
           </div>
         </div>
       </div>
+
+      {/* FROST RISK — conditionally rendered when risk is active */}
+      {field.frostRisk && field.frostRisk.verdict !== 'clear' && (
+        <div className="panel__section">
+          <SectionHeader
+            label="FROST RISK"
+            meta={
+              <span
+                className={`frost-verdict-badge frost-verdict-badge--${field.frostRisk.verdict}`}
+              >
+                {field.frostRisk.verdict === 'protect' ? 'Protect' : 'Watch'}
+              </span>
+            }
+          />
+          <div className="panel__data-grid">
+            <div className="panel__data-row">
+              <div className="panel__data-cell" data-metric-hint="frost-min" data-metric-value={`${field.frostRisk.minTempC}°C`}>
+                <div className="panel__data-cell-icon-label">
+                  <Snowflake size={12} />
+                  <span className="panel__data-cell-label">Frost Min (7d)</span>
+                </div>
+                <ValueSlot
+                  className="panel__data-cell-value"
+                  style={{
+                    color: field.frostRisk.verdict === 'protect'
+                      ? 'var(--status-danger)'
+                      : 'var(--status-warning)',
+                  }}
+                >
+                  {field.frostRisk.minTempC.toFixed(1)}°C
+                </ValueSlot>
+                <span className="panel__data-cell-sub">{field.frostRisk.verdictSub}</span>
+              </div>
+              <div className="panel__data-cell" data-metric-hint="frost-nights" data-metric-value={`${field.frostRisk.frostNights}`}>
+                <div className="panel__data-cell-icon-label">
+                  <Thermometer size={12} />
+                  <span className="panel__data-cell-label">Frost Nights</span>
+                </div>
+                <ValueSlot
+                  className="panel__data-cell-value"
+                  style={{
+                    color: field.frostRisk.frostNights >= 3
+                      ? 'var(--status-danger)'
+                      : field.frostRisk.frostNights >= 1
+                        ? 'var(--status-warning)'
+                        : undefined,
+                  }}
+                >
+                  {field.frostRisk.frostNights}
+                </ValueSlot>
+                <span className="panel__data-cell-sub">
+                  {field.frostRisk.probabilityPct != null
+                    ? `${Math.round(field.frostRisk.probabilityPct)}% probability`
+                    : 'Next 7 days'}
+                </span>
+              </div>
+            </div>
+            {field.frostRisk.freezeThawCycles != null && field.frostRisk.freezeThawCycles > 0 && (
+              <div className="panel__data-row">
+                <div className="panel__data-cell" data-metric-hint="freeze-thaw" data-metric-value={`${field.frostRisk.freezeThawCycles}`}>
+                  <div className="panel__data-cell-icon-label">
+                    <ArrowLeftRight size={12} />
+                    <span className="panel__data-cell-label">Freeze-Thaw Cycles</span>
+                  </div>
+                  <ValueSlot className="panel__data-cell-value">
+                    {field.frostRisk.freezeThawCycles}
+                  </ValueSlot>
+                  <span className="panel__data-cell-sub">Past 7 days · affects field access</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ACTIVE ALERTS */}
       <div className="panel__section">

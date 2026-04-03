@@ -4464,6 +4464,28 @@ img {
   color: var(--status-info);
 }
 
+/* ── Frost Verdict Badge ── */
+
+.frost-verdict-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.frost-verdict-badge--watch {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.frost-verdict-badge--protect {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
 /* ── Evidence Card ── */
 
 .evidence-card {

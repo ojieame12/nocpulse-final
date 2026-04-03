@@ -12,6 +12,7 @@ import {
   deriveSummaryConfidenceBreakdown,
   deriveSummaryDataSources,
   deriveSummaryDataQuality,
+  deriveSummaryFrostRisk,
 } from "./buildFieldOverviewViewModel";
 import { buildActionProps } from "./buildFieldOverviewViewModel.action";
 import {
@@ -1443,6 +1444,65 @@ test("buildActionProps prioritizes spring seeding readiness over frost watch whe
     action.questions[1]?.answer ?? "",
     /seed-depth soil temperature is still missing/i,
   );
+});
+
+test("deriveSummaryFrostRisk returns protect for hard-frost signals", () => {
+  const frostRisk = deriveSummaryFrostRisk({
+    weather: {
+      signals: {
+        frostRiskMinTempC7d: -3.4,
+        frostRiskNights7d: 2,
+        frostProbabilityPct7d: 68,
+        freezeThawCycles7d: 1,
+      },
+    },
+  });
+
+  assert.deepEqual(frostRisk, {
+    minTempC: -3.4,
+    frostNights: 2,
+    probabilityPct: 68,
+    freezeThawCycles: 1,
+    verdict: "protect",
+    verdictSub: "2 frost nights forecast",
+  });
+});
+
+test("deriveSummaryFrostRisk returns watch for marginal frost signals", () => {
+  const frostRisk = deriveSummaryFrostRisk({
+    weather: {
+      signals: {
+        frostRiskMinTempC7d: 0.8,
+        frostRiskNights7d: 1,
+        frostProbabilityPct7d: 34,
+        freezeThawCycles7d: 2,
+      },
+    },
+  });
+
+  assert.deepEqual(frostRisk, {
+    minTempC: 0.8,
+    frostNights: 1,
+    probabilityPct: 34,
+    freezeThawCycles: 2,
+    verdict: "watch",
+    verdictSub: "1 marginal night ahead",
+  });
+});
+
+test("deriveSummaryFrostRisk hides the summary when no actionable frost signal exists", () => {
+  const frostRisk = deriveSummaryFrostRisk({
+    weather: {
+      signals: {
+        frostRiskMinTempC7d: 5.6,
+        frostRiskNights7d: 0,
+        frostProbabilityPct7d: 8,
+        freezeThawCycles7d: 0,
+      },
+    },
+  });
+
+  assert.equal(frostRisk, null);
 });
 
 test("buildActionProps deduplicates active signals while preserving active intelligence counts", () => {

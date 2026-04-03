@@ -1023,6 +1023,7 @@ export async function buildFieldOverviewViewModel(
     // Data sources
     dataSources: deriveSummaryDataSources(latestMoisture, weatherDataAvailability),
     dataQuality: summaryDataQuality,
+    frostRisk: deriveSummaryFrostRisk(readModel),
   };
 
   const viewModel = {
@@ -1324,6 +1325,65 @@ export function deriveSummaryDataSources(
   }
 
   return { satellite, weather, soil };
+}
+
+export function deriveSummaryFrostRisk(
+  readModel: { weather?: { signals?: Record<string, unknown> | null } },
+): FieldSummaryProps["frostRisk"] {
+  const signals = readModel.weather?.signals;
+  if (!signals) {
+    return null;
+  }
+
+  const minTempC =
+    typeof signals.frostRiskMinTempC7d === "number" && Number.isFinite(signals.frostRiskMinTempC7d)
+      ? signals.frostRiskMinTempC7d
+      : typeof signals.frostRiskMinTempC === "number" && Number.isFinite(signals.frostRiskMinTempC)
+        ? signals.frostRiskMinTempC
+        : null;
+  const frostNights =
+    typeof signals.frostRiskNights7d === "number" && Number.isFinite(signals.frostRiskNights7d)
+      ? Math.max(0, Math.round(signals.frostRiskNights7d))
+      : 0;
+  const probabilityPct =
+    typeof signals.frostProbabilityPct7d === "number" && Number.isFinite(signals.frostProbabilityPct7d)
+      ? signals.frostProbabilityPct7d
+      : null;
+  const freezeThawCycles =
+    typeof signals.freezeThawCycles7d === "number" && Number.isFinite(signals.freezeThawCycles7d)
+      ? Math.max(0, Math.round(signals.freezeThawCycles7d))
+      : null;
+
+  const hasActionableRisk =
+    (minTempC != null && minTempC <= 2) ||
+    frostNights > 0 ||
+    (probabilityPct != null && probabilityPct >= 15);
+  if (!hasActionableRisk) {
+    return null;
+  }
+
+  const verdict: "watch" | "protect" =
+    (minTempC != null && minTempC <= -2) ||
+    frostNights >= 3 ||
+    (probabilityPct != null && probabilityPct >= 60)
+      ? "protect"
+      : "watch";
+
+  return {
+    minTempC: minTempC ?? 0,
+    frostNights,
+    probabilityPct,
+    freezeThawCycles,
+    verdict,
+    verdictSub:
+      verdict === "protect"
+        ? frostNights > 0
+          ? `${frostNights} frost night${frostNights === 1 ? "" : "s"} forecast`
+          : `Low of ${minTempC?.toFixed(1) ?? "0.0"}°C forecast`
+        : frostNights > 0
+          ? `${frostNights} marginal night${frostNights === 1 ? "" : "s"} ahead`
+          : "Near-frost conditions in the next 7 days",
+  };
 }
 
 function isSummarySnapshotStale(snapshot: any | null | undefined) {
