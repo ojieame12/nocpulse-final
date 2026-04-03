@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { FieldWeatherForecast } from "@fieldpulse/module-weather";
-import { resolveSprayWindowRecommendation } from "./buildFieldOverviewViewModel.spray";
+import type { FieldWeatherForecast } from "../contracts/FieldWeatherForecast";
+import {
+  findSprayWindows,
+  formatFieldLocalTime,
+  resolveFieldTimeZone,
+} from "./resolveSprayWindows";
 
 const WORKSPACE_ID = "workspace-1";
 const FIELD_ID = "field-1";
@@ -33,7 +37,19 @@ function createForecast(input: {
   };
 }
 
-test("resolveSprayWindowRecommendation returns the first eligible 4-hour block", () => {
+test("resolveFieldTimeZone prefers America/Regina for Saskatchewan field coordinates", () => {
+  assert.equal(resolveFieldTimeZone([-106.67, 52.13]), "America/Regina");
+});
+
+test("formatFieldLocalTime renders Saskatchewan spray windows in local CST", () => {
+  const label = formatFieldLocalTime("2026-04-02T18:00:00.000Z", [-106.67, 52.13]);
+
+  assert.match(label, /12:00/);
+  assert.match(label, /CST/);
+  assert.doesNotMatch(label, /UTC/);
+});
+
+test("findSprayWindows returns 4-hour blocks with an inclusive end hour", () => {
   const forecasts = [
     createForecast({ validAt: "2026-04-02T13:00:00.000Z", airTemperatureC: 8, windSpeedKph: 10 }),
     createForecast({ validAt: "2026-04-02T14:00:00.000Z", airTemperatureC: 12 }),
@@ -45,41 +61,16 @@ test("resolveSprayWindowRecommendation returns the first eligible 4-hour block",
     createForecast({ validAt: "2026-04-02T20:00:00.000Z", airTemperatureC: 15 }),
   ];
 
-  const recommendation = resolveSprayWindowRecommendation({
-    cropLabel: "Canola",
-    sprayWindowCount24h: 1,
-    forecasts,
-    fieldLabelPoint: [-106.67, 52.13],
-    weatherSourceLabel: "open-meteo · hourly-v1",
+  const windows = findSprayWindows(forecasts, {
+    horizonHours: 24,
+    maxWindows: 1,
+    consecutiveHours: 4,
   });
 
-  assert.equal(recommendation?.title, "Spray window open");
-  assert.equal(recommendation?.urgency, "Ready");
-  assert.match(recommendation?.whyNow ?? "", /earliest 4-hour spray block/i);
-  assert.doesNotMatch(recommendation?.whyNow ?? "", /UTC/);
-  assert.match(recommendation?.whyNow ?? "", /12:00/);
-  assert.match(recommendation?.whyNow ?? "", /CST/);
-  assert.match(recommendation?.signals[0]?.detail ?? "", /open-meteo · hourly-v1/i);
-  assert.match(recommendation?.signals[0]?.detail ?? "", /12:00/);
-  assert.match(recommendation?.signals[0]?.detail ?? "", /CST/);
-});
-
-test("resolveSprayWindowRecommendation returns null when no eligible 4-hour block exists", () => {
-  const forecasts = Array.from({ length: 8 }, (_, index) =>
-    createForecast({
-      validAt: new Date(Date.parse("2026-04-02T13:00:00.000Z") + index * 60 * 60 * 1000).toISOString(),
-      airTemperatureC: 11,
-      windSpeedKph: 24,
-    }),
-  );
-
-  const recommendation = resolveSprayWindowRecommendation({
-    cropLabel: "Wheat",
-    sprayWindowCount24h: 0,
-    forecasts,
-    fieldLabelPoint: [-106.67, 52.13],
-    weatherSourceLabel: "open-meteo · hourly-v1",
-  });
-
-  assert.equal(recommendation, null);
+  assert.equal(windows.length, 1);
+  assert.equal(windows[0]?.startAt, "2026-04-02T14:00:00.000Z");
+  assert.equal(windows[0]?.endAt, "2026-04-02T18:00:00.000Z");
+  assert.equal(windows[0]?.maxWindKph, 12);
+  assert.equal(windows[0]?.minAverageTempC, 12);
+  assert.equal(windows[0]?.maxAverageTempC, 17);
 });

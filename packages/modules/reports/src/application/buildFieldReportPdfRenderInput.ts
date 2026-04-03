@@ -3,7 +3,11 @@ import { STATUS, BRAND, SURFACE } from "@fieldpulse/pdf";
 import type { FieldAlert } from "@fieldpulse/module-alerts";
 import type { FieldIntelligenceFinding } from "@fieldpulse/module-crop-intelligence";
 import type { FieldZoneActivityItem } from "@fieldpulse/module-crop-intelligence";
-import type { FieldWeatherForecast } from "@fieldpulse/module-weather";
+import {
+  findSprayWindows,
+  formatFieldLocalTime,
+  type FieldWeatherForecast,
+} from "@fieldpulse/module-weather";
 import type { FieldReportReadModel } from "../contracts/FieldReportReadModel";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -168,73 +172,6 @@ function fieldWorkability(opts: {
   }
 
   return { verdict: "Fit", explanation: "Field conditions are workable. Soil is firm enough for equipment traffic." };
-}
-
-/* ── Spray Window Helpers ── */
-
-type SprayWindowBlock = {
-  startAt: string;
-  endAt: string;
-  maxWindKph: number;
-  maxPrecipProbabilityPct: number | null;
-  avgTempRangeLabel: string;
-};
-
-function isSprayEligible(f: FieldWeatherForecast): boolean {
-  const avgTemp = (f.airTemperatureMinC + f.airTemperatureMaxC) / 2;
-  return (
-    f.windSpeedKph <= 18 &&
-    (f.precipitationProbabilityPct ?? 0) < 20 &&
-    f.precipitationMm < 1 &&
-    avgTemp >= 10 &&
-    avgTemp <= 30
-  );
-}
-
-function addHoursToIso(value: string, hours: number) {
-  return new Date(Date.parse(value) + hours * 60 * 60 * 1000).toISOString();
-}
-
-function findSprayWindows(forecasts: readonly FieldWeatherForecast[], maxWindows = 3): SprayWindowBlock[] {
-  const windows: SprayWindowBlock[] = [];
-  const horizon = forecasts.slice(0, 48); // 48h lookahead
-  let i = 0;
-  while (i <= horizon.length - 4 && windows.length < maxWindows) {
-    const block = horizon.slice(i, i + 4);
-    if (block.length < 4 || block.some((f) => !isSprayEligible(f))) {
-      i += 1;
-      continue;
-    }
-    const avgs = block.map((f) => (f.airTemperatureMinC + f.airTemperatureMaxC) / 2);
-    const precips = block
-      .map((f) => f.precipitationProbabilityPct)
-      .filter((v): v is number => v !== null && Number.isFinite(v));
-    windows.push({
-      startAt: block[0]!.validAt,
-      endAt: addHoursToIso(block[block.length - 1]!.validAt, 1),
-      maxWindKph: Math.max(...block.map((f) => f.windSpeedKph)),
-      maxPrecipProbabilityPct: precips.length > 0 ? Math.max(...precips) : null,
-      avgTempRangeLabel: `${Math.min(...avgs).toFixed(0)}–${Math.max(...avgs).toFixed(0)}°C`,
-    });
-    i += 4; // skip past this window
-  }
-  return windows;
-}
-
-function fmtWindowTime(iso: string): string {
-  try {
-    const label = new Date(iso).toLocaleString("en-CA", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-      timeZone: "UTC",
-    });
-    return `${label} UTC`;
-  } catch {
-    return `${iso.slice(0, 16).replace("T", " ")} UTC`;
-  }
 }
 
 /** Derive a plain-language recommended action from an alert title. */
@@ -1053,7 +990,14 @@ export function buildFieldReportPdfRenderInput({
   /* ── Spray Window Detail ── */
 
   const allForecasts = m.weather.profile.forecasts;
-  const sprayWindows = allForecasts.length >= 4 ? findSprayWindows(allForecasts) : [];
+  const sprayWindows =
+    allForecasts.length >= 4
+      ? findSprayWindows(allForecasts, {
+          horizonHours: 48,
+          maxWindows: 3,
+          consecutiveHours: 4,
+        })
+      : [];
 
   if (sprayWindows.length > 0 || (sig && sig.sprayWindowCount24h > 0)) {
     blocks.push({ kind: "spacer", height: 6 });
@@ -1070,7 +1014,7 @@ export function buildFieldReportPdfRenderInput({
       blocks.push({
         kind: "text",
         style: "caption",
-        text: "Eligible 4-hour blocks where wind ≤ 18 km/h, rain probability < 20%, precipitation < 1 mm, and average temperature 10–30°C. All times shown in UTC.",
+        text: "Eligible 4-hour blocks where wind ≤ 18 km/h, rain probability < 20%, precipitation < 1 mm, and average temperature 10–30°C. All times shown in field-local time.",
       });
 
       blocks.push({
@@ -1087,11 +1031,11 @@ export function buildFieldReportPdfRenderInput({
         rows: sprayWindows.map((w, i) => ({
           cells: [
             String(i + 1),
-            fmtWindowTime(w.startAt),
-            fmtWindowTime(w.endAt),
+            formatFieldLocalTime(w.startAt, m.field.labelPoint),
+            formatFieldLocalTime(w.endAt, m.field.labelPoint),
             `${Math.round(w.maxWindKph)} km/h`,
             w.maxPrecipProbabilityPct !== null ? `${Math.round(w.maxPrecipProbabilityPct)}%` : "Low",
-            w.avgTempRangeLabel,
+            `${w.minAverageTempC.toFixed(0)}–${w.maxAverageTempC.toFixed(0)}°C`,
           ],
         })),
         marginTop: 6,
@@ -1101,8 +1045,8 @@ export function buildFieldReportPdfRenderInput({
       blocks.push({
         kind: "severity-card",
         severity: "info",
-        title: `Best window: ${fmtWindowTime(best.startAt)} – ${fmtWindowTime(best.endAt)}`,
-        body: `Wind up to ${Math.round(best.maxWindKph)} km/h, ${best.maxPrecipProbabilityPct !== null ? `${Math.round(best.maxPrecipProbabilityPct)}% rain risk` : "low rain risk"}, temperatures ${best.avgTempRangeLabel}.`,
+        title: `Best window: ${formatFieldLocalTime(best.startAt, m.field.labelPoint)} – ${formatFieldLocalTime(best.endAt, m.field.labelPoint)}`,
+        body: `Wind up to ${Math.round(best.maxWindKph)} km/h, ${best.maxPrecipProbabilityPct !== null ? `${Math.round(best.maxPrecipProbabilityPct)}% rain risk` : "low rain risk"}, temperatures ${best.minAverageTempC.toFixed(0)}–${best.maxAverageTempC.toFixed(0)}°C.`,
         action: "Confirm target crop stage and product label. Re-check wind on exposed field edges before committing.",
         marginTop: 6,
       });

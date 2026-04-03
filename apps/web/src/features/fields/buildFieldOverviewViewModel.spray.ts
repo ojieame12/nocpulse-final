@@ -1,4 +1,10 @@
-import type { FieldWeatherForecast } from "@fieldpulse/module-weather";
+import {
+  findSprayWindows,
+  formatFieldLocalTime,
+  type FieldLabelPoint,
+  type FieldWeatherForecast,
+  type SprayWindowBlock,
+} from "@fieldpulse/module-weather";
 
 export type SprayWindowRecommendationPresentation = {
   title: string;
@@ -21,47 +27,6 @@ export type SprayWindowRecommendationPresentation = {
   }[];
 };
 
-type SprayWindowBlock = {
-  startAt: string;
-  endAt: string;
-  maxWindKph: number;
-  maxPrecipProbabilityPct: number | null;
-  minAverageTempC: number;
-  maxAverageTempC: number;
-};
-
-function averageTemperature(forecast: FieldWeatherForecast) {
-  return (forecast.airTemperatureMinC + forecast.airTemperatureMaxC) / 2;
-}
-
-function addHoursToIso(value: string, hours: number) {
-  return new Date(Date.parse(value) + hours * 60 * 60 * 1000).toISOString();
-}
-
-function isSprayEligible(forecast: FieldWeatherForecast) {
-  const averageTempC = averageTemperature(forecast);
-
-  return (
-    forecast.windSpeedKph <= 18 &&
-    (forecast.precipitationProbabilityPct ?? 0) < 20 &&
-    forecast.precipitationMm < 1 &&
-    averageTempC >= 10 &&
-    averageTempC <= 30
-  );
-}
-
-function formatWindowLabel(value: string) {
-  const label = new Date(value).toLocaleString("en-CA", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "UTC",
-  });
-  return `${label} UTC`;
-}
-
 function formatSignedRange(minValue: number, maxValue: number) {
   return `${minValue.toFixed(0)}–${maxValue.toFixed(0)}°C`;
 }
@@ -69,38 +34,20 @@ function formatSignedRange(minValue: number, maxValue: number) {
 function findFirstSprayWindow(
   forecasts: readonly FieldWeatherForecast[],
 ): SprayWindowBlock | null {
-  const next24h = forecasts.slice(0, 24);
-
-  for (let index = 0; index <= next24h.length - 4; index += 1) {
-    const window = next24h.slice(index, index + 4);
-
-    if (window.length < 4 || window.some((forecast) => !isSprayEligible(forecast))) {
-      continue;
-    }
-
-    const averages = window.map(averageTemperature);
-    const precipProbabilities = window
-      .map((forecast) => forecast.precipitationProbabilityPct)
-      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-
-    return {
-      startAt: window[0]!.validAt,
-      endAt: addHoursToIso(window[window.length - 1]!.validAt, 1),
-      maxWindKph: Math.max(...window.map((forecast) => forecast.windSpeedKph)),
-      maxPrecipProbabilityPct:
-        precipProbabilities.length > 0 ? Math.max(...precipProbabilities) : null,
-      minAverageTempC: Math.min(...averages),
-      maxAverageTempC: Math.max(...averages),
-    };
-  }
-
-  return null;
+  return (
+    findSprayWindows(forecasts, {
+      horizonHours: 24,
+      maxWindows: 1,
+      consecutiveHours: 4,
+    })[0] ?? null
+  );
 }
 
 export function resolveSprayWindowRecommendation(input: {
   cropLabel: string;
   sprayWindowCount24h: number | null;
   forecasts: readonly FieldWeatherForecast[];
+  fieldLabelPoint?: FieldLabelPoint | null;
   weatherSourceLabel?: string | null;
 }): SprayWindowRecommendationPresentation | null {
   const sprayWindowCount24h =
@@ -119,8 +66,8 @@ export function resolveSprayWindowRecommendation(input: {
 
   const cropLabel = input.cropLabel.trim().length > 0 ? input.cropLabel : "This crop";
   const weatherSourceLabel = input.weatherSourceLabel?.trim() || "weather-backed";
-  const startLabel = formatWindowLabel(firstWindow.startAt);
-  const endLabel = formatWindowLabel(firstWindow.endAt);
+  const startLabel = formatFieldLocalTime(firstWindow.startAt, input.fieldLabelPoint);
+  const endLabel = formatFieldLocalTime(firstWindow.endAt, input.fieldLabelPoint);
   const precipLabel =
     firstWindow.maxPrecipProbabilityPct != null
       ? `${Math.round(firstWindow.maxPrecipProbabilityPct)}% rain chance`

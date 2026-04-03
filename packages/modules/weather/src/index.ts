@@ -65,6 +65,17 @@ export {
   type RefreshFieldWeatherUseCaseInput,
 } from "./application/refreshFieldWeather";
 export {
+  DEFAULT_SPRAY_WINDOW_THRESHOLDS,
+  findSprayWindows,
+  formatFieldLocalTime,
+  isSprayEligibleForecast,
+  resolveFieldTimeZone,
+  type FieldLabelPoint,
+  type FindSprayWindowsOptions,
+  type SprayWindowBlock,
+  type SprayWindowThresholds,
+} from "./application/resolveSprayWindows";
+export {
   replaceFieldWeatherForecastSet,
   type ReplaceFieldWeatherForecastSetUseCaseInput,
 } from "./application/replaceFieldWeatherForecastSet";
