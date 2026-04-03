@@ -1256,8 +1256,10 @@ test("crop PDF preserves crop-panel weather pressure and threshold signals", () 
     weather: {
       profile: {
         latestObservation: {
+          airTemperatureC: 2.4,
           soilMoisturePct: 62,
           soilTemperature6cmC: 6.1,
+          windSpeedKph: 19,
         },
       },
       signals: {
@@ -1289,6 +1291,7 @@ test("crop PDF preserves crop-panel weather pressure and threshold signals", () 
   };
 
   const crop = buildCropProps(readModel);
+  const report = buildReportProps(readModel, "Sigurson", () => "just now");
   const artifact = prepareFieldCropReportArtifact({
     fieldId: "field-234",
     fieldName: "Sigurson",
@@ -1300,10 +1303,18 @@ test("crop PDF preserves crop-panel weather pressure and threshold signals", () 
   const pdfText = Buffer.from(artifact.bytes).toString("utf8");
 
   assert.equal(crop.fieldTiles[0]?.label, "FROST RISK");
+  assert.equal(
+    crop.fieldTiles[0]?.sub,
+    "Min -2.5°C · 1 night next 7d · 43% probability",
+  );
   assert.equal(crop.fieldTiles[1]?.label, "CROP WATER DEMAND");
   assert.equal(crop.thresholds[0]?.actual, "28.4%");
   assert.match(crop.thresholds[0]?.notes ?? "", /within optimal range/i);
   assert.equal(crop.alerts[0]?.title, "Critical frost risk next 24h");
+  assert.equal(
+    report.cropParams.find((item) => item.label === "Frost Min 7d (1n · 43%)")?.value,
+    "-2.5°C",
+  );
   assert.match(pdfText, /RECENT WEATHER PRESSURE/i);
   assert.match(pdfText, /FROST RISK/i);
   assert.match(pdfText, /CROP WATER DEMAND/i);

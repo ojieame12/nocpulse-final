@@ -18,6 +18,7 @@ import {
   formatHistoryLabel,
 } from "./buildFieldOverviewViewModel.shared";
 import { averageMeasurement } from "./buildFieldOverviewViewModel.raster";
+import { describeFrostRiskSummary } from "@fieldpulse/module-weather";
 import {
   resolveCanopySignalPresentation,
   resolveCropStagePresentation,
@@ -368,22 +369,18 @@ function buildWatchlistSummary(input: {
     });
   }
 
-  const frostMin =
-    input.weatherSignals?.frostRiskMinTempC7d ??
-    input.weatherSignals?.frostRiskMinTempC ??
-    null;
+  const frostSummary = describeFrostRiskSummary({
+    frostRiskMinTempC: input.weatherSignals?.frostRiskMinTempC ?? null,
+    frostRiskMinTempC7d: input.weatherSignals?.frostRiskMinTempC7d ?? null,
+    frostRiskNights7d: input.weatherSignals?.frostRiskNights7d ?? null,
+    frostProbabilityPct7d: input.weatherSignals?.frostProbabilityPct7d ?? null,
+  });
+  const frostMin = frostSummary.minTempC;
   const frostRiskNights7d = input.weatherSignals?.frostRiskNights7d ?? null;
   const frostProbabilityPct7d = input.weatherSignals?.frostProbabilityPct7d ?? null;
-  const frostHorizonLabel =
-    input.weatherSignals?.frostRiskMinTempC7d != null ? "next 7d" : "next 24h";
-  const frostDetailLabel =
-    input.weatherSignals?.frostRiskMinTempC7d != null
-      ? "Lowest forecast low"
-      : "Next overnight minimum";
-  const frostProbabilityLabel =
-    frostProbabilityPct7d != null && Number.isFinite(frostProbabilityPct7d)
-      ? `${Math.round(frostProbabilityPct7d)}% probability`
-      : null;
+  const frostHorizonLabel = frostSummary.horizonLabel;
+  const frostDetailLabel = frostSummary.detailLabel;
+  const frostProbabilityLabel = frostSummary.probabilityLabel;
 
   if (
     typeof frostMin === "number" &&
@@ -418,9 +415,7 @@ function buildWatchlistSummary(input: {
           label: `Frost min ${frostMin.toFixed(1)}°C`,
           color: severity === "high" ? "red" : "yellow",
           detail: [
-            frostRiskNights7d != null && frostRiskNights7d > 0
-              ? `${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}`
-              : frostDetailLabel,
+            frostSummary.riskNightsLabel ?? frostDetailLabel,
             frostProbabilityLabel,
             input.weatherSourceLabel,
           ]
@@ -732,22 +727,18 @@ export function buildActionProps(
       weatherSignals?.updatedAt ?? weatherSignals?.observedAt ?? null,
     moistureObservedAt: moisture?.observedAt ?? null,
   });
-  const frostMin =
-    weatherSignals?.frostRiskMinTempC7d ??
-    weatherSignals?.frostRiskMinTempC ??
-    null;
+  const frostSummary = describeFrostRiskSummary({
+    frostRiskMinTempC: weatherSignals?.frostRiskMinTempC ?? null,
+    frostRiskMinTempC7d: weatherSignals?.frostRiskMinTempC7d ?? null,
+    frostRiskNights7d: weatherSignals?.frostRiskNights7d ?? null,
+    frostProbabilityPct7d: weatherSignals?.frostProbabilityPct7d ?? null,
+  });
+  const frostMin = frostSummary.minTempC;
   const frostRiskNights7d = weatherSignals?.frostRiskNights7d ?? null;
-  const frostHorizonLabel =
-    weatherSignals?.frostRiskMinTempC7d != null ? "next 7d" : "next 24h";
-  const frostDetailLabel =
-    weatherSignals?.frostRiskMinTempC7d != null
-      ? "Lowest forecast low"
-      : "Next overnight minimum";
   const frostProbabilityPct7d = weatherSignals?.frostProbabilityPct7d ?? null;
-  const frostProbabilityLabel =
-    frostProbabilityPct7d != null && Number.isFinite(frostProbabilityPct7d)
-      ? `${Math.round(frostProbabilityPct7d)}% probability`
-      : null;
+  const frostHorizonLabel = frostSummary.horizonLabel;
+  const frostDetailLabel = frostSummary.detailLabel;
+  const frostProbabilityLabel = frostSummary.probabilityLabel;
 
   const activeSignals = finalizeRankedSignals(
     [
@@ -873,13 +864,11 @@ export function buildActionProps(
                 : frostMin <= 2
                   ? "yellow"
                   : "green",
-            detail: [
-              frostRiskNights7d != null && frostRiskNights7d > 0
-                ? `${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}`
-                : frostDetailLabel,
-              frostProbabilityLabel,
-              weatherSourceLabel,
-            ]
+              detail: [
+                frostSummary.riskNightsLabel ?? frostDetailLabel,
+                frostProbabilityLabel,
+                weatherSourceLabel,
+              ]
               .filter((value): value is string => Boolean(value))
               .join(" · "),
           }

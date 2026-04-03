@@ -3,7 +3,10 @@ import {
   resolveCropRuleContext,
 } from "@fieldpulse/module-crop-intelligence";
 import type { FieldRasterObservation } from "@fieldpulse/module-imagery";
-import { summarizeForecastDays } from "@fieldpulse/module-weather";
+import {
+  describeFrostRiskSummary,
+  summarizeForecastDays,
+} from "@fieldpulse/module-weather";
 import type {
   FieldReportProps,
   ReadingIconKey,
@@ -184,20 +187,14 @@ export function buildReportProps(
   );
   const rootMoistureAvg = moisture?.rootZoneAvgPct ?? null;
   const surfaceMoistureAvg = moisture?.surfaceAvgPct ?? null;
-  const frostMinTemp =
-    weatherSignals?.frostRiskMinTempC7d ??
-    weatherSignals?.frostRiskMinTempC ??
-    null;
-  const frostRiskNights7d = weatherSignals?.frostRiskNights7d ?? null;
-  const frostProbabilityPct7d = weatherSignals?.frostProbabilityPct7d ?? null;
-  const frostLabel =
-    weatherSignals?.frostRiskMinTempC7d != null
-      ? frostRiskNights7d != null && frostRiskNights7d > 0
-        ? `Frost Min 7d (${frostRiskNights7d}n${frostProbabilityPct7d != null ? ` · ${Math.round(frostProbabilityPct7d)}%` : ""})`
-        : frostProbabilityPct7d != null
-          ? `Frost Min 7d (${Math.round(frostProbabilityPct7d)}%)`
-          : "Frost Min 7d"
-      : "Frost Min";
+  const frostSummary = describeFrostRiskSummary({
+    frostRiskMinTempC: weatherSignals?.frostRiskMinTempC ?? null,
+    frostRiskMinTempC7d: weatherSignals?.frostRiskMinTempC7d ?? null,
+    frostRiskNights7d: weatherSignals?.frostRiskNights7d ?? null,
+    frostProbabilityPct7d: weatherSignals?.frostProbabilityPct7d ?? null,
+  });
+  const frostMinTemp = frostSummary.minTempC;
+  const frostLabel = frostSummary.reportLabel;
   const springSeedingContext = isSpringSeedingContext(cropStagePresentation);
   const soilTempPresentation = resolveSoilTempPresentation({
     soilTemp6cmCurrentC:

@@ -6,6 +6,7 @@ import {
   type FieldAccessVerdict,
   type SeedingThresholdRulePack,
 } from "@fieldpulse/module-crop-intelligence";
+import { describeFrostRiskSummary } from "@fieldpulse/module-weather";
 import type { CropStagePresentation } from "./buildFieldOverviewViewModel.cropSignals";
 
 export type SpringMetricTone = "danger" | "warning" | "positive" | "info";
@@ -67,14 +68,6 @@ function signalColor(tone: SpringMetricTone): SpringSignalColor {
 
 function formatSignedTemperature(value: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}°C`;
-}
-
-function formatProbabilityLabel(value: number | null) {
-  if (value == null || !Number.isFinite(value)) {
-    return null;
-  }
-
-  return `${Math.round(value)}% probability`;
 }
 
 function formatSoilTempDetail(input: {
@@ -241,7 +234,12 @@ export function resolveSeedingRecommendation(input: {
   const frostRiskNights7d = decision.frostRiskNights7d;
   const frostProbabilityPct7d = decision.frostProbabilityPct7d;
   const weatherSourceLabel = input.weatherSourceLabel?.trim() || "weather-backed";
-  const frostProbabilityLabel = formatProbabilityLabel(frostProbabilityPct7d);
+  const frostSummary = describeFrostRiskSummary({
+    frostRiskMinTempC: null,
+    frostRiskMinTempC7d,
+    frostRiskNights7d,
+    frostProbabilityPct7d,
+  });
   const thresholdC = decision.thresholdC;
   const requiredDays = decision.requiredDays;
   const soilReady = decision.soilReady;
@@ -258,10 +256,8 @@ export function resolveSeedingRecommendation(input: {
         color: frostKillRisk ? "red" : frostBlocked ? "yellow" : "green",
         detail:
           [
-            frostRiskNights7d > 0
-              ? `${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} next 7d`
-              : "No frost-risk nights next 7d",
-            frostProbabilityLabel,
+            frostSummary.riskNightsLabel ?? "No frost-risk nights next 7d",
+            frostSummary.probabilityLabel,
             weatherSourceLabel,
           ]
             .filter((value): value is string => Boolean(value))

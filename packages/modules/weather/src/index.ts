@@ -78,6 +78,10 @@ export {
   type SprayWindowThresholds,
 } from "./application/resolveSprayWindows";
 export {
+  describeFrostRiskSummary,
+  type FrostRiskSummary,
+} from "./application/describeFrostRiskSummary";
+export {
   summarizeForecastDays,
   type ForecastDaySummary,
   type SummarizeForecastDaysOptions,

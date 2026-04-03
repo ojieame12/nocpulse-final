@@ -2,6 +2,7 @@ import {
   prairieDefaultRulePack,
   resolveCropRuleContext,
 } from "@fieldpulse/module-crop-intelligence";
+import { describeFrostRiskSummary } from "@fieldpulse/module-weather";
 import type { CropAlertCard, FieldCropProps } from "./tabs/CropTab";
 import {
   averageMeasurement,
@@ -122,18 +123,16 @@ export function buildCropProps(rm: any): FieldCropProps {
     ndreAvg,
     hasOpticalRaster: latestOpticalRaster != null,
   });
-  const frostMinTemp =
-    weatherSignals?.frostRiskMinTempC7d ??
-    weatherSignals?.frostRiskMinTempC ??
-    null;
+  const frostSummary = describeFrostRiskSummary({
+    frostRiskMinTempC: weatherSignals?.frostRiskMinTempC ?? null,
+    frostRiskMinTempC7d: weatherSignals?.frostRiskMinTempC7d ?? null,
+    frostRiskNights7d: weatherSignals?.frostRiskNights7d ?? null,
+    frostProbabilityPct7d: weatherSignals?.frostProbabilityPct7d ?? null,
+  });
+  const frostMinTemp = frostSummary.minTempC;
   const frostRiskNights7d = weatherSignals?.frostRiskNights7d ?? null;
-  const frostProbabilityPct7d = weatherSignals?.frostProbabilityPct7d ?? null;
-  const frostProbabilityLabel =
-    frostProbabilityPct7d != null && Number.isFinite(frostProbabilityPct7d)
-      ? `${Math.round(frostProbabilityPct7d)}% probability`
-      : null;
-  const frostHorizonLabel =
-    weatherSignals?.frostRiskMinTempC7d != null ? "next 7d" : "next 24h";
+  const frostProbabilityLabel = frostSummary.probabilityLabel;
+  const frostHorizonLabel = frostSummary.horizonLabel;
   const soilTempPresentation = resolveSoilTempPresentation({
     soilTemp6cmCurrentC:
       weatherSignals?.soilTemp6cmCurrentC ??
@@ -243,7 +242,7 @@ export function buildCropProps(rm: any): FieldCropProps {
             ? `Kill temperature forecast ${frostHorizonLabel} — protect crop immediately`
             : frostMinTemp <= resolvedRules.weatherRisk.frost.damageTempC
               ? frostRiskNights7d != null && frostRiskNights7d > 0
-                ? `${frostRiskNights7d} frost night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""} — monitor lows closely`
+                ? `${frostSummary.riskNightsCompactLabel ?? `${frostRiskNights7d} night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}`}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""} — monitor lows closely`
                 : `Damage risk ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""} — monitor overnight lows`
               : `Above frost damage threshold ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""}`,
       status:
@@ -561,9 +560,8 @@ export function buildCropProps(rm: any): FieldCropProps {
         sub:
           frostMinTemp == null
             ? "No frost signal available"
-            : frostRiskNights7d != null && frostRiskNights7d > 0
-              ? `Min ${frostMinTemp.toFixed(1)}°C · ${frostRiskNights7d} night${frostRiskNights7d === 1 ? "" : "s"} ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""}`
-              : `Min ${frostMinTemp.toFixed(1)}°C ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""}`,
+            : frostSummary.compactMinimumLabel ??
+              `Min ${frostMinTemp.toFixed(1)}°C ${frostHorizonLabel}${frostProbabilityLabel ? ` · ${frostProbabilityLabel}` : ""}`,
         ...frostTone,
       },
       {
