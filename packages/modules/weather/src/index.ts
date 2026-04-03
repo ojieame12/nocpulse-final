@@ -71,6 +71,8 @@ export {
   isSprayEligibleForecast,
   resolveFieldTimeZone,
   type FieldLabelPoint,
+  type FieldLocalTimeContext,
+  type FieldTimeZone,
   type FindSprayWindowsOptions,
   type SprayWindowBlock,
   type SprayWindowThresholds,

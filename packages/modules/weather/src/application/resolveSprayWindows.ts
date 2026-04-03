@@ -1,6 +1,12 @@
 import type { FieldWeatherForecast } from "../contracts/FieldWeatherForecast";
 
 export type FieldLabelPoint = readonly [longitude: number, latitude: number];
+export type FieldTimeZone = string;
+
+export type FieldLocalTimeContext = {
+  fieldTimeZone?: FieldTimeZone | null;
+  fieldLabelPoint?: FieldLabelPoint | null;
+};
 
 export type SprayWindowThresholds = {
   maxWindKph: number;
@@ -43,7 +49,7 @@ function addHoursToIso(value: string, hours: number) {
 }
 
 function hasFiniteLabelPoint(
-  labelPoint?: FieldLabelPoint | null,
+  labelPoint?: unknown,
 ): labelPoint is FieldLabelPoint {
   return (
     Array.isArray(labelPoint) &&
@@ -144,18 +150,38 @@ export function resolveFieldTimeZone(labelPoint?: FieldLabelPoint | null): strin
   return "UTC";
 }
 
+function resolveFieldTimeZoneFromContext(
+  context?: FieldLocalTimeContext | FieldLabelPoint | null,
+) {
+  if (hasFiniteLabelPoint(context)) {
+    return resolveFieldTimeZone(context);
+  }
+
+  if (context && !Array.isArray(context)) {
+    const explicitTimeZone = context.fieldTimeZone?.trim();
+    if (explicitTimeZone) {
+      return explicitTimeZone;
+    }
+
+    return resolveFieldTimeZone(context.fieldLabelPoint);
+  }
+
+  return "UTC";
+}
+
 export function formatFieldLocalTime(
   value: string,
-  labelPoint?: FieldLabelPoint | null,
+  context?: FieldLocalTimeContext | FieldLabelPoint | null,
 ): string {
   const date = new Date(value);
+  const timeZone = resolveFieldTimeZoneFromContext(context);
   const formatter = new Intl.DateTimeFormat("en-CA", {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
-    timeZone: resolveFieldTimeZone(labelPoint),
+    timeZone,
     timeZoneName: "short",
   });
 

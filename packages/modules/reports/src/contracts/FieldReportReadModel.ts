@@ -61,6 +61,7 @@ export type FieldReportReadModel = {
   generatedAt: TimestampIso;
   reportDate: TimestampIso;
   field: FieldDetail;
+  fieldTimeZone?: string;
   cropContext: FieldCropContext | null;
   intake: {
     latestCommittedCandidate: Pick<

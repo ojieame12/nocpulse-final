@@ -49,6 +49,16 @@ test("formatFieldLocalTime renders Saskatchewan spray windows in local CST", () 
   assert.doesNotMatch(label, /UTC/);
 });
 
+test("formatFieldLocalTime honors an explicit field timezone without needing a label point", () => {
+  const label = formatFieldLocalTime("2026-04-02T18:00:00.000Z", {
+    fieldTimeZone: "America/Regina",
+  });
+
+  assert.match(label, /12:00/);
+  assert.match(label, /CST/);
+  assert.doesNotMatch(label, /UTC/);
+});
+
 test("findSprayWindows returns 4-hour blocks with an inclusive end hour", () => {
   const forecasts = [
     createForecast({ validAt: "2026-04-02T13:00:00.000Z", airTemperatureC: 8, windSpeedKph: 10 }),

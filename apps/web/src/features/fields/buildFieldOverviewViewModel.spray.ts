@@ -2,6 +2,7 @@ import {
   findSprayWindows,
   formatFieldLocalTime,
   type FieldLabelPoint,
+  type FieldTimeZone,
   type FieldWeatherForecast,
   type SprayWindowBlock,
 } from "@fieldpulse/module-weather";
@@ -47,6 +48,7 @@ export function resolveSprayWindowRecommendation(input: {
   cropLabel: string;
   sprayWindowCount24h: number | null;
   forecasts: readonly FieldWeatherForecast[];
+  fieldTimeZone?: FieldTimeZone | null;
   fieldLabelPoint?: FieldLabelPoint | null;
   weatherSourceLabel?: string | null;
 }): SprayWindowRecommendationPresentation | null {
@@ -66,8 +68,14 @@ export function resolveSprayWindowRecommendation(input: {
 
   const cropLabel = input.cropLabel.trim().length > 0 ? input.cropLabel : "This crop";
   const weatherSourceLabel = input.weatherSourceLabel?.trim() || "weather-backed";
-  const startLabel = formatFieldLocalTime(firstWindow.startAt, input.fieldLabelPoint);
-  const endLabel = formatFieldLocalTime(firstWindow.endAt, input.fieldLabelPoint);
+  const startLabel = formatFieldLocalTime(firstWindow.startAt, {
+    fieldTimeZone: input.fieldTimeZone,
+    fieldLabelPoint: input.fieldLabelPoint,
+  });
+  const endLabel = formatFieldLocalTime(firstWindow.endAt, {
+    fieldTimeZone: input.fieldTimeZone,
+    fieldLabelPoint: input.fieldLabelPoint,
+  });
   const precipLabel =
     firstWindow.maxPrecipProbabilityPct != null
       ? `${Math.round(firstWindow.maxPrecipProbabilityPct)}% rain chance`

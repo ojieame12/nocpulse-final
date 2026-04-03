@@ -19,6 +19,7 @@ import type {
 } from "@fieldpulse/module-moisture";
 import {
   loadFieldWeatherProfile,
+  resolveFieldTimeZone,
   type FieldWeatherDerivedSignalSetRepository,
   type FieldWeatherForecastRepository,
   type FieldWeatherObservationRepository,
@@ -383,6 +384,7 @@ export async function buildFieldReportReadModel(
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     reportDate: input.reportDate,
     field,
+    fieldTimeZone: resolveFieldTimeZone(field.labelPoint),
     cropContext,
     intake: {
       latestCommittedCandidate: latestCommittedCandidate

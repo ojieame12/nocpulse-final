@@ -1,5 +1,9 @@
 import type { FieldWeatherForecast } from "../contracts/FieldWeatherForecast";
-import { resolveFieldTimeZone, type FieldLabelPoint } from "./resolveSprayWindows";
+import {
+  resolveFieldTimeZone,
+  type FieldLabelPoint,
+  type FieldTimeZone,
+} from "./resolveSprayWindows";
 
 export type ForecastDaySummary = {
   dateKey: string;
@@ -14,6 +18,7 @@ export type ForecastDaySummary = {
 };
 
 export type SummarizeForecastDaysOptions = {
+  fieldTimeZone?: FieldTimeZone | null;
   fieldLabelPoint?: FieldLabelPoint | null;
   limitDays?: number;
 };
@@ -50,7 +55,8 @@ export function summarizeForecastDays(
     return [];
   }
 
-  const timeZone = resolveFieldTimeZone(options.fieldLabelPoint);
+  const timeZone =
+    options.fieldTimeZone?.trim() || resolveFieldTimeZone(options.fieldLabelPoint);
   const limitDays = options.limitDays ?? Number.POSITIVE_INFINITY;
   const ordered = [...forecasts].sort((left, right) => Date.parse(left.validAt) - Date.parse(right.validAt));
   const summaries = new Map<string, ForecastDaySummary>();

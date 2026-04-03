@@ -93,3 +93,33 @@ test("summarizeForecastDays groups by field-local day for Saskatchewan fields", 
   assert.equal(days[0]?.dateKey, "2026-04-02");
   assert.equal(days[1]?.dateKey, "2026-04-03");
 });
+
+test("summarizeForecastDays honors an explicit field timezone", () => {
+  const days = summarizeForecastDays(
+    [
+      createForecast({
+        id: "f1",
+        validAt: "2026-04-03T02:00:00.000Z",
+        minC: 1,
+        maxC: 5,
+        precipitationMm: 0,
+        precipitationProbabilityPct: 0,
+        windSpeedKph: 10,
+      }),
+      createForecast({
+        id: "f2",
+        validAt: "2026-04-03T10:00:00.000Z",
+        minC: 3,
+        maxC: 9,
+        precipitationMm: 0.2,
+        precipitationProbabilityPct: 15,
+        windSpeedKph: 14,
+      }),
+    ],
+    { fieldTimeZone: "America/Regina" },
+  );
+
+  assert.equal(days.length, 2);
+  assert.equal(days[0]?.dateKey, "2026-04-02");
+  assert.equal(days[1]?.dateKey, "2026-04-03");
+});

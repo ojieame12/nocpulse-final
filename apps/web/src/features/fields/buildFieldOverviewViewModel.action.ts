@@ -657,6 +657,7 @@ export function buildActionProps(
           cropLabel,
           sprayWindowCount24h: weatherSignals?.sprayWindowCount24h ?? null,
           forecasts,
+          fieldTimeZone: rm.fieldTimeZone ?? null,
           fieldLabelPoint: rm.field?.labelPoint ?? null,
           weatherSourceLabel,
         })

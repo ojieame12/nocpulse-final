@@ -300,6 +300,7 @@ export function buildReportProps(
   ];
 
   const forecastDays = summarizeForecastDays(forecasts, {
+    fieldTimeZone: rm.fieldTimeZone ?? null,
     fieldLabelPoint: rm.field?.labelPoint ?? null,
     limitDays: 7,
   });

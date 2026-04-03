@@ -195,6 +195,7 @@ test("buildFieldReportReadModel fetches active and resolved alerts once and spli
     readModel.resolvedAlerts.map((alert) => alert.id),
     ["alert-resolved-1", "alert-resolved-2"],
   );
+  assert.equal(readModel.fieldTimeZone, "America/Winnipeg");
   assert.equal(readModel.summary.activeAlertCount, 2);
   assert.deepEqual(readModel.dataAvailability, {
     activeAlerts: true,

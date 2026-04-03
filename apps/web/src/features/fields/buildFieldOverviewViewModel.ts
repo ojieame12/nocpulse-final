@@ -15,7 +15,7 @@ import {
   resolveCropRuleContext,
   prairieDefaultRulePack,
 } from "@fieldpulse/module-crop-intelligence";
-import { summarizeForecastDays } from "@fieldpulse/module-weather";
+import { resolveFieldTimeZone, summarizeForecastDays } from "@fieldpulse/module-weather";
 import {
   RequestContextError,
 } from "../../server/runtime/resolveRequestContext";
@@ -514,6 +514,7 @@ export async function buildFieldOverviewViewModel(
   });
   const effectiveReadModel = {
     ...readModel,
+    fieldTimeZone: readModel.fieldTimeZone ?? resolveFieldTimeZone(field.labelPoint),
     moisture: effectiveMoisture,
     imagery: imageryWithFamilyObservations,
   };
@@ -812,6 +813,7 @@ export async function buildFieldOverviewViewModel(
   const latestObservation = readModel.weather.profile.latestObservation;
   const forecastPeriods = readModel.weather.profile.forecasts;
   const forecastDays = summarizeForecastDays(forecastPeriods, {
+    fieldTimeZone: effectiveReadModel.fieldTimeZone,
     fieldLabelPoint: field.labelPoint,
     limitDays: 7,
   });

@@ -132,6 +132,7 @@ function createReadModel(input: {
     generatedAt: "2026-04-03T12:00:00.000Z",
     reportDate: "2026-04-03T00:00:00.000Z",
     field: FIELD,
+    fieldTimeZone: "America/Regina",
     cropContext: createCropContext(input.cropType),
     intake: {
       latestCommittedCandidate: null,
