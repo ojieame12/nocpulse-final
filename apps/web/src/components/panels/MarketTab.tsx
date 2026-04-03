@@ -39,7 +39,11 @@ export interface FieldMarketProps {
     | "provisional"
     | "scenario"
     | "unsupported";
+  feedStatusLabel: string;
   referenceStatusLabel: string;
+  quoteFreshnessState: "fresh" | "stale" | "missing" | "unsupported";
+  quoteFreshnessLabel: string;
+  quoteAgeLabel?: string | null;
   valuationStatusLabel: string;
   missingInputs: readonly ("quote" | "yield")[];
   primaryActionLabel: string;
@@ -94,7 +98,7 @@ export function MarketTab({ field }: MarketTabProps) {
         <div className="panel__title-section">
           <h2 className="panel__title-main">No market context</h2>
           <span className="panel__title-sub">
-            No live quote or field scenario is available for this field right now.
+            No stored quote or field scenario is available for this field right now.
           </span>
         </div>
       </div>
@@ -185,7 +189,7 @@ export function MarketTab({ field }: MarketTabProps) {
 
         {/* Inline status chips */}
         <div className="market__status-chips">
-          <span className={`market__chip${hasQuote ? ' market__chip--active' : ''}`}>
+          <span className={`market__chip${field.quoteFreshnessState === "fresh" ? ' market__chip--active' : ''}`}>
             {field.referenceStatusLabel}
           </span>
           {field.missingInputs.includes("yield") ? (
@@ -389,16 +393,20 @@ function compactHint(value: string | null | undefined) {
 
   return value
     .replace("Add a manual quote plus a yield assumption to unlock revenue for this field.", "Add quote + yield to unlock field revenue.")
-    .replace("No live quote symbol is configured for", "No feed symbol for")
-    .replace("No live ", "No ")
+    .replace("No market symbol is configured for", "No symbol for")
+    .replace("No stored ", "No ")
     .replace(" quote is stored yet, and no field yield assumption is saved for this field.", " quote and yield are both missing.")
     .replace(" quote is stored yet.", " quote stored yet.")
-    .replace(" feed is connected yet.", " feed connected.")
+    .replace(" quote source is wired in FieldPulse yet.", " feed unsupported.")
     .replace("Revenue will stay provisional until a quote arrives or you add a manual quote.", "Revenue stays provisional until a quote is added.")
     .replace("Use this crop in field revenue planning.", "Use this crop in field planning.");
 }
 
 function resolveFeedStatusLabel(field: FieldMarketProps, hasQuote: boolean) {
+  if (field.feedStatusLabel) {
+    return field.feedStatusLabel;
+  }
+
   if (!field.cropSymbol) {
     return "N/A";
   }

@@ -23,6 +23,8 @@ Environment overrides:
   FIELDPULSE_STALE_HOURS    Default: 24
   FIELDPULSE_PROBE_LIMIT    Default: 50
   FIELDPULSE_PROBE_SINCE    Default: 6
+  FIELDPULSE_MARKET_CROP_SYMBOLS       Default: CANOLA,WHEAT,CORN,RYE,SOYBEAN
+  FIELDPULSE_MARKET_STALE_HOURS        Default: 24
   FIELDPULSE_ACTION_BRIEF_WORKSPACE_ID  Optional workspace for action-brief runs.
   FIELDPULSE_ACTION_BRIEF_LIMIT         Optional per-workspace field limit.
   FIELDPULSE_ACTION_BRIEF_DRAIN_LIMIT   Default: 100
@@ -67,9 +69,16 @@ JOB="${1:-}"
 
 case "${JOB}" in
   market)
+    MARKET_CROP_SYMBOLS="${FIELDPULSE_MARKET_CROP_SYMBOLS:-CANOLA,WHEAT,CORN,RYE,SOYBEAN}"
+    MARKET_STALE_HOURS="${FIELDPULSE_MARKET_STALE_HOURS:-24}"
     run_job \
       market \
-      corepack pnpm --filter @fieldpulse/worker market:cadence -- --commodity CANOLA
+      /bin/bash -o pipefail -c \
+      'corepack pnpm --filter @fieldpulse/worker market:cadence -- --crop-symbols "$1" && \
+       corepack pnpm --filter @fieldpulse/worker market:report -- --crop-symbols "$1" --stale-after-hours "$2"' \
+      _ \
+      "${MARKET_CROP_SYMBOLS}" \
+      "${MARKET_STALE_HOURS}"
     ;;
   probe)
     PROBE_LIMIT="${FIELDPULSE_PROBE_LIMIT:-50}"

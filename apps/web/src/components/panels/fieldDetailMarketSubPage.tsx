@@ -74,14 +74,16 @@ export function MarketSubPage({
     ? compactTopSummary || market?.priceUnitLabel || ""
     : compactTopSummary || marketHistoryEmptyText;
   const topBadgeLabel = hasQuote
-    ? market?.priceDeltaLabel ?? market?.capturedAtLabel ?? "Stored"
-    : "N/A";
+    ? market?.priceDeltaLabel ?? market?.quoteFreshnessLabel ?? market?.capturedAtLabel ?? "N/A"
+    : market?.quoteFreshnessLabel ?? "N/A";
   const topBadgeStyle =
-    market?.valuationState === "scenario"
+    market?.quoteFreshnessState === "fresh"
       ? { background: "rgba(22,163,74,0.12)", color: "#16a34a" }
-      : hasQuote
-        ? { background: "rgba(22,163,74,0.12)", color: "#16a34a" }
-        : { background: "rgba(245,158,11,0.12)", color: "#b45309" };
+      : market?.quoteFreshnessState === "stale"
+        ? { background: "rgba(245,158,11,0.12)", color: "#b45309" }
+        : market?.quoteFreshnessState === "unsupported"
+          ? { background: "#f8fafc", color: "#475569" }
+          : { background: "rgba(245,158,11,0.12)", color: "#b45309" };
   const statusChips = [
     market?.valuationState
       ? {
@@ -518,6 +520,10 @@ function resolveFeedStatusLabel(market: FieldMarketProps | null, hasQuote: boole
     return "N/A";
   }
 
+  if (market.feedStatusLabel) {
+    return market.feedStatusLabel;
+  }
+
   if (!market.cropSymbol) {
     return "N/A";
   }
@@ -601,11 +607,11 @@ function compactHint(value: string | null | undefined) {
 
   return value
     .replace("Add a manual quote plus a yield assumption to unlock revenue for this field.", "Add quote + yield to unlock field revenue.")
-    .replace("No live quote symbol is configured for", "No feed symbol for")
-    .replace("No live ", "No ")
+    .replace("No market symbol is configured for", "No symbol for")
+    .replace("No stored ", "No ")
     .replace(" quote is stored yet, and no field yield assumption is saved for this field.", " quote and yield are both missing.")
     .replace(" quote is stored yet.", " quote stored yet.")
-    .replace(" feed is connected yet.", " feed connected.")
+    .replace(" quote source is wired in FieldPulse yet.", " feed unsupported.")
     .replace("Revenue will stay provisional until a quote arrives or you add a manual quote.", "Revenue stays provisional until a quote is added.")
     .replace("Use this crop in field revenue planning.", "Use this crop in field planning.");
 }

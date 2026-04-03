@@ -13,6 +13,11 @@ export { type FieldBasisAssumptionRepository } from "./contracts/FieldBasisAssum
 export { type GrainPriceSnapshotRepository } from "./contracts/GrainPriceSnapshotRepository";
 export { type FieldYieldAssumptionRepository } from "./contracts/FieldYieldAssumptionRepository";
 export { describeGrainPriceSnapshot } from "./application/describeGrainPriceSnapshot";
+export {
+  describeGrainPriceSnapshotFreshness,
+  type GrainPriceSnapshotFreshness,
+  type GrainPriceSnapshotFreshnessStatus,
+} from "./application/describeGrainPriceSnapshotFreshness";
 export { type MarketPriceFeed } from "./infrastructure/MarketPriceFeed";
 export { createSupabaseFieldBasisAssumptionRepository } from "./infrastructure/createSupabaseFieldBasisAssumptionRepository";
 export { createSupabaseGrainPriceSnapshotRepository } from "./infrastructure/createSupabaseGrainPriceSnapshotRepository";

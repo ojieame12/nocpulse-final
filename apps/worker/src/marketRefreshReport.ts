@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { createServerRuntime } from "@fieldpulse/platform-runtime";
+import { describeGrainPriceSnapshotFreshness } from "@fieldpulse/module-market";
 import { loadWorkerEnv } from "./runtime/loadEnv";
 import {
   normalizeRequestedMarketSymbols,
@@ -47,13 +48,6 @@ export type MarketRefreshReport = {
   errorCount: number;
   entries: readonly MarketRefreshReportEntry[];
 };
-
-function classifyMarketSnapshotStatus(
-  capturedAt: string,
-  staleBefore: string,
-): MarketRefreshReportEntry["status"] {
-  return Date.parse(capturedAt) < Date.parse(staleBefore) ? "stale" : "fresh";
-}
 
 function formatNormalizationLabel(snapshot: MarketSnapshotForReport) {
   if (snapshot.sourceCurrency === "CAD" && snapshot.sourceUnit === "tonne") {
@@ -105,18 +99,17 @@ export async function buildMarketRefreshReport(input: {
           };
         }
 
-        const ageHours =
-          (Date.parse(generatedAt) - Date.parse(snapshot.capturedAt)) / (60 * 60 * 1000);
-        const status = classifyMarketSnapshotStatus(
-          snapshot.capturedAt,
-          staleBefore,
-        );
+        const freshness = describeGrainPriceSnapshotFreshness({
+          capturedAt: snapshot.capturedAt,
+          now: generatedAt,
+          staleAfterHours,
+        });
 
         return {
           cropSymbol,
-          status,
+          status: freshness.status,
           capturedAt: snapshot.capturedAt,
-          ageHours,
+          ageHours: freshness.ageHours,
           priceCadPerTonne: snapshot.closePriceCadPerTonne,
           basisCadPerTonne: snapshot.basisCadPerTonne,
           sourceKey: snapshot.sourceKey,

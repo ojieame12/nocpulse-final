@@ -1125,17 +1125,14 @@ export function FieldDetailPanel({
   const conciseHistoryLabel =
     historyRow?.value === "No stored captures" ? "0 captures" : historyRow?.value ?? null;
   const conciseFeedStatus =
-    market?.closePriceCadPerTonne != null
-      ? "Stored"
+    market?.feedStatusLabel ??
+    (market?.closePriceCadPerTonne != null
+      ? "Supported"
       : !market?.cropSymbol
         ? "N/A"
         : market?.availabilityState === "unsupported-feed"
           ? "Unsupported"
-        : market?.referenceStatusLabel?.includes("feed connected")
-          ? "Offline"
-          : market?.referenceStatusLabel?.includes("quote yet")
-            ? "Pending"
-            : "N/A";
+          : "Supported");
   const conciseYieldLabel =
     yieldRow?.value === "Add yield" || yieldRow?.value == null || yieldRow?.value === "—"
       ? "N/A"
@@ -1159,7 +1156,7 @@ export function FieldDetailPanel({
       : market?.cropSymbol ?? market?.referenceStatusLabel ?? "—";
   const marketCardMeta =
     market?.closePriceCadPerTonne != null
-      ? market?.priceDeltaLabel ?? market?.priceUnitLabel ?? ""
+      ? market?.priceDeltaLabel ?? market?.quoteFreshnessLabel ?? market?.priceUnitLabel ?? ""
       : conciseFeedStatus;
   const marketCardSub =
     [conciseHistoryLabel, areaRow?.value]

@@ -2,7 +2,10 @@ import {
   prairieDefaultRulePack,
   resolveCropRuleContext,
 } from "@fieldpulse/module-crop-intelligence";
-import { isLiveMarketFeedCropSymbol } from "@fieldpulse/module-market";
+import {
+  describeGrainPriceSnapshotFreshness,
+  isLiveMarketFeedCropSymbol,
+} from "@fieldpulse/module-market";
 import type { FieldMarketProps, MarketBarDatum } from "../../components/panels/MarketTab";
 import {
   filterFieldQualityDependentAlertRecords,
@@ -90,6 +93,23 @@ function formatYieldTonnesPerHa(value: number) {
 function formatSignedCadDelta(value: number) {
   const sign = value > 0 ? "+" : value < 0 ? "−" : "";
   return `${sign}$${Math.abs(value).toFixed(2)}`;
+}
+
+function formatQuoteFreshnessLabel(
+  value: FieldMarketProps["quoteFreshnessState"],
+) {
+  switch (value) {
+    case "fresh":
+      return "Fresh";
+    case "stale":
+      return "Stale";
+    case "missing":
+      return "Missing";
+    case "unsupported":
+      return "Unsupported";
+    default:
+      return "N/A";
+  }
 }
 
 function buildMarketHistoryLabels(
@@ -374,17 +394,17 @@ export function buildMarketProps(
             : "ready";
   const availabilityReasonLabel =
     availabilityState === "unsupported-crop"
-      ? `No live quote symbol is configured for ${cropLabel.toLowerCase()} yet. You can still store field yield and basis assumptions for planning.`
+      ? `No market symbol is configured for ${cropLabel.toLowerCase()} yet. You can still store field yield and basis assumptions for planning.`
       : availabilityState === "unsupported-feed"
-        ? `No live ${marketCropSymbol} quote source is wired in FieldPulse yet.`
+        ? `No ${marketCropSymbol} quote source is wired in FieldPulse yet.`
       : availabilityState === "quote-and-yield-unavailable"
         ? liveFeedSupported
-          ? `No live ${marketCropSymbol} quote is stored yet, and no field yield assumption is saved for this field. You can add a manual quote while the feed catches up.`
-          : `No live ${marketCropSymbol} feed is connected yet, and no field yield assumption is saved for this field. Add a manual quote plus a yield assumption to unlock revenue for this field.`
+          ? `No stored ${marketCropSymbol} quote is available yet, and no field yield assumption is saved for this field. You can add a manual quote while the feed catches up.`
+          : `No ${marketCropSymbol} quote source is available yet, and no field yield assumption is saved for this field. Add a manual quote plus a yield assumption to unlock revenue for this field.`
         : availabilityState === "quote-unavailable"
           ? liveFeedSupported
-            ? `No live ${marketCropSymbol} quote is stored yet. Revenue will stay provisional until a quote arrives or you add a manual quote.`
-            : `No live ${marketCropSymbol} feed is connected yet. Add a manual quote to use this crop in field revenue planning.`
+            ? `No stored ${marketCropSymbol} quote is available yet. Revenue will stay provisional until a quote arrives or you add a manual quote.`
+            : `No ${marketCropSymbol} quote source is available yet. Add a manual quote to use this crop in field revenue planning.`
           : availabilityState === "yield-unavailable"
             ? "Add a field yield assumption to unlock revenue for this field."
             : null;
@@ -427,16 +447,26 @@ export function buildMarketProps(
     deltaCadPerTonne != null && deltaPct != null
       ? `${deltaCadPerTonne >= 0 ? "▲" : "▼"} ${formatSignedCadDelta(deltaCadPerTonne)} (${deltaPct >= 0 ? "+" : "−"}${Math.abs(deltaPct).toFixed(1)}%)`
       : null;
-  const referenceStatusLabel =
+  const feedStatusLabel =
     !marketCropSymbol
       ? "N/A"
       : availabilityState === "unsupported-feed"
         ? "Unsupported"
-      : quoteAvailable
-        ? "Stored"
-      : liveFeedSupported
-          ? "Pending"
-          : "Offline";
+        : "Supported";
+  const quoteFreshnessBase = describeGrainPriceSnapshotFreshness({
+    capturedAt: latestHistorySnapshot?.capturedAt ?? effectiveMarketPrice?.capturedAt ?? null,
+    now: rm.generatedAt,
+  });
+  const quoteFreshnessState =
+    !marketCropSymbol || availabilityState === "unsupported-feed"
+      ? "unsupported"
+      : quoteFreshnessBase.status;
+  const quoteFreshnessLabel = formatQuoteFreshnessLabel(quoteFreshnessState);
+  const quoteAgeLabel =
+    quoteFreshnessState === "fresh" || quoteFreshnessState === "stale"
+      ? quoteFreshnessBase.ageLabel
+      : null;
+  const referenceStatusLabel = quoteFreshnessLabel;
   const valuationStatusLabel =
     valuationState === "unsupported"
       ? "Unsupported"
@@ -475,7 +505,7 @@ export function buildMarketProps(
     },
     {
       label: "Feed",
-      value: referenceStatusLabel,
+      value: feedStatusLabel,
     },
     {
       label: "Stored History",
@@ -512,9 +542,9 @@ export function buildMarketProps(
             : availabilityState === "unsupported-feed"
               ? "Unsupported"
             : liveFeedSupported
-              ? "Pending"
+              ? "Missing"
               : marketCropSymbol
-                ? "Offline"
+                ? "Missing"
                 : "Unsupported";
 
   return {
@@ -523,7 +553,11 @@ export function buildMarketProps(
     availabilityState,
     availabilityReasonLabel,
     valuationState,
+    feedStatusLabel,
     referenceStatusLabel,
+    quoteFreshnessState,
+    quoteFreshnessLabel,
+    quoteAgeLabel,
     valuationStatusLabel,
     missingInputs,
     primaryActionLabel,
@@ -570,7 +604,7 @@ export function buildMarketProps(
         ? `${recentHistory.length}-capture history`
         : "Latest stored quote",
     priceLabel: effectiveMarketPrice ? `$${effectiveMarketPrice.closePriceCadPerTonne.toFixed(2)}` : "—",
-    priceUnitLabel: effectiveMarketPrice ? "/tonne CAD" : "live quote unavailable",
+    priceUnitLabel: effectiveMarketPrice ? "/tonne CAD" : "quote unavailable",
     priceDeltaLabel,
     priceBars,
     rangeLowLabel:
@@ -583,7 +617,8 @@ export function buildMarketProps(
           effectiveBasisAssumption
             ? `Field basis ${effectiveBasisAssumption.basisCadPerTonne >= 0 ? "+" : ""}${effectiveBasisAssumption.basisCadPerTonne.toFixed(2)} CAD/t`
             : `Basis ${effectiveMarketPrice.basisCadPerTonne >= 0 ? "+" : ""}${effectiveMarketPrice.basisCadPerTonne.toFixed(2)} CAD/t`,
-          `Stored`,
+          quoteFreshnessLabel,
+          quoteAgeLabel,
           `Source ${shortSourceLabel(effectiveMarketPrice.sourceKey)}`,
           effectiveMarketPrice.sourceCurrency === "CAD" && effectiveMarketPrice.sourceUnit === "tonne"
             ? null
@@ -593,9 +628,7 @@ export function buildMarketProps(
           .join(" · ")
       : !marketCropSymbol
         ? "N/A"
-      : liveFeedSupported
-          ? "Pending"
-          : "Offline",
+      : quoteFreshnessLabel,
     estimatedGrossLabel:
       grossRevenueCad != null
         ? formatCadCurrency(grossRevenueCad, {
@@ -607,7 +640,7 @@ export function buildMarketProps(
       grossRevenueCad != null
         ? "estimated gross revenue"
         : yieldAvailable
-          ? "live quote unavailable"
+          ? "quote unavailable"
         : quoteAvailable
           ? "yield assumption unavailable"
             : "gross estimate unavailable",
@@ -649,10 +682,10 @@ export function buildMarketProps(
       : yieldAvailable
         ? `Stored yield assumption ${yieldAssumptionLabel} from ${shortSourceLabel(
             effectiveYieldAssumption!.sourceKey,
-          )} is available, but revenue is waiting on a live quote.`
+          )} is available, but revenue is waiting on a market quote.`
         : quoteAvailable
-          ? "Live quote is available, but revenue remains unavailable until a field yield assumption is stored."
-          : "Connect a live grain price feed and store a field yield assumption before using this tab for revenue decisions.",
+          ? "A market quote is available, but revenue remains unavailable until a field yield assumption is stored."
+          : "Store a market quote and a field yield assumption before using this tab for revenue decisions.",
     contextTiles: [
       {
         label: "ROOT MOISTURE",
@@ -712,17 +745,17 @@ export function buildMarketProps(
         ? effectiveMarketPrice.sourceCurrency === "CAD" && effectiveMarketPrice.sourceUnit === "tonne"
           ? yieldAvailable
             ? effectiveBasisAssumption
-              ? "Quote data is live from the persisted market snapshot feed. Revenue uses the latest stored field yield and field-local basis assumptions and is an estimate only."
-              : "Quote data is live from the persisted market snapshot feed. Revenue uses the latest stored field yield assumption and is an estimate only."
-            : "Quote data is live from the persisted market snapshot feed. Revenue remains unavailable until a field yield assumption is stored."
+              ? "Quote data comes from stored market snapshots. Revenue uses the latest stored field yield and field-local basis assumptions and is an estimate only."
+              : "Quote data comes from stored market snapshots. Revenue uses the latest stored field yield assumption and is an estimate only."
+            : "Quote data comes from stored market snapshots. Revenue remains unavailable until a field yield assumption is stored."
           : yieldAvailable
             ? effectiveBasisAssumption
-              ? "Quote data is live and normalized into CAD/tonne from the upstream futures unit. Revenue uses the latest stored field yield and field-local basis assumptions and is an estimate only."
-              : "Quote data is live and normalized into CAD/tonne from the upstream futures unit. Revenue uses the latest stored field yield assumption and is an estimate only."
-            : "Quote data is live and normalized into CAD/tonne from the upstream futures unit. Revenue remains unavailable until a field yield assumption is stored."
+              ? "Quote data comes from stored market snapshots and is normalized into CAD/tonne from the upstream futures unit. Revenue uses the latest stored field yield and field-local basis assumptions and is an estimate only."
+              : "Quote data comes from stored market snapshots and is normalized into CAD/tonne from the upstream futures unit. Revenue uses the latest stored field yield assumption and is an estimate only."
+            : "Quote data comes from stored market snapshots and is normalized into CAD/tonne from the upstream futures unit. Revenue remains unavailable until a field yield assumption is stored."
         : yieldAvailable
-          ? "A stored field yield assumption is available, but no live market quote source is connected yet, so revenue remains unavailable."
-          : "No live market quote source or stored field yield assumption is available yet. Price and revenue sections stay unavailable until both exist.",
+          ? "A stored field yield assumption is available, but no stored market quote is available yet, so revenue remains unavailable."
+          : "No stored market quote or field yield assumption is available yet. Price and revenue sections stay unavailable until both exist.",
     footerText: `Context updated ${new Date(rm.generatedAt).toLocaleString("en-US", {
       dateStyle: "medium",
       timeStyle: "short",

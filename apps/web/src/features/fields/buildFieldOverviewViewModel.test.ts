@@ -114,7 +114,11 @@ test("buildMarketProps computes gross revenue from quote plus stored yield assum
   assert.equal(props.availabilityState, "ready");
   assert.equal(props.availabilityReasonLabel, null);
   assert.equal(props.valuationState, "scenario");
-  assert.equal(props.referenceStatusLabel, "Stored");
+  assert.equal(props.feedStatusLabel, "Supported");
+  assert.equal(props.referenceStatusLabel, "Stale");
+  assert.equal(props.quoteFreshnessState, "stale");
+  assert.equal(props.quoteFreshnessLabel, "Stale");
+  assert.equal(props.quoteAgeLabel, "36h old");
   assert.equal(props.valuationStatusLabel, "Scenario");
   assert.deepEqual(props.missingInputs, []);
   assert.equal(props.provisionalRevenueLabel, "$109,166");
@@ -132,6 +136,7 @@ test("buildMarketProps computes gross revenue from quote plus stored yield assum
     { label: "Local Basis", value: "-12.00 CAD/t" },
     { label: "Field Area", value: "64.2 ha" },
   ]);
+  assert.match(props.quoteStatusLabel ?? "", /Stale/);
   assert.match(props.revenueNote, /manual-panel/i);
   assert.match(props.disclaimerText, /stored field yield assumption/i);
 });
@@ -165,8 +170,8 @@ test("buildMarketProps derives the current quote from stored recent history when
         sourceClosePrice: 720.5,
         fxRateToCad: 1,
         sourceKey: "manual-admin",
-        capturedAt: "2026-03-27T00:00:00Z",
-        createdAt: "2026-03-27T00:00:00Z",
+        capturedAt: "2026-03-28T10:00:00Z",
+        createdAt: "2026-03-28T10:00:00Z",
       },
     ],
     null,
@@ -182,7 +187,11 @@ test("buildMarketProps derives the current quote from stored recent history when
   assert.equal(props.availabilityState, "ready");
   assert.equal(props.closePriceCadPerTonne, 720.5);
   assert.equal(props.priceLabel, "$720.50");
+  assert.equal(props.referenceStatusLabel, "Fresh");
+  assert.equal(props.quoteFreshnessState, "fresh");
+  assert.equal(props.quoteAgeLabel, "2h old");
   assert.match(props.quoteStatusLabel ?? "", /\$720\.50\/t/);
+  assert.match(props.quoteStatusLabel ?? "", /Fresh/);
   assert.equal(props.provisionalRevenueLabel, "$109,628");
 });
 
@@ -292,8 +301,10 @@ test("buildMarketProps explains unsupported market crops", () => {
   assert.equal(props.cropSymbol, null);
   assert.equal(props.availabilityState, "unsupported-crop");
   assert.equal(props.valuationState, "unsupported");
+  assert.equal(props.feedStatusLabel, "N/A");
+  assert.equal(props.quoteFreshnessState, "unsupported");
   assert.equal(props.primaryActionLabel, "N/A");
-  assert.match(props.availabilityReasonLabel ?? "", /no live quote symbol/i);
+  assert.match(props.availabilityReasonLabel ?? "", /no market symbol/i);
   assert.equal(props.priceBars.length, 0);
 });
 
@@ -316,12 +327,14 @@ test("buildMarketProps treats rye as a live-feed crop even before quotes are sto
   assert.equal(props.cropSymbol, "RYE");
   assert.equal(props.availabilityState, "quote-and-yield-unavailable");
   assert.equal(props.valuationState, "reference-only");
-  assert.equal(props.referenceStatusLabel, "Pending");
+  assert.equal(props.feedStatusLabel, "Supported");
+  assert.equal(props.referenceStatusLabel, "Missing");
+  assert.equal(props.quoteFreshnessState, "missing");
   assert.equal(props.valuationStatusLabel, "Quote N/A · Yield N/A");
   assert.deepEqual(props.missingInputs, ["quote", "yield"]);
   assert.equal(props.primaryActionLabel, "Add manual quote and yield");
   assert.equal(props.priceSubmitUrl, "/api/market/prices");
-  assert.match(props.availabilityReasonLabel ?? "", /no live RYE quote is stored yet/i);
+  assert.match(props.availabilityReasonLabel ?? "", /no stored RYE quote is available yet/i);
 });
 
 test("buildMarketProps marks stored yield without quote as provisional", () => {
@@ -344,7 +357,9 @@ test("buildMarketProps marks stored yield without quote as provisional", () => {
 
   assert.equal(props.availabilityState, "quote-unavailable");
   assert.equal(props.valuationState, "provisional");
-  assert.equal(props.referenceStatusLabel, "Pending");
+  assert.equal(props.feedStatusLabel, "Supported");
+  assert.equal(props.referenceStatusLabel, "Missing");
+  assert.equal(props.quoteFreshnessState, "missing");
   assert.equal(props.valuationStatusLabel, "Quote N/A");
   assert.deepEqual(props.missingInputs, ["quote"]);
   assert.equal(props.primaryActionLabel, "Add manual quote");
