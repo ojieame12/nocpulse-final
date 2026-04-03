@@ -550,18 +550,18 @@ function resolveUnavailableMetricReason(
 ): string {
   switch (metricKey) {
     case "ndre":
-      return "No current red-edge raster";
+      return "Waiting for a cloud-free red-edge satellite pass. Sentinel-2 revisits every 5 days.";
     case "ndvi":
-      return "No current optical vigor raster";
+      return "Waiting for a cloud-free optical pass. NDVI will appear once Sentinel-2 imagery is processed for this field.";
     case "ndmi":
-      return "No current optical canopy-water surface";
+      return "Waiting for a cloud-free optical pass. Leaf moisture index requires the same Sentinel-2 imagery as NDVI.";
     case "radar-wetness":
-      return "No current SAR wetness surface";
+      return "No SAR wetness surface available yet. Sentinel-1 radar data is weather-independent but may take a few days to process.";
     case "surface-moisture-pct":
-      return "No current surface moisture layer";
+      return "Surface moisture layer is not yet available for this field.";
     case "root-zone-moisture-pct":
     default:
-      return "No current moisture surface";
+      return "Moisture surface is not yet available for this field.";
   }
 }
 

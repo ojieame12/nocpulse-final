@@ -29,6 +29,7 @@ export function prepareFieldReportArtifact(
     buildFieldReportPdfRenderInput({
       artifactKey,
       readModel,
+      brandLogo: input.brandLogoPngBytes ? { format: "png", bytes: input.brandLogoPngBytes } : undefined,
     }),
   );
   const activeAlertSummary =

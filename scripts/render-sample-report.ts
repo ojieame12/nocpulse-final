@@ -140,6 +140,24 @@ const blocks: PdfBlock[] = [
   ], columns: 4 },
   { kind: "progress-bar", label: "Season GDD Progress", value: "0 / ~1200", percent: 0, fillColor: GREEN as unknown as RGB, rangeLabels: ["0", "1200"] },
 
+  // ── SPRAY WINDOWS ──
+  { kind: "section-header", label: "Spray Windows", meta: "1 window in next 48 h" },
+  { kind: "text", style: "caption", text: "Eligible 4-hour blocks where wind ≤ 18 km/h, rain probability < 20%, precipitation < 1 mm, and average temperature 10–30°C. All times shown in UTC." },
+  { kind: "table", columns: [
+    { label: "Window", width: 0.08, align: "center" },
+    { label: "Start", width: 0.22 },
+    { label: "End", width: 0.22 },
+    { label: "Max Wind", width: 0.16, align: "right" },
+    { label: "Rain Risk", width: 0.16, align: "right" },
+    { label: "Temp Range", width: 0.16, align: "right" },
+  ], headerBg: GREEN, rows: [
+    { cells: ["1", "Apr 7, 10:00 AM UTC", "Apr 7, 2:00 PM UTC", "12 km/h", "5%", "10–14°C"] },
+  ] },
+  { kind: "severity-card", severity: "info",
+    title: "Best window: Apr 7, 10:00 AM UTC – Apr 7, 2:00 PM UTC",
+    body: "Wind up to 12 km/h, 5% rain risk, temperatures 10–14°C.",
+    action: "Confirm target crop stage and product label. Re-check wind on exposed field edges before committing." },
+
   // ── PAGE 3: FORECAST ──
   { kind: "section-header", label: "Forecast", meta: "Next 7 periods" },
   { kind: "table", columns: [

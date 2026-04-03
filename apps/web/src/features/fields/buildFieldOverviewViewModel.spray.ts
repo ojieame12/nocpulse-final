@@ -34,6 +34,10 @@ function averageTemperature(forecast: FieldWeatherForecast) {
   return (forecast.airTemperatureMinC + forecast.airTemperatureMaxC) / 2;
 }
 
+function addHoursToIso(value: string, hours: number) {
+  return new Date(Date.parse(value) + hours * 60 * 60 * 1000).toISOString();
+}
+
 function isSprayEligible(forecast: FieldWeatherForecast) {
   const averageTempC = averageTemperature(forecast);
 
@@ -47,7 +51,7 @@ function isSprayEligible(forecast: FieldWeatherForecast) {
 }
 
 function formatWindowLabel(value: string) {
-  return new Date(value).toLocaleString("en-CA", {
+  const label = new Date(value).toLocaleString("en-CA", {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -55,6 +59,7 @@ function formatWindowLabel(value: string) {
     hour12: true,
     timeZone: "UTC",
   });
+  return `${label} UTC`;
 }
 
 function formatSignedRange(minValue: number, maxValue: number) {
@@ -80,7 +85,7 @@ function findFirstSprayWindow(
 
     return {
       startAt: window[0]!.validAt,
-      endAt: window[window.length - 1]!.validAt,
+      endAt: addHoursToIso(window[window.length - 1]!.validAt, 1),
       maxWindKph: Math.max(...window.map((forecast) => forecast.windSpeedKph)),
       maxPrecipProbabilityPct:
         precipProbabilities.length > 0 ? Math.max(...precipProbabilities) : null,

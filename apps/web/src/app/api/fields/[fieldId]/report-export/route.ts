@@ -2,6 +2,7 @@ import { jsonError, jsonServerError } from "../../../../../server/http/json";
 import { buildFieldOverviewViewModel } from "../../../../../features/fields/buildFieldOverviewViewModel";
 import { prepareFieldReportArtifact } from "@fieldpulse/module-reports";
 import { getWebServerRuntime } from "../../../../../server/runtime/getWebServerRuntime";
+import { loadPdfBrandLogo } from "../../../../../server/exports/loadPdfBrandLogo";
 
 export const dynamic = "force-dynamic";
 
@@ -43,8 +44,10 @@ export async function GET(
       fieldId: viewModel.fieldId,
       reportDate: generatedAt,
     });
+    const brandLogo = loadPdfBrandLogo();
     const prepared = prepareFieldReportArtifact({
       readModel,
+      brandLogoPngBytes: brandLogo ?? undefined,
     });
     const fileName = `${slugify(viewModel.fieldName)}-field-report-${generatedAt.slice(0, 10)}.pdf`;
 

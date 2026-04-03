@@ -197,12 +197,17 @@ export function resolveCanopySignalPresentation(input: {
     return {
       cropTitle: "CROP HEALTH INDEX",
       cropValue: "Awaiting imagery",
-      cropSubLabel: "Awaiting first usable optical pass",
+      cropSubLabel:
+        "Satellite imagery requires a cloud-free optical pass over this field. " +
+        "Sentinel-2 revisits every 5 days — the first usable image is typically available " +
+        "within 5–10 days of field registration, depending on cloud cover and orbit timing.",
       reportHealthStatus: "Imagery Pending",
-      reportVegetationSubtitle: "Optical imagery pending",
+      reportVegetationSubtitle:
+        "Waiting for first cloud-free Sentinel-2 pass. Crop health, vigor, and vegetation indices (NDVI, NDRE, NDMI) will populate automatically once imagery is processed.",
       diseaseClearDescription:
-        "No usable optical pass is available yet, so crop-health and vigor interpretation is waiting on a clear provider-backed image.",
-      actionConfidenceLabel: "Imagery pending",
+        "No usable optical pass is available yet. Crop-health and vigor interpretation will begin automatically " +
+        "once a cloud-free satellite image is processed for this field. This usually takes 5–10 days after registration.",
+      actionConfidenceLabel: "Imagery pending — check back in a few days",
     };
   }
 

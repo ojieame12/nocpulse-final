@@ -55,7 +55,11 @@ test("resolveSprayWindowRecommendation returns the first eligible 4-hour block",
   assert.equal(recommendation?.title, "Spray window open");
   assert.equal(recommendation?.urgency, "Ready");
   assert.match(recommendation?.whyNow ?? "", /earliest 4-hour spray block/i);
+  assert.match(recommendation?.whyNow ?? "", /UTC/);
+  assert.match(recommendation?.whyNow ?? "", /6:00/);
   assert.match(recommendation?.signals[0]?.detail ?? "", /open-meteo · hourly-v1/i);
+  assert.match(recommendation?.signals[0]?.detail ?? "", /UTC/);
+  assert.match(recommendation?.signals[0]?.detail ?? "", /6:00/);
 });
 
 test("resolveSprayWindowRecommendation returns null when no eligible 4-hour block exists", () => {

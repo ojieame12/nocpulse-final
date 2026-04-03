@@ -1,4 +1,4 @@
-import type { PdfRenderInput, PdfBlock, RGB } from "@fieldpulse/pdf";
+import type { PdfRenderInput, PdfBlock, PdfBrandLogo, RGB } from "@fieldpulse/pdf";
 import { STATUS, BRAND, SURFACE } from "@fieldpulse/pdf";
 import type { FieldAlert } from "@fieldpulse/module-alerts";
 import type { FieldIntelligenceFinding } from "@fieldpulse/module-crop-intelligence";
@@ -16,6 +16,7 @@ import type { FieldReportReadModel } from "../contracts/FieldReportReadModel";
 type BuildFieldReportPdfRenderInput = {
   artifactKey: string;
   readModel: FieldReportReadModel;
+  brandLogo?: PdfBrandLogo;
 };
 
 /* ── Palette aliases from stylesheet ── */
@@ -169,6 +170,73 @@ function fieldWorkability(opts: {
   return { verdict: "Fit", explanation: "Field conditions are workable. Soil is firm enough for equipment traffic." };
 }
 
+/* ── Spray Window Helpers ── */
+
+type SprayWindowBlock = {
+  startAt: string;
+  endAt: string;
+  maxWindKph: number;
+  maxPrecipProbabilityPct: number | null;
+  avgTempRangeLabel: string;
+};
+
+function isSprayEligible(f: FieldWeatherForecast): boolean {
+  const avgTemp = (f.airTemperatureMinC + f.airTemperatureMaxC) / 2;
+  return (
+    f.windSpeedKph <= 18 &&
+    (f.precipitationProbabilityPct ?? 0) < 20 &&
+    f.precipitationMm < 1 &&
+    avgTemp >= 10 &&
+    avgTemp <= 30
+  );
+}
+
+function addHoursToIso(value: string, hours: number) {
+  return new Date(Date.parse(value) + hours * 60 * 60 * 1000).toISOString();
+}
+
+function findSprayWindows(forecasts: readonly FieldWeatherForecast[], maxWindows = 3): SprayWindowBlock[] {
+  const windows: SprayWindowBlock[] = [];
+  const horizon = forecasts.slice(0, 48); // 48h lookahead
+  let i = 0;
+  while (i <= horizon.length - 4 && windows.length < maxWindows) {
+    const block = horizon.slice(i, i + 4);
+    if (block.length < 4 || block.some((f) => !isSprayEligible(f))) {
+      i += 1;
+      continue;
+    }
+    const avgs = block.map((f) => (f.airTemperatureMinC + f.airTemperatureMaxC) / 2);
+    const precips = block
+      .map((f) => f.precipitationProbabilityPct)
+      .filter((v): v is number => v !== null && Number.isFinite(v));
+    windows.push({
+      startAt: block[0]!.validAt,
+      endAt: addHoursToIso(block[block.length - 1]!.validAt, 1),
+      maxWindKph: Math.max(...block.map((f) => f.windSpeedKph)),
+      maxPrecipProbabilityPct: precips.length > 0 ? Math.max(...precips) : null,
+      avgTempRangeLabel: `${Math.min(...avgs).toFixed(0)}–${Math.max(...avgs).toFixed(0)}°C`,
+    });
+    i += 4; // skip past this window
+  }
+  return windows;
+}
+
+function fmtWindowTime(iso: string): string {
+  try {
+    const label = new Date(iso).toLocaleString("en-CA", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "UTC",
+    });
+    return `${label} UTC`;
+  } catch {
+    return `${iso.slice(0, 16).replace("T", " ")} UTC`;
+  }
+}
+
 /** Derive a plain-language recommended action from an alert title. */
 function inferAlertAction(alert: FieldAlert): string | undefined {
   const t = (alert.title + " " + (alert.summary ?? "")).toLowerCase();
@@ -266,6 +334,7 @@ function inferFindingAction(finding: FieldIntelligenceFinding): string | undefin
 export function buildFieldReportPdfRenderInput({
   artifactKey,
   readModel,
+  brandLogo,
 }: BuildFieldReportPdfRenderInput): PdfRenderInput {
   const blocks: PdfBlock[] = [];
   const m = readModel;
@@ -981,6 +1050,71 @@ export function buildFieldReportPdfRenderInput({
     }
   }
 
+  /* ── Spray Window Detail ── */
+
+  const allForecasts = m.weather.profile.forecasts;
+  const sprayWindows = allForecasts.length >= 4 ? findSprayWindows(allForecasts) : [];
+
+  if (sprayWindows.length > 0 || (sig && sig.sprayWindowCount24h > 0)) {
+    blocks.push({ kind: "spacer", height: 6 });
+    blocks.push({
+      kind: "section-header",
+      label: "Spray Windows",
+      meta: sprayWindows.length > 0
+        ? `${sprayWindows.length} window${sprayWindows.length > 1 ? "s" : ""} in next 48 h`
+        : `${sig?.sprayWindowCount24h ?? 0} eligible in 24 h`,
+      accentColor: GREEN,
+    });
+
+    if (sprayWindows.length > 0) {
+      blocks.push({
+        kind: "text",
+        style: "caption",
+        text: "Eligible 4-hour blocks where wind ≤ 18 km/h, rain probability < 20%, precipitation < 1 mm, and average temperature 10–30°C. All times shown in UTC.",
+      });
+
+      blocks.push({
+        kind: "table",
+        columns: [
+          { label: "Window", width: 0.08, align: "center" },
+          { label: "Start", width: 0.22 },
+          { label: "End", width: 0.22 },
+          { label: "Max Wind", width: 0.16, align: "right" },
+          { label: "Rain Risk", width: 0.16, align: "right" },
+          { label: "Temp Range", width: 0.16, align: "right" },
+        ],
+        headerBg: GREEN,
+        rows: sprayWindows.map((w, i) => ({
+          cells: [
+            String(i + 1),
+            fmtWindowTime(w.startAt),
+            fmtWindowTime(w.endAt),
+            `${Math.round(w.maxWindKph)} km/h`,
+            w.maxPrecipProbabilityPct !== null ? `${Math.round(w.maxPrecipProbabilityPct)}%` : "Low",
+            w.avgTempRangeLabel,
+          ],
+        })),
+        marginTop: 6,
+      });
+
+      const best = sprayWindows[0]!;
+      blocks.push({
+        kind: "severity-card",
+        severity: "info",
+        title: `Best window: ${fmtWindowTime(best.startAt)} – ${fmtWindowTime(best.endAt)}`,
+        body: `Wind up to ${Math.round(best.maxWindKph)} km/h, ${best.maxPrecipProbabilityPct !== null ? `${Math.round(best.maxPrecipProbabilityPct)}% rain risk` : "low rain risk"}, temperatures ${best.avgTempRangeLabel}.`,
+        action: "Confirm target crop stage and product label. Re-check wind on exposed field edges before committing.",
+        marginTop: 6,
+      });
+    } else {
+      blocks.push({
+        kind: "text",
+        style: "body",
+        text: `${sig?.sprayWindowCount24h ?? 0} spray-eligible period${(sig?.sprayWindowCount24h ?? 0) !== 1 ? "s" : ""} detected in the next 24 hours, but detailed hourly forecast data was insufficient to identify specific window times. Check hourly conditions before spraying.`,
+      });
+    }
+  }
+
   /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
      PAGE 3 — FORECAST
      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
@@ -1250,6 +1384,7 @@ export function buildFieldReportPdfRenderInput({
     title: `Field Report: ${m.field.name}`,
     subject: `NocPulse field report for ${m.field.name} — ${m.reportDate.slice(0, 10)}`,
     author: "NocPulse",
+    brandLogo,
     blocks,
   };
 }
