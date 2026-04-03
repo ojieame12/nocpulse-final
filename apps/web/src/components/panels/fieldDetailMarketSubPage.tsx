@@ -53,14 +53,9 @@ export function MarketSubPage({
   const symbolRow = findMarketRow(market?.referenceRows, "Market Symbol");
   const historyRow = findMarketRow(market?.referenceRows, "Stored History");
   const fieldAreaRow = findMarketRow(market?.referenceRows, "Field Area");
-  const yieldRow = findMarketRow(market?.revenueRows, "Expected Yield");
-  const priceAtHarvestRow = findMarketRow(market?.revenueRows, "Price at Harvest");
-  const basisRow = findMarketRow(market?.revenueRows, "Local Basis");
   const feedStatusLabel = resolveFeedStatusLabel(market);
-  const historyStatusLabel = resolveHistoryStatusLabel(historyRow?.value);
-  const yieldStatusLabel = resolveYieldStatusLabel(yieldRow?.value);
-  const quoteStatusLabel = resolveQuoteStatusLabel(priceAtHarvestRow?.value);
-  const basisStatusLabel = resolveBasisStatusLabel(basisRow?.value);
+  const historyStatusLabel =
+    market?.historyStatusLabel ?? resolveHistoryStatusLabel(historyRow?.value);
   const missingInputsLabel =
     market?.missingInputs.length ? market.missingInputs.map((value) => value.toUpperCase()).join(" + ") : null;
   const topHeroValue =
@@ -68,9 +63,9 @@ export function MarketSubPage({
       ? market?.priceLabel ?? "—"
       : symbolRow?.value ?? market?.cropSymbol ?? "—";
   const topHeroUnit = hasQuote ? market?.priceUnitLabel ?? "" : "";
-  const compactTopSummary = [feedStatusLabel, historyStatusLabel, fieldAreaRow?.value]
-    .filter(Boolean)
-    .join(" · ");
+  const compactTopSummary =
+    market?.topSummaryLabel ??
+    [feedStatusLabel, historyStatusLabel, fieldAreaRow?.value].filter(Boolean).join(" · ");
   const topHeroSub = hasQuote
     ? compactTopSummary || market?.priceUnitLabel || ""
     : compactTopSummary || marketHistoryEmptyText;
@@ -119,20 +114,22 @@ export function MarketSubPage({
       : market?.provisionalRevenueLabel && market.provisionalRevenueLabel !== "—"
         ? market.provisionalRevenueLabel
         : "N/A";
-  const compactRevenueSummary = [yieldRow?.value, priceAtHarvestRow?.value, basisRow?.value]
-    .filter(Boolean)
-    .join(" · ");
+  const compactRevenueSummary =
+    market?.revenueSummaryLabel ??
+    [
+      ["Yield", market?.yieldStatusLabel ?? "N/A"],
+      ["Price", market?.harvestPriceStatusLabel ?? "N/A"],
+      ["Basis", market?.basisStatusLabel ?? "N/A"],
+    ]
+      .map(([label, value]) => `${label} ${value ?? "N/A"}`)
+      .join(" · ");
   const revenueHeroSub =
     hasGrossRevenue
       ? compactRevenueSummary ||
         marketScenarioQualifier ||
         market?.estimatedGrossSubLabel ||
         "Gross revenue estimate"
-      : buildMetricSummary([
-          ["Yield", yieldStatusLabel],
-          ["Price", quoteStatusLabel],
-          ["Basis", basisStatusLabel],
-        ]) || "Yield N/A · Price N/A · Basis N/A";
+      : compactRevenueSummary || "Yield N/A · Price N/A · Basis N/A";
   const scenarioIntroText = "Optional quote, basis, and yield overrides.";
   const historyEmptySummary =
     hasQuote
@@ -550,30 +547,6 @@ function resolveHistoryStatusLabel(value: string | null | undefined) {
   return value === "No stored captures" ? "0 captures" : value ?? "N/A";
 }
 
-function resolveYieldStatusLabel(value: string | null | undefined) {
-  return value === "Add yield" || value == null || value === "—" ? "N/A" : value;
-}
-
-function resolveQuoteStatusLabel(value: string | null | undefined) {
-  if (value === "Add quote" || value === "Needs yield" || value == null || value === "—") {
-    return "N/A";
-  }
-
-  return value;
-}
-
-function resolveBasisStatusLabel(value: string | null | undefined) {
-  if (value === "Uses feed basis") {
-    return "Feed";
-  }
-
-  if (value === "Not set" || value == null || value === "—") {
-    return "N/A";
-  }
-
-  return value;
-}
-
 function resolveValuationStateLabel(
   value: FieldMarketProps["valuationState"],
 ) {
@@ -589,14 +562,6 @@ function resolveValuationStateLabel(
     default:
       return "N/A";
   }
-}
-
-function buildMetricSummary(rows: readonly [string, string | null | undefined][]) {
-  const items = rows
-    .map(([label, value]) => `${label} ${value ?? "N/A"}`)
-    .filter(Boolean);
-
-  return items.join(" · ");
 }
 
 function compactHint(value: string | null | undefined) {

@@ -45,6 +45,12 @@ export interface FieldMarketProps {
   quoteFreshnessState: "fresh" | "stale" | "missing" | "unsupported";
   quoteFreshnessLabel: string;
   quoteAgeLabel?: string | null;
+  historyStatusLabel?: string | null;
+  yieldStatusLabel?: string | null;
+  harvestPriceStatusLabel?: string | null;
+  basisStatusLabel?: string | null;
+  topSummaryLabel?: string | null;
+  revenueSummaryLabel?: string | null;
   valuationStatusLabel: string;
   missingInputs: readonly ("quote" | "yield")[];
   primaryActionLabel: string;
@@ -112,37 +118,21 @@ export function MarketTab({ field }: MarketTabProps) {
   const hasGrossRevenue = field.grossRevenueLabel !== "—";
   const historyRow = field.referenceRows.find((row) => row.label === "Stored History") ?? null;
   const areaRow = field.referenceRows.find((row) => row.label === "Field Area") ?? null;
-  const yieldRow = field.revenueRows.find((row) => row.label === "Expected Yield") ?? null;
-  const priceAtHarvestRow = field.revenueRows.find((row) => row.label === "Price at Harvest") ?? null;
-  const basisRow = field.revenueRows.find((row) => row.label === "Local Basis") ?? null;
   const feedStatusLabel = resolveFeedStatusLabel(field);
   const historyStatusLabel =
-    historyRow?.value === "No stored captures" ? "0 captures" : historyRow?.value ?? "N/A";
-  const yieldStatusLabel =
-    yieldRow?.value === "Add yield" || yieldRow?.value == null || yieldRow?.value === "—"
-      ? "N/A"
-      : yieldRow.value;
-  const quoteStatusLabel =
-    priceAtHarvestRow?.value === "Add quote" ||
-    priceAtHarvestRow?.value === "Needs yield" ||
-    priceAtHarvestRow?.value == null ||
-    priceAtHarvestRow?.value === "—"
-      ? "N/A"
-      : priceAtHarvestRow.value;
-  const basisStatusLabel =
-    basisRow?.value === "Uses feed basis"
-      ? "Feed"
-      : basisRow?.value === "Not set" || basisRow?.value == null || basisRow?.value === "—"
-        ? "N/A"
-        : basisRow.value;
-  const compactTopSummary = [feedStatusLabel, historyStatusLabel, areaRow?.value]
-    .filter(Boolean)
-    .join(" · ");
-  const compactRevenueSummary = buildMetricSummary([
-    ['Yield', yieldStatusLabel],
-    ['Price', quoteStatusLabel],
-    ['Basis', basisStatusLabel],
-  ]);
+    field.historyStatusLabel ??
+    (historyRow?.value === "No stored captures" ? "0 captures" : historyRow?.value ?? "N/A");
+  const compactTopSummary =
+    field.topSummaryLabel ?? [feedStatusLabel, historyStatusLabel, areaRow?.value].filter(Boolean).join(" · ");
+  const compactRevenueSummary =
+    field.revenueSummaryLabel ??
+    [
+      ["Yield", field.yieldStatusLabel ?? "N/A"],
+      ["Price", field.harvestPriceStatusLabel ?? "N/A"],
+      ["Basis", field.basisStatusLabel ?? "N/A"],
+    ]
+      .map(([label, value]) => `${label} ${value ?? "N/A"}`)
+      .join(" · ");
   const assumptionMetaRows = [
     ['Season', field.seasonYear != null ? String(field.seasonYear) : 'N/A'],
     ['Next', field.primaryActionLabel ?? 'N/A'],
@@ -423,8 +413,4 @@ function resolveFeedStatusLabel(field: FieldMarketProps) {
   }
 
   return "Supported";
-}
-
-function buildMetricSummary(rows: readonly [string, string | null | undefined][]) {
-  return rows.map(([label, value]) => `${label} ${value ?? "N/A"}`).join(" · ");
 }

@@ -119,6 +119,15 @@ test("buildMarketProps computes gross revenue from quote plus stored yield assum
   assert.equal(props.quoteFreshnessState, "stale");
   assert.equal(props.quoteFreshnessLabel, "Stale");
   assert.equal(props.quoteAgeLabel, "36h old");
+  assert.equal(props.historyStatusLabel, "2 captures");
+  assert.equal(props.yieldStatusLabel, "2.40 t/ha");
+  assert.equal(props.harvestPriceStatusLabel, "$708.50/t");
+  assert.equal(props.basisStatusLabel, "-12.00 CAD/t");
+  assert.equal(props.topSummaryLabel, "Supported · 2 captures · 64.2 ha");
+  assert.equal(
+    props.revenueSummaryLabel,
+    "Yield 2.40 t/ha · Price $708.50/t · Basis -12.00 CAD/t",
+  );
   assert.equal(props.valuationStatusLabel, "Scenario");
   assert.deepEqual(props.missingInputs, []);
   assert.equal(props.provisionalRevenueLabel, "$109,166");
@@ -269,6 +278,15 @@ test("buildMarketProps ignores a mismatched crop yield assumption", () => {
   assert.equal(props.availabilityState, "yield-unavailable");
   assert.equal(props.valuationState, "reference-only");
   assert.equal(props.valuationStatusLabel, "Yield N/A");
+  assert.equal(props.historyStatusLabel, "1 capture");
+  assert.equal(props.yieldStatusLabel, "N/A");
+  assert.equal(props.harvestPriceStatusLabel, "$720.50/t");
+  assert.equal(props.basisStatusLabel, "+0.00 CAD/t");
+  assert.equal(props.topSummaryLabel, "Supported · 1 capture · 64.2 ha");
+  assert.equal(
+    props.revenueSummaryLabel,
+    "Yield N/A · Price $720.50/t · Basis +0.00 CAD/t",
+  );
   assert.deepEqual(props.missingInputs, ["yield"]);
   assert.equal(props.primaryActionLabel, "Add field yield");
   assert.equal(props.provisionalRevenueLabel, "$720.50/t");
@@ -375,6 +393,9 @@ test("buildMarketProps treats rye as a live-feed crop even before quotes are sto
   assert.equal(props.feedStatusLabel, "Supported");
   assert.equal(props.referenceStatusLabel, "Missing");
   assert.equal(props.quoteFreshnessState, "missing");
+  assert.equal(props.historyStatusLabel, "0 captures");
+  assert.equal(props.topSummaryLabel, "Supported · 0 captures · 64.2 ha");
+  assert.equal(props.revenueSummaryLabel, "Yield N/A · Price N/A · Basis N/A");
   assert.equal(props.valuationStatusLabel, "Quote N/A · Yield N/A");
   assert.deepEqual(props.missingInputs, ["quote", "yield"]);
   assert.equal(props.primaryActionLabel, "Add manual quote and yield");
@@ -406,6 +427,14 @@ test("buildMarketProps marks stored yield without quote as provisional", () => {
   assert.equal(props.feedStatusLabel, "Supported");
   assert.equal(props.referenceStatusLabel, "Missing");
   assert.equal(props.quoteFreshnessState, "missing");
+  assert.equal(props.historyStatusLabel, "0 captures");
+  assert.equal(props.yieldStatusLabel, "2.80 t/ha");
+  assert.equal(props.harvestPriceStatusLabel, "N/A");
+  assert.equal(props.basisStatusLabel, "N/A");
+  assert.equal(
+    props.revenueSummaryLabel,
+    "Yield 2.80 t/ha · Price N/A · Basis N/A",
+  );
   assert.equal(props.valuationStatusLabel, "Quote N/A");
   assert.deepEqual(props.missingInputs, ["quote"]);
   assert.equal(props.primaryActionLabel, "Add manual quote");

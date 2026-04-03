@@ -491,6 +491,17 @@ export function buildMarketProps(
     quoteFreshnessState === "fresh" || quoteFreshnessState === "stale"
       ? quoteFreshnessBase.ageLabel
       : null;
+  const historyStatusLabel =
+    recentHistory.length > 0
+      ? `${recentHistory.length} capture${recentHistory.length === 1 ? "" : "s"}`
+      : "0 captures";
+  const yieldStatusLabel = yieldAvailable ? yieldAssumptionLabel : "N/A";
+  const harvestPriceStatusLabel =
+    harvestPriceCadPerTonne != null
+      ? `${formatCadCurrency(harvestPriceCadPerTonne)}/t`
+      : "N/A";
+  const basisStatusLabel =
+    effectiveBasisCadPerTonne != null ? formatSignedBasis(effectiveBasisCadPerTonne) : "N/A";
   const referenceStatusLabel = quoteFreshnessLabel;
   const valuationStatusLabel =
     valuationState === "unsupported"
@@ -543,10 +554,7 @@ export function buildMarketProps(
     },
     {
       label: "Stored History",
-      value:
-        recentHistory.length > 0
-          ? `${recentHistory.length} capture${recentHistory.length === 1 ? "" : "s"}`
-          : "No stored captures",
+      value: recentHistory.length > 0 ? historyStatusLabel : "No stored captures",
     },
     {
       label: "Field Area",
@@ -578,8 +586,16 @@ export function buildMarketProps(
             : liveFeedSupported
               ? "Missing"
               : marketCropSymbol
-                ? "Missing"
-                : "Unsupported";
+              ? "Missing"
+              : "Unsupported";
+  const topSummaryLabel = [feedStatusLabel, historyStatusLabel, `${fieldAreaHa.toFixed(1)} ha`].join(
+    " · ",
+  );
+  const revenueSummaryLabel = [
+    `Yield ${yieldStatusLabel}`,
+    `Price ${harvestPriceStatusLabel}`,
+    `Basis ${basisStatusLabel}`,
+  ].join(" · ");
 
   return {
     fieldId,
@@ -592,6 +608,12 @@ export function buildMarketProps(
     quoteFreshnessState,
     quoteFreshnessLabel,
     quoteAgeLabel,
+    historyStatusLabel,
+    yieldStatusLabel,
+    harvestPriceStatusLabel,
+    basisStatusLabel,
+    topSummaryLabel,
+    revenueSummaryLabel,
     valuationStatusLabel,
     missingInputs,
     primaryActionLabel,
