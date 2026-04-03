@@ -195,6 +195,43 @@ test("buildMarketProps derives the current quote from stored recent history when
   assert.equal(props.provisionalRevenueLabel, "$109,628");
 });
 
+test("buildMarketProps keeps investing daily settlements fresh through the next market day", () => {
+  const props = buildMarketProps(
+    createBaseReadModel(),
+    "field-123",
+    "North Quarter Demo",
+    64.2,
+    null,
+    [
+      {
+        cropSymbol: "CANOLA",
+        closePriceCadPerTonne: 720.5,
+        basisCadPerTonne: -9,
+        sourceCurrency: "CAD",
+        sourceUnit: "tonne",
+        sourceClosePrice: 720.5,
+        fxRateToCad: 1,
+        sourceKey: "investing-canada:ice-canola-futures",
+        capturedAt: "2026-03-27T00:00:00Z",
+        createdAt: "2026-03-27T00:00:00Z",
+      },
+    ],
+    null,
+    {
+      cropSymbol: "CANOLA",
+      yieldTonnesPerHa: 2.4,
+      sourceKey: "manual-panel",
+      assumedAt: "2026-03-28T00:00:00Z",
+      noteText: "Field manager estimate",
+    },
+  );
+
+  assert.equal(props.referenceStatusLabel, "Fresh");
+  assert.equal(props.quoteFreshnessState, "fresh");
+  assert.equal(props.quoteAgeLabel, "36h old");
+  assert.match(props.quoteStatusLabel ?? "", /Fresh/);
+});
+
 test("buildMarketProps ignores a mismatched crop yield assumption", () => {
   const props = buildMarketProps(
     createBaseReadModel(),

@@ -101,6 +101,7 @@ export async function buildMarketRefreshReport(input: {
 
         const freshness = describeGrainPriceSnapshotFreshness({
           capturedAt: snapshot.capturedAt,
+          sourceKey: snapshot.sourceKey,
           now: generatedAt,
           staleAfterHours,
         });

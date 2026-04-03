@@ -9,6 +9,32 @@ export type GrainPriceSnapshotFreshness = {
   ageLabel: string | null;
 };
 
+function isDailySettlementSourceKey(sourceKey: string | null | undefined) {
+  const normalized = sourceKey?.trim().toLowerCase() ?? "";
+  return (
+    normalized.startsWith("investing:") ||
+    normalized.startsWith("investing-canada:")
+  );
+}
+
+function startOfUtcDay(value: number) {
+  const date = new Date(value);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function businessDayIndex(value: number) {
+  const date = new Date(startOfUtcDay(value));
+  const day = date.getUTCDay();
+
+  if (day === 0) {
+    date.setUTCDate(date.getUTCDate() - 2);
+  } else if (day === 6) {
+    date.setUTCDate(date.getUTCDate() - 1);
+  }
+
+  return Math.floor(date.getTime() / 86_400_000);
+}
+
 function formatAgeLabel(ageHours: number) {
   if (ageHours < 1) {
     const minutes = Math.max(1, Math.round(ageHours * 60));
@@ -24,6 +50,7 @@ function formatAgeLabel(ageHours: number) {
 
 export function describeGrainPriceSnapshotFreshness(input: {
   capturedAt: string | null | undefined;
+  sourceKey?: string | null | undefined;
   now?: string | Date;
   staleAfterHours?: number;
 }): GrainPriceSnapshotFreshness {
@@ -54,9 +81,17 @@ export function describeGrainPriceSnapshotFreshness(input: {
   }
 
   const ageHours = Math.max(0, (now - capturedAt) / (60 * 60 * 1000));
+  const status =
+    isDailySettlementSourceKey(input.sourceKey)
+      ? businessDayIndex(now) - businessDayIndex(capturedAt) > 1
+        ? "stale"
+        : "fresh"
+      : ageHours > staleAfterHours
+        ? "stale"
+        : "fresh";
 
   return {
-    status: ageHours > staleAfterHours ? "stale" : "fresh",
+    status,
     ageHours,
     ageLabel: formatAgeLabel(ageHours),
   };

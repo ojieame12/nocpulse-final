@@ -31,7 +31,7 @@ test("buildMarketRefreshReport defaults to all supported crop symbols and classi
             sourceUnit: "bushel",
             sourceClosePrice: 6.05,
             fxRateToCad: 1.41,
-            sourceKey: "investing:cbot-us-wheat-futures",
+            sourceKey: "manual-admin",
             capturedAt: "2026-03-26T10:00:00.000Z",
           };
         default:
@@ -54,6 +54,35 @@ test("buildMarketRefreshReport defaults to all supported crop symbols and classi
   );
   assert.match(report.entries[1]?.normalizationLabel ?? "", /USD\/bushel × FX/i);
   assert.equal(report.entries[0]?.errorMessage, null);
+});
+
+test("buildMarketRefreshReport keeps investing daily settlements fresh through the next market day", async () => {
+  const report = await buildMarketRefreshReport({
+    now: "2026-04-03T15:43:22.778Z",
+    staleAfterHours: 24,
+    async loadLatestPrice(cropSymbol) {
+      if (cropSymbol !== "CANOLA") {
+        return null;
+      }
+
+      return {
+        cropSymbol,
+        closePriceCadPerTonne: 727.1,
+        basisCadPerTonne: 0,
+        sourceCurrency: "CAD",
+        sourceUnit: "tonne",
+        sourceClosePrice: 727.1,
+        fxRateToCad: 1,
+        sourceKey: "investing-canada:ice-canola-futures",
+        capturedAt: "2026-04-02T00:00:00+00:00",
+      };
+    },
+  });
+
+  assert.equal(
+    report.entries.find((entry) => entry.cropSymbol === "CANOLA")?.status,
+    "fresh",
+  );
 });
 
 test("buildMarketRefreshReport records per-symbol lookup failures without aborting the whole report", async () => {

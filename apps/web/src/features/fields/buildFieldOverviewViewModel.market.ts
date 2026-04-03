@@ -455,6 +455,7 @@ export function buildMarketProps(
         : "Supported";
   const quoteFreshnessBase = describeGrainPriceSnapshotFreshness({
     capturedAt: latestHistorySnapshot?.capturedAt ?? effectiveMarketPrice?.capturedAt ?? null,
+    sourceKey: latestHistorySnapshot?.sourceKey ?? effectiveMarketPrice?.sourceKey ?? null,
     now: rm.generatedAt,
   });
   const quoteFreshnessState =
