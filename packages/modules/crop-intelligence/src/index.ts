@@ -128,6 +128,10 @@ export {
   GROWTH_STAGE_ORDER,
 } from "./application/resolveCropRuleContext";
 export {
+  describeFieldAccessDecisionNarrative,
+  type FieldAccessDecisionNarrative,
+} from "./application/describeFieldAccessDecisionNarrative";
+export {
   describeSeedingAdvisoryNarrative,
   type DescribeSeedingAdvisoryNarrativeInput,
   type SeedingAdvisoryNarrative,

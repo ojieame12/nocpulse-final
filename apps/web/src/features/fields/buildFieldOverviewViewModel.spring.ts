@@ -1,4 +1,5 @@
 import {
+  describeFieldAccessDecisionNarrative,
   describeSeedingAdvisoryNarrative,
   resolveFieldAccessDecision,
   resolveSeedingAdvisoryDecision,
@@ -183,21 +184,13 @@ export function resolveFieldAccessPresentation(input: {
     return null;
   }
 
+  const narrative = describeFieldAccessDecisionNarrative(decision);
+
   return {
     label: "FIELD ACCESS",
-    value:
-      decision.verdict === "wait"
-        ? "Wait"
-        : decision.verdict === "marginal"
-          ? "Marginal"
-          : "Workable",
-    sub: decision.detailSummary,
-    tone:
-      decision.verdict === "wait"
-        ? "danger"
-        : decision.verdict === "marginal"
-          ? "warning"
-          : "positive",
+    value: narrative.valueLabel,
+    sub: narrative.summary,
+    tone: narrative.tone,
   };
 }
 
