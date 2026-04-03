@@ -14,6 +14,7 @@ import {
   type SeedingAdvisoryDecision,
 } from "@fieldpulse/module-crop-intelligence";
 import {
+  describeFrostRiskNarrative,
   findSprayWindows,
   formatFieldLocalTime,
   summarizeForecastDays,
@@ -174,10 +175,11 @@ function signalNote(label: string, value: number | null): string {
     return "3-day balance is positive.";
   }
   if (lbl.includes("frost")) {
-    if (value < -5) return "Hard frost. Significant crop damage risk.";
-    if (value < 0) return "Frost likely. Protect sensitive crops.";
-    if (value < 2) return "Near-frost. Monitor overnight lows.";
-    return "No frost risk in forecast.";
+    return describeFrostRiskNarrative({
+      minTempC: value,
+      probabilityPct7d: null,
+      riskNights7d: null,
+    }).signalNote;
   }
   if (lbl.includes("gdd")) {
     if (value < 5) return "Minimal heat accumulation. Growth stalled.";
@@ -683,6 +685,12 @@ export function buildFieldReportPdfRenderInput({
       sig.freezeThawCycles7d !== null;
 
     if (hasFrostDetail) {
+      const frostNarrative = describeFrostRiskNarrative({
+        minTempC: sig.frostRiskMinTempC7d,
+        probabilityPct7d: sig.frostProbabilityPct7d,
+        riskNights7d: sig.frostRiskNights7d,
+      });
+
       blocks.push({ kind: "spacer", height: 6 });
       blocks.push({
         kind: "section-header",
@@ -697,11 +705,7 @@ export function buildFieldReportPdfRenderInput({
         frostMetrics.push({
           label: "7-Day Low",
           value: `${fmt(sig.frostRiskMinTempC7d)}°C`,
-          sub: sig.frostRiskMinTempC7d < 0
-            ? "Hard frost expected this week"
-            : sig.frostRiskMinTempC7d < 2
-              ? "Near-frost conditions possible"
-              : "No frost risk in 7-day window",
+          sub: frostNarrative.sevenDayLowSub,
           valueColor: sig.frostRiskMinTempC7d < 0 ? RED : sig.frostRiskMinTempC7d < 2 ? AMBER : undefined,
         });
       }
@@ -710,11 +714,7 @@ export function buildFieldReportPdfRenderInput({
         frostMetrics.push({
           label: "Frost Probability",
           value: `${fmt(sig.frostProbabilityPct7d, 0)}%`,
-          sub: sig.frostProbabilityPct7d > 60
-            ? "Very likely — delay sensitive operations"
-            : sig.frostProbabilityPct7d > 30
-              ? "Moderate risk — monitor forecasts daily"
-              : "Low probability — conditions trending safe",
+          sub: frostNarrative.probabilitySub,
           valueColor: sig.frostProbabilityPct7d > 60 ? RED : sig.frostProbabilityPct7d > 30 ? AMBER : undefined,
         });
       }
@@ -723,11 +723,7 @@ export function buildFieldReportPdfRenderInput({
         frostMetrics.push({
           label: "Frost-Risk Nights",
           value: `${sig.frostRiskNights7d} of 7`,
-          sub: sig.frostRiskNights7d >= 4
-            ? "Persistent frost pattern — not safe for tender seedlings"
-            : sig.frostRiskNights7d >= 2
-              ? "Intermittent frost — watch overnight lows"
-              : "Isolated occurrence only",
+          sub: frostNarrative.riskNightsSub,
           valueColor: sig.frostRiskNights7d >= 4 ? RED : sig.frostRiskNights7d >= 2 ? AMBER : undefined,
         });
       }

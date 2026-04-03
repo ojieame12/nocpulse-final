@@ -343,3 +343,49 @@ test("buildFieldReportPdfRenderInput aggregates hourly forecast periods into dai
     "55%",
   ]);
 });
+
+test("buildFieldReportPdfRenderInput uses shared frost narrative copy in signal notes and frost metrics", () => {
+  const renderInput = buildFieldReportPdfRenderInput({
+    artifactKey: "test-artifact",
+    readModel: createReadModel({
+      cropType: "Canola",
+      surfacePct: 58,
+      signalSet: createSignalSet({
+        soilTemp6cmCurrentC: 5.2,
+        soilTemp6cmSustainedDays: 2,
+        frostRiskMinTempC7d: -6.4,
+        frostRiskNights7d: 5,
+        frostProbabilityPct7d: 72,
+      }),
+    }),
+  });
+
+  const weatherSignalsTable = renderInput.blocks.find(
+    (block) => block.kind === "table" && block.columns[0]?.label === "Signal",
+  );
+  const frostSectionIndex = renderInput.blocks.findIndex(
+    (block) => block.kind === "section-header" && block.label === "Frost & Spring Risk",
+  );
+  const frostMetrics =
+    frostSectionIndex === -1
+      ? null
+      : renderInput.blocks
+          .slice(frostSectionIndex + 1)
+          .find((block) => block.kind === "metric-grid");
+
+  assert.equal(weatherSignalsTable?.kind, "table");
+  const frostSignalRow = weatherSignalsTable.rows.find((row) => row.cells[0] === "Frost Risk Min");
+  assert.ok(frostSignalRow);
+  assert.equal(frostSignalRow.cells[4], "Hard frost. Significant crop damage risk.");
+
+  assert.equal(frostMetrics?.kind, "metric-grid");
+  assert.equal(frostMetrics?.cells[0]?.sub, "Hard frost expected this week");
+  assert.equal(
+    frostMetrics?.cells.find((cell) => cell.label === "Frost Probability")?.sub,
+    "Very likely — delay sensitive operations",
+  );
+  assert.equal(
+    frostMetrics?.cells.find((cell) => cell.label === "Frost-Risk Nights")?.sub,
+    "Persistent frost pattern — not safe for tender seedlings",
+  );
+});
