@@ -12,6 +12,7 @@ import type {
   FieldWeatherForecast,
   FieldWeatherProfile,
 } from "@fieldpulse/module-weather";
+import { buildReportProps } from "./buildFieldOverviewViewModel.report";
 import { resolveFieldAccessPresentation, resolveSeedingRecommendation } from "./buildFieldOverviewViewModel.spring";
 import { resolveSprayWindowRecommendation } from "./buildFieldOverviewViewModel.spray";
 import type { FieldReportReadModel } from "../../../../../packages/modules/reports/src/contracts/FieldReportReadModel";
@@ -285,6 +286,17 @@ function findSprayBlocks(readModel: FieldReportReadModel) {
   };
 }
 
+function findForecastTable(readModel: FieldReportReadModel) {
+  const renderInput = buildFieldReportPdfRenderInput({
+    artifactKey: "test-artifact",
+    readModel,
+  });
+
+  return renderInput.blocks.find(
+    (block) => block.kind === "table" && block.columns[0]?.label === "Day",
+  );
+}
+
 test("UI and PDF stay aligned on too-early canola seeding decisions", () => {
   const cropType = "Canola";
   const ruleContext = resolveCropRuleContext({
@@ -438,4 +450,58 @@ test("UI and PDF stay aligned on farmer-local spray window timing", () => {
   assert.equal(pdfSprayBlocks.table?.rows[0]?.cells[1], startLabel);
   assert.equal(pdfSprayBlocks.table?.rows[0]?.cells[2], endLabel);
   assert.equal(pdfSprayBlocks.card?.title, `Best window: ${startLabel} – ${endLabel}`);
+});
+
+test("UI report cards and PDF stay aligned on daily forecast aggregation", () => {
+  const forecasts = [
+    createHourlyForecast({
+      validAt: "2026-04-03T06:00:00.000Z",
+      airTemperatureC: 1,
+      precipitationMm: 0.4,
+      windSpeedKph: 15,
+      precipitationProbabilityPct: 20,
+    }),
+    createHourlyForecast({
+      validAt: "2026-04-03T18:00:00.000Z",
+      airTemperatureC: 12,
+      precipitationMm: 1.1,
+      windSpeedKph: 22,
+      precipitationProbabilityPct: 55,
+    }),
+    createHourlyForecast({
+      validAt: "2026-04-04T12:00:00.000Z",
+      airTemperatureC: 14,
+      precipitationMm: 0,
+      windSpeedKph: 18,
+      precipitationProbabilityPct: 10,
+    }),
+  ];
+  const readModel = createReadModel({
+    cropType: "Canola",
+    surfacePct: 58,
+    signalSet: createSignalSet({
+      soilTemp6cmCurrentC: 5.2,
+      soilTemp6cmSustainedDays: 2,
+      frostRiskMinTempC7d: 1.5,
+      frostRiskNights7d: 1,
+      frostProbabilityPct7d: 25,
+    }),
+    forecasts,
+  });
+  const reportProps = buildReportProps(readModel, FIELD.name, () => "just now");
+  const forecastTable = findForecastTable(readModel);
+
+  assert.equal(forecastTable?.kind, "table");
+  assert.equal(reportProps.forecast.length, forecastTable?.rows.length);
+
+  for (const [index, day] of reportProps.forecast.entries()) {
+    const row = forecastTable?.rows[index];
+    assert.ok(row);
+    assert.equal(day.day, row.cells[0]);
+    assert.equal(day.temp, `${Math.round(Number.parseFloat(row.cells[3] ?? "0"))}/${Math.round(Number.parseFloat(row.cells[2] ?? "0"))}`);
+    assert.equal(
+      day.precip,
+      row.cells[6] !== "—" ? row.cells[6] : (row.cells[4] ?? "").replace(" ", ""),
+    );
+  }
 });
