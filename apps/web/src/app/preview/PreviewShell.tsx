@@ -2353,6 +2353,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
       notes={fieldData.notesPanel}
       activity={fieldData.activityPanel}
       onMarketScenarioSaved={handleMarketScenarioSaved}
+      onOpenAlerts={() => switchPanel("alerts")}
       initialPage={initialPage}
       onInitialPageClose={onInitialPageClose}
       onboardingStatus={fieldOnboardingProgress.get(fieldData.fieldId) ?? null}

@@ -3,6 +3,7 @@
  * Extracted from SubPageView — pure render, shared openQ state passed as props.
  */
 
+import React from "react";
 import { ChevronRight } from "lucide-react";
 import { Card, Lbl, LblM, Big, Sub, Mono } from "./fieldDetailCardPrimitives";
 import type { FieldActionProps } from "./ActionTab";
@@ -70,6 +71,8 @@ export interface ActionsSubPageProps {
   contextualNotesTarget: FieldNotesInspectionTarget | null;
   /** Handle open context notes */
   handleOpenContextNotes: () => void;
+  /** Open the alerts review surface */
+  handleOpenAlerts: () => void;
   /** Status color function */
   statusColor: (status: string) => string;
 }
@@ -91,6 +94,7 @@ export function ActionsSubPage({
   handleOpenFocusedZone,
   contextualNotesTarget,
   handleOpenContextNotes,
+  handleOpenAlerts,
   statusColor,
 }: ActionsSubPageProps) {
   const intelligenceMeta =
@@ -176,6 +180,34 @@ export function ActionsSubPage({
           ))}
         </div>
       </Card>
+      {(action?.activeAlertCount ?? 0) > 0 ? (
+        <Card span={-1} accent={ac} onClick={handleOpenAlerts}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <Lbl color={ac}>Alert Review</Lbl>
+            <span
+              className="fdp-mono"
+              style={{ fontSize: 9, fontWeight: 700, color: ac, textTransform: "uppercase" }}
+            >
+              Review alerts
+            </span>
+          </div>
+          <div style={{ marginTop: 4 }}>
+            <span
+              style={{
+                fontFamily: "var(--font-body)",
+                fontSize: 13,
+                fontWeight: 700,
+                color: "var(--text-primary)",
+              }}
+            >
+              {action?.activeAlertCount} active alert{action?.activeAlertCount === 1 ? "" : "s"}
+            </span>
+            <div>
+              <Sub>{action?.topRiskTitle ?? "Open the alerts panel to review or resolve current field alerts."}</Sub>
+            </div>
+          </div>
+        </Card>
+      ) : null}
       {(action?.questions ?? []).map((qa, i) => (
         <Card
           key={i}

@@ -1669,6 +1669,7 @@ export function FieldPageShell({
         action={interactiveAction}
         notes={interactiveNotes}
         activity={interactiveActivity}
+        onOpenAlerts={() => setPanelView("alerts")}
         initialPage={canonicalDetailInitialPage}
         onInitialPageClose={() => setPanelView("detail")}
         onboardingStatus={fieldOnboardingProgress.get(activeFieldId) ?? null}
@@ -1771,6 +1772,7 @@ export function FieldPageShell({
         action={interactiveAction}
         notes={interactiveNotes}
         activity={interactiveActivity}
+        onOpenAlerts={() => setPanelView("alerts")}
         onClose={handlePanelClose}
         onboardingStatus={fieldOnboardingProgress.get(activeFieldId) ?? null}
         prebuiltStages={prebuiltStagesByField.get(activeFieldId) ?? null}

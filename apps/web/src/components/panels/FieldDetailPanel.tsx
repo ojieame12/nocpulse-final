@@ -205,6 +205,7 @@ function SubPageView({
   selectedNotesTarget,
   onSelectNotesTarget,
   onMarketScenarioSaved,
+  onOpenAlerts,
 }: {
   fieldId: string;
   workspaceId?: string;
@@ -236,6 +237,7 @@ function SubPageView({
   selectedNotesTarget: FieldNotesInspectionTarget | null;
   onSelectNotesTarget: (target: FieldNotesInspectionTarget | null) => void;
   onMarketScenarioSaved?: (() => void | Promise<void>) | null;
+  onOpenAlerts?: (() => void) | null;
 }) {
   const mc = liveModeData;
   const pg = SUB_PAGES.find((p) => p.k === page)!;
@@ -726,6 +728,7 @@ function SubPageView({
             handleOpenFocusedZone={handleOpenFocusedZone}
             contextualNotesTarget={contextualNotesTarget}
             handleOpenContextNotes={handleOpenContextNotes}
+            handleOpenAlerts={() => onOpenAlerts?.()}
             statusColor={statusColor}
           />
         )}
@@ -770,6 +773,7 @@ export interface FieldDetailPanelProps {
   notes: FieldNotesProps | null;
   activity: FieldActivityPanelModel | null;
   onMarketScenarioSaved?: (() => void | Promise<void>) | null;
+  onOpenAlerts?: (() => void) | null;
   initialPage?: string | null;
   onInitialPageClose?: (() => void) | null;
   onClose?: (() => void) | null;
@@ -937,6 +941,7 @@ export function FieldDetailPanel({
   notes,
   activity,
   onMarketScenarioSaved,
+  onOpenAlerts,
   initialPage,
   onInitialPageClose,
   onClose,
@@ -1495,6 +1500,7 @@ export function FieldDetailPanel({
           selectedNotesTarget={selectedSubpageNotesTarget}
           onSelectNotesTarget={setSelectedSubpageNotesTarget}
           onMarketScenarioSaved={onMarketScenarioSaved}
+          onOpenAlerts={onOpenAlerts}
         />
       ) : (
         <MetricHintProvider>

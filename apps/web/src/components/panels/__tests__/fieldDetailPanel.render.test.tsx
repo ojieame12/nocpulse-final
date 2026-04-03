@@ -158,6 +158,25 @@ test("FieldDetailPanel initialPage='notes' renders the canonical notes subpage",
   assert.match(markup, /Scout moisture pocket on the west edge\./);
 });
 
+test("FieldDetailPanel initialPage='actions' exposes alert review when active alerts exist", () => {
+  const markup = renderWithDarkTheme(
+    <FieldDetailPanel
+      {...createBasePanelProps()}
+      initialPage="actions"
+      action={{
+        ...createBasePanelProps().action,
+        activeAlertCount: 2,
+        topRiskTitle: "Field changed materially this week",
+      }}
+    />,
+  );
+
+  assert.match(markup, /Alert Review/);
+  assert.match(markup, /Review alerts/);
+  assert.match(markup, /2 active alerts/);
+  assert.match(markup, /Field changed materially this week/);
+});
+
 test("FieldDetailPanel keeps first insight details collapsed by default", () => {
   const markup = renderWithDarkTheme(
     <FieldDetailPanel
