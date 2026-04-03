@@ -49,6 +49,7 @@ export interface FieldMarketProps {
   missingInputs: readonly ("quote" | "yield")[];
   primaryActionLabel: string;
   primaryActionHint: string;
+  primaryActionHintCompact?: string | null;
   referenceRows: readonly MarketRevenueRow[];
   provisionalRevenueLabel: string;
   provisionalRevenueSubLabel: string;
@@ -83,6 +84,7 @@ export interface FieldMarketProps {
   revenueRows: readonly MarketRevenueRow[];
   grossRevenueLabel: string;
   revenueNote: string;
+  revenueNoteCompact?: string | null;
   contextTiles: readonly MarketContextTile[];
   disclaimerText: string;
   footerText: string;
@@ -304,7 +306,9 @@ export function MarketTab({ field }: MarketTabProps) {
         ) : null}
 
         {hasGrossRevenue ? (
-          <span className="market__revenue-note">{compactHint(field.revenueNote) ?? field.revenueNote}</span>
+          <span className="market__revenue-note">
+            {field.revenueNoteCompact ?? compactHint(field.revenueNote) ?? field.revenueNote}
+          </span>
         ) : null}
       </div>
 
@@ -339,7 +343,9 @@ export function MarketTab({ field }: MarketTabProps) {
             </div>
             {field.primaryActionHint ? (
               <span className="market__revenue-note">
-                {compactHint(field.primaryActionHint) ?? field.primaryActionHint}
+                {field.primaryActionHintCompact ??
+                  compactHint(field.primaryActionHint) ??
+                  field.primaryActionHint}
               </span>
             ) : null}
             {yieldNoteText ? (

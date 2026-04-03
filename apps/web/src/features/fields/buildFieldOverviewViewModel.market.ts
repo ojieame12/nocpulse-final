@@ -95,6 +95,10 @@ function formatSignedCadDelta(value: number) {
   return `${sign}$${Math.abs(value).toFixed(2)}`;
 }
 
+function formatSignedBasis(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)} CAD/t`;
+}
+
 function formatQuoteFreshnessLabel(
   value: FieldMarketProps["quoteFreshnessState"],
 ) {
@@ -406,8 +410,28 @@ export function buildMarketProps(
             ? `No stored ${marketCropSymbol} quote is available yet. Revenue will stay provisional until a quote arrives or you add a manual quote.`
             : `No ${marketCropSymbol} quote source is available yet. Add a manual quote to use this crop in field revenue planning.`
           : availabilityState === "yield-unavailable"
-            ? "Add a field yield assumption to unlock revenue for this field."
+          ? "Add a field yield assumption to unlock revenue for this field."
             : null;
+  const availabilityReasonCompactLabel =
+    availabilityState === "unsupported-crop"
+      ? `No symbol for ${cropLabel.toLowerCase()} yet.`
+      : availabilityState === "unsupported-feed"
+        ? marketCropSymbol
+          ? `${marketCropSymbol} feed unsupported.`
+          : "Feed unsupported."
+        : availabilityState === "quote-and-yield-unavailable"
+          ? "Add quote + yield to unlock field revenue."
+          : availabilityState === "quote-unavailable"
+            ? liveFeedSupported
+              ? marketCropSymbol
+                ? `No ${marketCropSymbol} quote stored yet.`
+                : "No quote stored yet."
+              : marketCropSymbol
+                ? `Add quote to use ${marketCropSymbol}.`
+                : "Add quote to use this crop."
+            : availabilityState === "yield-unavailable"
+              ? "Add field yield to unlock revenue."
+              : null;
   const valuationState =
     !marketCropSymbol || availabilityState === "unsupported-feed"
       ? "unsupported"
@@ -499,6 +523,15 @@ export function buildMarketProps(
       : availabilityState === "unsupported-feed"
         ? ""
         : "Store field inputs to move from reference market context into a field-specific revenue view.");
+  const primaryActionHintCompact =
+    availabilityReasonCompactLabel ??
+    (valuationState === "scenario"
+      ? effectiveBasisAssumption == null
+        ? "Stored inputs active. Add field basis to refine."
+        : "Stored inputs active. Refine quote, basis, or yield."
+      : availabilityState === "unsupported-feed"
+        ? null
+        : "Store field inputs for field revenue.");
   const referenceRows = [
     {
       label: "Market Symbol",
@@ -563,6 +596,7 @@ export function buildMarketProps(
     missingInputs,
     primaryActionLabel,
     primaryActionHint,
+    primaryActionHintCompact,
     referenceRows,
     provisionalRevenueLabel,
     provisionalRevenueSubLabel,
@@ -652,7 +686,7 @@ export function buildMarketProps(
         label: "Local Basis",
         value:
           effectiveBasisCadPerTonne != null
-            ? `${effectiveBasisCadPerTonne >= 0 ? "+" : ""}${effectiveBasisCadPerTonne.toFixed(2)} CAD/t`
+            ? formatSignedBasis(effectiveBasisCadPerTonne)
             : "N/A",
       },
       { label: "Field Area", value: `${fieldAreaHa.toFixed(1)} ha` },
@@ -668,7 +702,7 @@ export function buildMarketProps(
       ? [
           `Based on stored yield assumption ${yieldAssumptionLabel}`,
           effectiveBasisAssumption
-            ? `with field basis ${effectiveBasisAssumption.basisCadPerTonne >= 0 ? "+" : ""}${effectiveBasisAssumption.basisCadPerTonne.toFixed(2)} CAD/t`
+            ? `with field basis ${formatSignedBasis(effectiveBasisAssumption.basisCadPerTonne)}`
             : null,
           yieldAssumptionDateLabel
             ? `captured ${yieldAssumptionDateLabel}`
@@ -687,6 +721,23 @@ export function buildMarketProps(
         : quoteAvailable
           ? "A market quote is available, but revenue remains unavailable until a field yield assumption is stored."
           : "Store a market quote and a field yield assumption before using this tab for revenue decisions.",
+    revenueNoteCompact:
+      grossRevenueCad != null
+        ? [
+            `Yield ${yieldAssumptionLabel}`,
+            effectiveBasisAssumption
+              ? `Basis ${formatSignedBasis(effectiveBasisAssumption.basisCadPerTonne)}`
+              : null,
+            yieldAssumptionDateLabel ? `Saved ${yieldAssumptionDateLabel}` : null,
+            `Source ${shortSourceLabel(effectiveYieldAssumption!.sourceKey)}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : yieldAvailable
+          ? `Yield ${yieldAssumptionLabel} stored. Waiting on quote.`
+          : quoteAvailable
+            ? "Quote stored. Add yield to unlock revenue."
+            : "Store quote + yield before using revenue.",
     contextTiles: [
       {
         label: "ROOT MOISTURE",

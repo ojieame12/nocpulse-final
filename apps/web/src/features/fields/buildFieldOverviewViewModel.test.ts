@@ -136,8 +136,13 @@ test("buildMarketProps computes gross revenue from quote plus stored yield assum
     { label: "Local Basis", value: "-12.00 CAD/t" },
     { label: "Field Area", value: "64.2 ha" },
   ]);
+  assert.equal(props.primaryActionHintCompact, "Stored inputs active. Add field basis to refine.");
   assert.match(props.quoteStatusLabel ?? "", /Stale/);
   assert.match(props.revenueNote, /manual-panel/i);
+  assert.equal(
+    props.revenueNoteCompact,
+    "Yield 2.40 t/ha · Saved Mar 28, 2026 · Source manual-panel",
+  );
   assert.match(props.disclaimerText, /stored field yield assumption/i);
 });
 
@@ -272,6 +277,8 @@ test("buildMarketProps ignores a mismatched crop yield assumption", () => {
   assert.equal(props.estimatedGrossLabel, "—");
   assert.equal(props.grossRevenueLabel, "—");
   assert.equal(props.revenueRows[0]?.value, "N/A");
+  assert.equal(props.primaryActionHintCompact, "Add field yield to unlock revenue.");
+  assert.equal(props.revenueNoteCompact, "Quote stored. Add yield to unlock revenue.");
   assert.match(props.revenueNote, /yield assumption is stored/i);
 });
 
@@ -342,6 +349,7 @@ test("buildMarketProps explains unsupported market crops", () => {
   assert.equal(props.quoteFreshnessState, "unsupported");
   assert.equal(props.primaryActionLabel, "N/A");
   assert.match(props.availabilityReasonLabel ?? "", /no market symbol/i);
+  assert.equal(props.primaryActionHintCompact, "No symbol for faba bean yet.");
   assert.equal(props.priceBars.length, 0);
 });
 
@@ -370,6 +378,7 @@ test("buildMarketProps treats rye as a live-feed crop even before quotes are sto
   assert.equal(props.valuationStatusLabel, "Quote N/A · Yield N/A");
   assert.deepEqual(props.missingInputs, ["quote", "yield"]);
   assert.equal(props.primaryActionLabel, "Add manual quote and yield");
+  assert.equal(props.primaryActionHintCompact, "Add quote + yield to unlock field revenue.");
   assert.equal(props.priceSubmitUrl, "/api/market/prices");
   assert.match(props.availabilityReasonLabel ?? "", /no stored RYE quote is available yet/i);
 });

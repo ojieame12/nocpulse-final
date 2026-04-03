@@ -143,7 +143,11 @@ export function MarketSubPage({
   const showYieldQuickForm = market?.availabilityState === "yield-unavailable" && hasQuote;
   const revenueFootnote =
     hasGrossRevenue
-      ? marketScenarioQualifier ?? compactRevenueSummary ?? market?.revenueNote ?? "Revenue estimate available."
+      ? marketScenarioQualifier ??
+        compactRevenueSummary ??
+        market?.revenueNoteCompact ??
+        market?.revenueNote ??
+        "Revenue estimate available."
       : null;
   const collapseRevenueRows = showYieldQuickForm && !hasGrossRevenue;
   const revenueRows = (market?.revenueRows ?? []).map((row) => ({
@@ -316,7 +320,7 @@ export function MarketSubPage({
             ))}
           </div>
         ) : null}
-        {revenueFootnote ? <Sub>{compactHint(revenueFootnote)}</Sub> : null}
+        {revenueFootnote ? <Sub>{compactHint(revenueFootnote) ?? revenueFootnote}</Sub> : null}
       </Card>
       <Card
         span={-1}
@@ -373,7 +377,13 @@ export function MarketSubPage({
                 ))}
               </div>
             ) : null}
-            {market?.primaryActionHint ? <Sub>{compactHint(market.primaryActionHint) ?? market.primaryActionHint}</Sub> : null}
+            {market?.primaryActionHint ? (
+              <Sub>
+                {market.primaryActionHintCompact ??
+                  compactHint(market.primaryActionHint) ??
+                  market.primaryActionHint}
+              </Sub>
+            ) : null}
             {yieldNoteText ? <Sub>{`Yield note: ${yieldNoteText}`}</Sub> : null}
             {basisNoteText ? <Sub>{`Basis note: ${basisNoteText}`}</Sub> : null}
           </div>
