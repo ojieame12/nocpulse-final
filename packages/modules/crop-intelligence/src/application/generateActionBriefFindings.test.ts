@@ -172,6 +172,7 @@ test("generateActionBriefFindings creates an active action brief when root-zone 
   assert.equal(result.findings[0]?.severity, "medium");
   assert.match(result.findings[0]?.title ?? "", /Field changed materially since last review/);
   assert.match(result.findings[0]?.summary ?? "", /Root-zone moisture moved down 13\.0 pts/);
+  assert.equal(result.findings[0]?.evidence?.metadata?.reasonCode, "material-drydown");
   assert.equal(findingRepository.upsertInputs[0]?.dedupeKey, "action-brief:material-change:v1");
 });
 
@@ -235,6 +236,7 @@ test("generateActionBriefFindings resolves an active action brief when the chang
   assert.equal(result.findings.length, 1);
   assert.equal(result.findings[0]?.status, "resolved");
   assert.match(result.findings[0]?.title ?? "", /Field stabilized after recent change/);
+  assert.equal(result.findings[0]?.evidence?.metadata?.reasonCode, "stabilized");
   assert.equal(result.findings[0]?.endedAt, "2026-04-02T12:05:00.000Z");
 });
 

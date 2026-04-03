@@ -1,4 +1,5 @@
 import {
+  describeSeedingAdvisoryNarrative,
   resolveFieldAccessDecision,
   resolveSeedingAdvisoryDecision,
   type FieldAccessVerdict,
@@ -301,28 +302,26 @@ export function resolveSeedingRecommendation(input: {
         detail: input.fieldAccessPresentation.sub,
       }
     : null;
+  const advisoryNarrative = describeSeedingAdvisoryNarrative({
+    decision,
+    cropLabel,
+    frostDamageTempC: input.frostDamageTempC,
+    surfaceMoistureMinPct: input.seedingThresholds.surfaceMoistureMinPct,
+    fieldAccessExplanation:
+      input.fieldAccessPresentation?.sub ??
+      "Field access conditions are not yet stable enough for a clean seeding run.",
+  });
 
   if (!soilReady) {
-    const soilReason =
-      soilTempCurrent == null
-        ? `Seed-depth soil temperature is still missing.`
-        : soilTempCurrent < thresholdC
-          ? `Soil @ 6 cm is ${soilTempCurrent.toFixed(1)}°C, below the ${thresholdC.toFixed(0)}°C target.`
-          : `Soil @ 6 cm is ${soilTempCurrent.toFixed(1)}°C, but it has only held above ${thresholdC.toFixed(0)}°C for ${soilTempSustainedDays ?? 0} of ${requiredDays} required days.`;
-
     return {
-      title: "Too early to seed",
-      severity: "medium",
-      urgency: "Watch",
-      dueDate: "Recheck in 48h",
-      recommendation: `Hold seeding until ${cropLabel.toLowerCase()} seed-depth soil temperature reaches ${thresholdC.toFixed(0)}°C for ${requiredDays} consecutive days.`,
-      explanation: `No confirmed finding is active yet. ${soilReason} This recommendation is advisory and uses crop-specific seeding thresholds rather than a tracked intelligence event.`,
-      whyNow:
-        soilTempCurrent == null
-          ? `Seed-depth soil temperature is still missing, so the seeding window cannot be opened confidently for ${cropLabel.toLowerCase()}.`
-          : `Seed-depth soil temperature has not yet met the ${thresholdC.toFixed(0)}°C for ${requiredDays}d rule for ${cropLabel.toLowerCase()}.`,
-      inspectFirst:
-        "Check seed-depth temperature in representative field areas, then compare lighter-ground and low-lying spots before committing equipment across the whole field.",
+      title: advisoryNarrative.uiTitle,
+      severity: advisoryNarrative.uiSeverity,
+      urgency: advisoryNarrative.urgency,
+      dueDate: advisoryNarrative.dueDate,
+      recommendation: advisoryNarrative.recommendation,
+      explanation: advisoryNarrative.explanation,
+      whyNow: advisoryNarrative.whyNow,
+      inspectFirst: advisoryNarrative.inspectFirst,
       confidence: "Heuristic watchlist · crop-aware weather",
       signals: [soilSignal, accessSignal, frostSignal].filter(
         (value): value is NonNullable<typeof value> => value != null,
@@ -336,19 +335,14 @@ export function resolveSeedingRecommendation(input: {
 
   if (frostBlocked) {
     return {
-      title: frostKillRisk ? "Hold seeding for kill-risk frost" : "Hold seeding for frost risk",
-      severity: frostKillRisk ? "high" : "medium",
-      urgency: "Watch",
-      dueDate: "Within 7d",
-      recommendation:
-        "Hold seeding until the 7-day frost window clears, especially in low spots and exposed parts of the field.",
-      explanation: `No confirmed finding is active yet. Soil conditions are approaching readiness, but the next 7 days still carry frost exposure for ${cropLabel.toLowerCase()}. This recommendation is advisory and based on crop-specific frost sensitivity.`,
-      whyNow:
-        frostRiskMinTempC7d != null
-          ? `The lowest forecast low is ${formatSignedTemperature(frostRiskMinTempC7d)} with ${frostRiskNights7d} frost-risk night${frostRiskNights7d === 1 ? "" : "s"} in the next 7 days${frostProbabilityLabel ? ` and ${frostProbabilityLabel.toLowerCase()} of dropping below the crop damage threshold.` : "."}`
-          : `Frost-sensitive nights are still present in the next 7 days.`,
-      inspectFirst:
-        "Check low-lying, residue-light, and wind-exposed areas first, then reassess the seeding plan once the frost window clears.",
+      title: advisoryNarrative.uiTitle,
+      severity: advisoryNarrative.uiSeverity,
+      urgency: advisoryNarrative.urgency,
+      dueDate: advisoryNarrative.dueDate,
+      recommendation: advisoryNarrative.recommendation,
+      explanation: advisoryNarrative.explanation,
+      whyNow: advisoryNarrative.whyNow,
+      inspectFirst: advisoryNarrative.inspectFirst,
       confidence: "Heuristic watchlist · crop-aware weather",
       signals: [soilSignal, frostSignal, accessSignal].filter(
         (value): value is NonNullable<typeof value> => value != null,
@@ -361,48 +355,35 @@ export function resolveSeedingRecommendation(input: {
   }
 
   if (fieldAccessBlocked || fieldAccessMarginal || tooDry) {
-    const accessReason = tooDry
-      ? `Surface moisture is ${surfaceMoisturePct?.toFixed(0)}%, below the ${input.seedingThresholds.surfaceMoistureMinPct.toFixed(0)}% germination floor.`
-      : input.fieldAccessPresentation?.sub ??
-        "Field access conditions are not yet stable enough for a clean seeding run.";
-    const severeAccessConstraint = fieldAccessBlocked && !tooDry;
-
     return {
-      title: severeAccessConstraint ? "Hold seeding for field access" : "Hold seeding for field fit",
-      severity: severeAccessConstraint ? "high" : "medium",
-      urgency: "Watch",
-      dueDate: "Recheck in 48h",
-      recommendation:
-        "Hold seeding until field access and surface conditions settle enough for a cleaner pass.",
-      explanation: `No confirmed finding is active yet. Seed-depth temperature is close enough to watch, but the field still looks operationally constrained for ${cropLabel.toLowerCase()}. This recommendation is advisory and based on surface moisture, recent precipitation, and thaw-cycle heuristics.`,
-      whyNow: accessReason,
-      inspectFirst:
-        "Check headlands, low pockets, and the heaviest ground first, then confirm whether the same access constraints persist across the rest of the field.",
+      title: advisoryNarrative.uiTitle,
+      severity: advisoryNarrative.uiSeverity,
+      urgency: advisoryNarrative.urgency,
+      dueDate: advisoryNarrative.dueDate,
+      recommendation: advisoryNarrative.recommendation,
+      explanation: advisoryNarrative.explanation,
+      whyNow: advisoryNarrative.whyNow,
+      inspectFirst: advisoryNarrative.inspectFirst,
       confidence: "Heuristic watchlist · crop-aware weather",
       signals: [soilSignal, accessSignal].filter(
         (value): value is NonNullable<typeof value> => value != null,
       ),
       tags: [
         { label: "Seeding", color: "yellow" },
-        { label: "Field access", color: severeAccessConstraint ? "red" : "yellow" },
+        { label: "Field access", color: advisoryNarrative.uiSeverity === "high" ? "red" : "yellow" },
       ],
     };
   }
 
   return {
-    title: "Seeding window open",
-    severity: "medium",
-    urgency: "Ready",
-    dueDate: "This week",
-    recommendation:
-      "Seed now if field checks match this read, and keep verifying low spots as the weather window progresses.",
-    explanation: `No confirmed finding is active yet. Crop-specific soil temperature, frost, and field-access checks are aligned for ${cropLabel.toLowerCase()}, so the field is in a workable seeding window.`,
-    whyNow:
-      frostRiskMinTempC7d != null
-        ? `Soil @ 6 cm has cleared ${thresholdC.toFixed(0)}°C for ${soilTempSustainedDays ?? requiredDays}d, field access is workable, and the next 7 days stay above the ${formatSignedTemperature(input.frostDamageTempC)} damage threshold${frostProbabilityLabel ? ` with only ${frostProbabilityLabel.toLowerCase()} of crossing it.` : "."}`
-        : `Soil @ 6 cm has cleared ${thresholdC.toFixed(0)}°C for ${soilTempSustainedDays ?? requiredDays}d and field access is workable.`,
-    inspectFirst:
-      "Start with representative strips and your colder low spots, then keep checking seed-depth temperature as the window advances.",
+    title: advisoryNarrative.uiTitle,
+    severity: advisoryNarrative.uiSeverity,
+    urgency: advisoryNarrative.urgency,
+    dueDate: advisoryNarrative.dueDate,
+    recommendation: advisoryNarrative.recommendation,
+    explanation: advisoryNarrative.explanation,
+    whyNow: advisoryNarrative.whyNow,
+    inspectFirst: advisoryNarrative.inspectFirst,
     confidence: "Heuristic watchlist · crop-aware weather",
     signals: [soilSignal, accessSignal, frostSignal].filter(
       (value): value is NonNullable<typeof value> => value != null,

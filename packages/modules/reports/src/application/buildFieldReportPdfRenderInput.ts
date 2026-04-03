@@ -2,6 +2,7 @@ import type { PdfRenderInput, PdfBlock, PdfBrandLogo, RGB } from "@fieldpulse/pd
 import { STATUS, BRAND, SURFACE } from "@fieldpulse/pdf";
 import type { FieldAlert } from "@fieldpulse/module-alerts";
 import {
+  describeSeedingAdvisoryNarrative,
   prairieDefaultRulePack,
   resolveCropRuleContext,
   resolveFieldAccessDecision,
@@ -145,66 +146,22 @@ function buildPdfSeedingRecommendation(input: {
   decision: SeedingAdvisoryDecision;
   cropLabel: string;
   frostDamageTempC: number;
+  surfaceMoistureMinPct: number;
   fieldAccessExplanation: string;
 }): { severity: "critical" | "warning" | "info"; title: string; body: string; action: string } {
-  const cropLabel = input.cropLabel.trim().length > 0 ? input.cropLabel : "Crop";
-  const d = input.decision;
-
-  if (d.verdict === "too-early") {
-    const body =
-      d.reasonCode === "missing-soil-temp"
-        ? "Soil temperature data unavailable. Wait for weather station readings."
-        : d.reasonCode === "soil-below-threshold" && d.soilTempCurrentC != null
-          ? `Soil at 6 cm is ${d.soilTempCurrentC.toFixed(1)}°C — ${cropLabel} needs sustained ≥${d.thresholdC}°C. Wait for warmer conditions.`
-          : `Soil is ${d.soilTempCurrentC?.toFixed(1) ?? "—"}°C but has only been above ${d.thresholdC}°C for ${d.soilTempSustainedDays ?? 0} day(s). Need ${d.requiredDays}+ sustained days.`;
-    return {
-      severity: "critical",
-      title: `Too Early to Seed — ${cropLabel}`,
-      body,
-      action: "Wait for sustained warming. Track soil temperature daily.",
-    };
-  }
-
-  if (d.verdict === "hold") {
-    if (d.reasonCode === "frost-risk") {
-      const body =
-        d.frostRiskMinTempC7d != null
-          ? `The lowest forecast low is ${d.frostRiskMinTempC7d.toFixed(1)}°C with ${d.frostRiskNights7d} frost-risk night${d.frostRiskNights7d === 1 ? "" : "s"} in the next 7 days${d.frostProbabilityPct7d != null ? ` and ${Math.round(d.frostProbabilityPct7d)}% probability of dropping below the crop damage threshold.` : "."}`
-          : `Frost-sensitive nights are still present in the next 7 days.`;
-      return {
-        severity: d.frostKillRisk ? "critical" : "warning",
-        title: d.frostKillRisk
-          ? `Hold Seeding for Kill-Risk Frost — ${cropLabel}`
-          : `Hold Seeding for Frost Risk — ${cropLabel}`,
-        body,
-        action: "Re-check conditions in 2–3 days. Monitor the 7-day forecast.",
-      };
-    }
-
-    return {
-      severity: input.decision.fieldAccessBlocked && !input.decision.tooDry ? "critical" : "warning",
-      title:
-        input.decision.reasonCode === "surface-too-dry"
-          ? `Hold Seeding for Surface Moisture — ${cropLabel}`
-          : input.decision.fieldAccessBlocked
-            ? `Hold Seeding for Field Access — ${cropLabel}`
-            : `Hold Seeding for Field Fit — ${cropLabel}`,
-      body:
-        input.decision.reasonCode === "surface-too-dry" && input.decision.surfaceMoisturePct != null
-          ? `Surface moisture is ${input.decision.surfaceMoisturePct.toFixed(0)}%, below the crop germination floor.`
-          : input.fieldAccessExplanation,
-      action: "Re-check conditions in 2–3 days. Monitor the 7-day forecast.",
-    };
-  }
+  const narrative = describeSeedingAdvisoryNarrative({
+    decision: input.decision,
+    cropLabel: input.cropLabel,
+    frostDamageTempC: input.frostDamageTempC,
+    surfaceMoistureMinPct: input.surfaceMoistureMinPct,
+    fieldAccessExplanation: input.fieldAccessExplanation,
+  });
 
   return {
-    severity: "info",
-    title: `Seeding Window Open — ${cropLabel}`,
-    body:
-      d.frostRiskMinTempC7d != null
-        ? `Soil @ 6 cm has cleared ${d.thresholdC}°C for ${d.soilTempSustainedDays ?? d.requiredDays}d, field access is workable, and the next 7 days stay above the ${input.frostDamageTempC.toFixed(1)}°C damage threshold${d.frostProbabilityPct7d != null ? ` with only ${Math.round(d.frostProbabilityPct7d)}% probability of crossing it.` : "."}`
-        : `Soil @ 6 cm has cleared ${d.thresholdC}°C for ${d.soilTempSustainedDays ?? d.requiredDays}d and field access is workable.`,
-    action: "Conditions favor seeding. Confirm with local soil probe before committing.",
+    severity: narrative.pdfSeverity,
+    title: narrative.pdfTitle,
+    body: narrative.whyNow,
+    action: narrative.pdfAction,
   };
 }
 
@@ -941,6 +898,7 @@ export function buildFieldReportPdfRenderInput({
           decision: seedingDecision,
           cropLabel: cropType ?? "Crop",
           frostDamageTempC: frostThresholds.damageTempC,
+          surfaceMoistureMinPct: seedingThresholds.surfaceMoistureMinPct,
           fieldAccessExplanation:
             accessDecision == null
               ? "Field access conditions are not yet available."

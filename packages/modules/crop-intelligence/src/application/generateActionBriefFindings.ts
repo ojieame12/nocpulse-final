@@ -70,6 +70,7 @@ export type GenerateActionBriefFindingsUseCaseInput = {
 };
 
 type ActionBriefAssessment = {
+  reasonCode: "material-drydown" | "material-recharge" | "stabilized";
   severity: UpsertFieldIntelligenceFindingInput["severity"];
   status: UpsertFieldIntelligenceFindingInput["status"];
   title: string;
@@ -278,6 +279,7 @@ function assessActionBrief(input: {
     }
 
     return {
+      reasonCode: "stabilized",
       severity: "low",
       status: "resolved",
       title: "Field stabilized after recent change",
@@ -299,6 +301,7 @@ function assessActionBrief(input: {
   }
 
   return {
+    reasonCode: deltaPct < 0 ? "material-drydown" : "material-recharge",
     severity,
     status: "active",
     title: "Field changed materially since last review",
@@ -378,6 +381,7 @@ export async function generateActionBriefFindings(
       previousMoistureSnapshotId: previousSnapshot?.id ?? null,
       weatherSignalSetId: weatherSignalSet?.id ?? null,
       trigger: "material-change-since-last-review",
+      reasonCode: assessment?.reasonCode ?? null,
       deltaPct: assessment?.deltaPct ?? null,
     },
   });
@@ -414,6 +418,7 @@ export async function generateActionBriefFindings(
       weatherSignalSetId: weatherSignalSet?.id ?? undefined,
       metadata: {
         trigger: "material-change-since-last-review",
+        reasonCode: assessment.reasonCode,
         latestSnapshotId: latestSnapshot.id,
         previousSnapshotId: previousSnapshot.id,
         latestObservedAt: latestSnapshot.observedAt,
