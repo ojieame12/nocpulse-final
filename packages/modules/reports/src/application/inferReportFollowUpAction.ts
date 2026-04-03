@@ -1,5 +1,6 @@
 import type { FieldAlert } from "@fieldpulse/module-alerts";
 import type { FieldIntelligenceFinding } from "@fieldpulse/module-crop-intelligence";
+import type { ReportSeverity } from "./reportSeverity";
 
 function normalizeText(title: string, summary?: string | null) {
   return `${title} ${summary ?? ""}`.toLowerCase();
@@ -47,7 +48,7 @@ export function inferCropAlertFollowUpAction(
 
 export function inferDiseaseRiskFollowUpAction(
   name: string,
-  severity: "critical" | "warning" | "info",
+  severity: ReportSeverity,
 ): string | undefined {
   const text = name.toLowerCase();
   if (severity === "info") return undefined;

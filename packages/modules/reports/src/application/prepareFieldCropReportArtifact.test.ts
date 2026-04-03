@@ -262,3 +262,59 @@ test("prepareFieldCropReportArtifact uses the shared disease fallback action hel
   assert.match(pdfText, /fungicide timing if at/i);
   assert.match(pdfText, /petal stage\./i);
 });
+
+test("prepareFieldCropReportArtifact uses shared severity mapping for crop alerts", () => {
+  const crop: FieldCropReportProps = {
+    cropName: "Canola",
+    lld: "SE-19-037-11-W3",
+    growthSegments: [],
+    accumulatedGddLabel: "182",
+    gddUnitLabel: "base 5°C",
+    thresholdStageLabel: "Flowering",
+    thresholds: [],
+    healthIndexTitle: "Crop Signal",
+    healthIndex: {
+      value: 0.61,
+      label: "Watch",
+      subLabel: "Preseason optical context",
+      fillColor: "#f59e0b",
+      metrics: [],
+    },
+    moistureBalanceTitle: "Moisture Balance",
+    moistureBalance: {
+      value: 0.48,
+      label: "Tightening",
+      subLabel: "Root moisture 28.4%",
+      fillColor: "#3b82f6",
+      metrics: [],
+    },
+    fieldTiles: [],
+    diseaseRisks: [],
+    provenanceRows: [],
+    provenanceChips: [],
+    alerts: [
+      {
+        iconKey: "moisture",
+        title: "Moisture stress",
+        desc: "Root zone is tightening.",
+      },
+    ],
+    footer: null,
+  };
+
+  const artifact = prepareFieldCropReportArtifact({
+    fieldId: "field-123",
+    fieldName: "Krants",
+    areaLabel: "64.7 ha",
+    crop,
+    summary: {
+      crop: "Canola",
+      cropStage: "Flowering",
+    },
+    generatedAt: "2026-03-30T09:00:00.000Z",
+  });
+
+  const pdfText = Buffer.from(artifact.bytes).toString("utf8");
+  assert.match(pdfText, /Moisture stress/i);
+  assert.match(pdfText, /Schedule irrigation check\. Prioritize affected zones\./i);
+});

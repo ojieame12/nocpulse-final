@@ -7,6 +7,10 @@ import {
   inferCropAlertFollowUpAction,
   inferDiseaseRiskFollowUpAction,
 } from "./inferReportFollowUpAction";
+import {
+  inferCropAlertSeverity,
+  inferCropDiseaseRiskSeverity,
+} from "./reportSeverity";
 
 export type CropReportGrowthSegment = {
   label: string;
@@ -530,13 +534,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
     });
 
     for (const risk of c.diseaseRisks) {
-      const pctNum = parseFloat(risk.pct);
-      const severity: "critical" | "warning" | "info" =
-        !Number.isNaN(pctNum) && pctNum >= 60
-          ? "critical"
-          : !Number.isNaN(pctNum) && pctNum >= 30
-            ? "warning"
-            : "info";
+      const severity = inferCropDiseaseRiskSeverity(risk.pct);
 
       blocks.push({
         kind: "severity-card",
@@ -565,12 +563,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
     });
   } else {
     for (const alert of c.alerts.slice(0, 10)) {
-      const severity: "critical" | "warning" | "info" =
-        alert.iconKey === "disease" || alert.iconKey === "temperature"
-          ? "critical"
-          : alert.iconKey === "moisture"
-            ? "warning"
-            : "info";
+      const severity = inferCropAlertSeverity(alert.iconKey);
 
       blocks.push({
         kind: "severity-card",

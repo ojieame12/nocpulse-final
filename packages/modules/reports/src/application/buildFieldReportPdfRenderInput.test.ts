@@ -664,4 +664,6 @@ test("buildFieldReportPdfRenderInput uses the shared fallback action helper for 
 
   assert.equal(frostAlertCard?.action, "Check frost protection measures. Monitor overnight low temperatures closely.");
   assert.equal(stressFindingCard?.action, "Ground-truth stressed zones within the next 48 hours.");
+  assert.equal(frostAlertCard?.severity, "critical");
+  assert.equal(stressFindingCard?.severity, "warning");
 });

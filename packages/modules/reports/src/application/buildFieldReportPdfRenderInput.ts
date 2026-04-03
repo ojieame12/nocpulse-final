@@ -27,6 +27,7 @@ import {
   inferFieldAlertFollowUpAction,
   inferFieldFindingFollowUpAction,
 } from "./inferReportFollowUpAction";
+import { normalizeReportSeverity, type ReportSeverity } from "./reportSeverity";
 
 /* ═══════════════════════════════════════════════════════════════════
    NocPulse Field Report — PDF Document Builder  (v3)
@@ -43,12 +44,12 @@ type BuildFieldReportPdfRenderInput = {
 
 /* ── Palette aliases from stylesheet ── */
 
-const GREEN: RGB = BRAND.forest900;
-const GREEN_SOFT: RGB = BRAND.positive;
-const RED: RGB = STATUS.critical;
-const AMBER: RGB = STATUS.warning;
-const TEAL: RGB = STATUS.info;
-const SLATE: RGB = SURFACE.border;
+const GREEN = BRAND.forest900;
+const GREEN_SOFT = BRAND.positive;
+const RED = STATUS.critical;
+const AMBER = STATUS.warning;
+const TEAL = STATUS.info;
+const SLATE = SURFACE.border;
 
 /* ── Helpers ── */
 
@@ -91,18 +92,6 @@ function fmtDateTime(value: string | null) {
   }
 }
 
-function sevToType(severity: string): "critical" | "warning" | "info" {
-  const s = severity.toLowerCase();
-  if (s === "high" || s === "critical") return "critical";
-  if (s === "medium" || s === "med" || s === "warning") return "warning";
-  return "info";
-}
-
-function sevToColor(severity: string): RGB {
-  const t = sevToType(severity);
-  return t === "critical" ? RED : t === "warning" ? AMBER : TEAL;
-}
-
 /* ── Seeding Intelligence Helpers ── */
 
 function buildPdfSeedingRecommendation(input: {
@@ -111,7 +100,7 @@ function buildPdfSeedingRecommendation(input: {
   frostDamageTempC: number;
   surfaceMoistureMinPct: number;
   fieldAccessExplanation: string;
-}): { severity: "critical" | "warning" | "info"; title: string; body: string; action: string } {
+}): { severity: ReportSeverity; title: string; body: string; action: string } {
   const narrative = describeSeedingAdvisoryNarrative({
     decision: input.decision,
     cropLabel: input.cropLabel,
@@ -266,7 +255,7 @@ export function buildFieldReportPdfRenderInput({
     for (const alert of m.alerts.slice(0, 3)) {
       blocks.push({
         kind: "severity-card",
-        severity: sevToType(alert.severity),
+        severity: normalizeReportSeverity(alert.severity),
         title: alert.title,
         body: alert.summary ?? undefined,
         action: inferFieldAlertFollowUpAction(alert),
@@ -1084,7 +1073,7 @@ export function buildFieldReportPdfRenderInput({
     for (const alert of m.alerts.slice(0, 8)) {
       blocks.push({
         kind: "severity-card",
-        severity: sevToType(alert.severity),
+        severity: normalizeReportSeverity(alert.severity),
         title: alert.title,
         body: alert.summary ?? undefined,
         detail: alert.explanation ?? undefined,
@@ -1121,7 +1110,7 @@ export function buildFieldReportPdfRenderInput({
     for (const finding of m.findings.slice(0, 8)) {
       blocks.push({
         kind: "severity-card",
-        severity: sevToType(finding.severity),
+        severity: normalizeReportSeverity(finding.severity),
         title: finding.title,
         body: finding.summary ?? undefined,
         detail: finding.explanation
