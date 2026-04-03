@@ -94,6 +94,7 @@ test("prepareFieldCropReportArtifact renders a branded crop PDF artifact", () =>
   assert.match(pdfText, /Krants Crop Report/);
   assert.match(pdfText, /CROP SIGNALS/i);
   assert.match(pdfText, /ACTIVE CROP ALERTS/i);
+  assert.match(pdfText, /Consider frost protection measures\. Monitor overnight lows closely\./i);
 });
 
 test("prepareFieldCropReportArtifact includes truth and weather pressure context", () => {

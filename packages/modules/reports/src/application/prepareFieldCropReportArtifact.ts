@@ -3,6 +3,7 @@ import {
   describeAgronomicTruthBasis,
   formatAgronomicSourceBasisLabel,
 } from "@fieldpulse/module-crop-intelligence";
+import { inferCropAlertFollowUpAction } from "./inferReportFollowUpAction";
 
 export type CropReportGrowthSegment = {
   label: string;
@@ -220,17 +221,6 @@ function inferDiseaseAction(name: string, sev: "critical" | "warning" | "info") 
     return "Scout affected areas immediately. Consult agronomist for treatment options.";
   }
   return "Monitor for symptoms. Scout during next field walk.";
-}
-
-function inferCropAlertAction(title: string) {
-  const t = title.toLowerCase();
-  if (t.includes("frost")) return "Consider frost protection measures. Monitor overnight lows closely.";
-  if (t.includes("moisture stress")) return "Schedule irrigation check. Prioritize affected zones.";
-  if (t.includes("hail")) return "Review hail protection options. Check crop insurance coverage.";
-  if (t.includes("wind")) return "Assess wind damage risk. Delay spraying until conditions settle.";
-  if (t.includes("disease")) return "Scout affected areas. Consult agronomist for fungicide options.";
-  if (t.includes("vpd") || t.includes("atmospheric")) return "Monitor crop water demand. Consider irrigation timing.";
-  return undefined;
 }
 
 function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
@@ -608,7 +598,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
         severity,
         title: alert.title,
         body: alert.desc,
-        action: inferCropAlertAction(alert.title),
+        action: inferCropAlertFollowUpAction(alert.title),
         marginTop: 4,
       });
     }

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { FieldAlert } from "@fieldpulse/module-alerts";
 import type { FieldCropContext } from "@fieldpulse/module-field-crop-context";
 import type { FieldDetail } from "@fieldpulse/module-fields";
 import type { FieldMoistureSnapshot } from "@fieldpulse/module-moisture";
+import type { FieldIntelligenceFinding } from "@fieldpulse/module-crop-intelligence";
 import type {
   FieldWeatherDerivedSignalSet,
   FieldWeatherProfile,
@@ -567,4 +569,99 @@ test("buildFieldReportPdfRenderInput uses shared moisture-band narrative copy", 
     moistureTable.rows.find((row) => row.cells[0] === "High")?.cells[4],
     "Root zone critically dry. Irrigation urgent.",
   );
+});
+
+test("buildFieldReportPdfRenderInput uses the shared fallback action helper for alerts and findings", () => {
+  const alert: FieldAlert = {
+    id: "alert-1",
+    workspaceId: "workspace-1",
+    fieldId: "field-1",
+    family: "weather_risk",
+    severity: "high",
+    status: "active",
+    sourceKey: "test",
+    dedupeKey: "alert-1",
+    title: "Frost warning",
+    summary: "Overnight lows are approaching crop thresholds.",
+    explanation: null,
+    recommendedAction: null,
+    facts: {},
+    evidence: {},
+    startedAt: "2026-04-03T12:00:00.000Z",
+    endedAt: null,
+    acknowledgedAt: null,
+    acknowledgedByUserId: null,
+    resolvedAt: null,
+    resolutionNote: null,
+    createdAt: "2026-04-03T12:00:00.000Z",
+    updatedAt: "2026-04-03T12:00:00.000Z",
+  };
+  const finding: FieldIntelligenceFinding = {
+    id: "finding-1",
+    workspaceId: "workspace-1",
+    fieldId: "field-1",
+    runId: null,
+    family: "weather_risk",
+    severity: "warning",
+    status: "active",
+    sourceKey: "test",
+    dedupeKey: "finding-1",
+    title: "Localized stress cluster",
+    summary: "Stress signature expanding near the south edge.",
+    explanation: null,
+    recommendedAction: null,
+    confidence: 0.7,
+    zoneGeoJson: null,
+    affectedCellKeys: ["A1", "A2"],
+    evidence: {},
+    startedAt: "2026-04-03T12:00:00.000Z",
+    endedAt: null,
+    createdAt: "2026-04-03T12:00:00.000Z",
+    updatedAt: "2026-04-03T12:00:00.000Z",
+  };
+
+  const renderInput = buildFieldReportPdfRenderInput({
+    artifactKey: "test-artifact",
+    readModel: {
+      ...createReadModel({
+        cropType: "Canola",
+        surfacePct: 58,
+        signalSet: createSignalSet({
+          soilTemp6cmCurrentC: 5.2,
+          soilTemp6cmSustainedDays: 2,
+          frostRiskMinTempC7d: 1.5,
+          frostRiskNights7d: 1,
+          frostProbabilityPct7d: 25,
+        }),
+      }),
+      alerts: [alert],
+      findings: [finding],
+      dataAvailability: {
+        activeAlerts: true,
+        resolvedAlerts: false,
+      },
+      summary: {
+        ...createReadModel({
+          cropType: "Canola",
+          surfacePct: 58,
+          signalSet: createSignalSet({
+            soilTemp6cmCurrentC: 5.2,
+            soilTemp6cmSustainedDays: 2,
+            frostRiskMinTempC7d: 1.5,
+            frostRiskNights7d: 1,
+            frostProbabilityPct7d: 25,
+          }),
+        }).summary,
+        activeAlertCount: 1,
+        activeFindingCount: 1,
+      },
+    },
+  });
+
+  const cards = renderInput.blocks.filter((block) => block.kind === "severity-card");
+  const frostAlertCard = cards.find((block) => block.title === "Frost warning");
+  const stressFindingCard = cards.find((block) => block.title === "Localized stress cluster");
+
+  assert.equal(frostAlertCard?.action, "Check frost protection measures. Monitor overnight low temperatures closely.");
+  assert.equal(stressFindingCard?.action, "Ground-truth stressed zones within the next 48 hours.");
 });

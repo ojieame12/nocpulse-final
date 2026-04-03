@@ -23,6 +23,10 @@ import {
   summarizeForecastDays,
 } from "@fieldpulse/module-weather";
 import type { FieldReportReadModel } from "../contracts/FieldReportReadModel";
+import {
+  inferFieldAlertFollowUpAction,
+  inferFieldFindingFollowUpAction,
+} from "./inferReportFollowUpAction";
 
 /* ═══════════════════════════════════════════════════════════════════
    NocPulse Field Report — PDF Document Builder  (v3)
@@ -122,27 +126,6 @@ function buildPdfSeedingRecommendation(input: {
     body: narrative.whyNow,
     action: narrative.pdfAction,
   };
-}
-
-/** Derive a plain-language recommended action from an alert title. */
-function inferAlertAction(alert: FieldAlert): string | undefined {
-  const t = (alert.title + " " + (alert.summary ?? "")).toLowerCase();
-  if (alert.recommendedAction) return alert.recommendedAction;
-  if (t.includes("frost")) return "Check frost protection measures. Monitor overnight low temperatures closely.";
-  if (t.includes("moisture stress") || t.includes("below")) return "Review irrigation scheduling. Prioritize affected zones.";
-  if (t.includes("hail")) return "Assess crop damage risk and review insurance coverage.";
-  if (t.includes("wind")) return "Delay field operations until wind subsides.";
-  return undefined;
-}
-
-/** Derive a plain-language action from a finding. */
-function inferFindingAction(finding: FieldIntelligenceFinding): string | undefined {
-  if (finding.recommendedAction) return finding.recommendedAction;
-  const t = (finding.title + " " + (finding.summary ?? "")).toLowerCase();
-  if (t.includes("frost")) return "Monitor overnight lows. Activate frost mitigation if available.";
-  if (t.includes("moisture")) return "Review irrigation for the upcoming week.";
-  if (t.includes("stress")) return "Ground-truth stressed zones within the next 48 hours.";
-  return undefined;
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */
@@ -286,7 +269,7 @@ export function buildFieldReportPdfRenderInput({
         severity: sevToType(alert.severity),
         title: alert.title,
         body: alert.summary ?? undefined,
-        action: inferAlertAction(alert),
+        action: inferFieldAlertFollowUpAction(alert),
         marginTop: 4,
       });
     }
@@ -1105,7 +1088,7 @@ export function buildFieldReportPdfRenderInput({
         title: alert.title,
         body: alert.summary ?? undefined,
         detail: alert.explanation ?? undefined,
-        action: inferAlertAction(alert),
+        action: inferFieldAlertFollowUpAction(alert),
         marginTop: 6,
       });
     }
@@ -1144,7 +1127,7 @@ export function buildFieldReportPdfRenderInput({
         detail: finding.explanation
           ? `${finding.explanation}${finding.affectedCellKeys.length > 0 ? ` — ${finding.affectedCellKeys.length} cells affected` : ""}`
           : undefined,
-        action: inferFindingAction(finding),
+        action: inferFieldFindingFollowUpAction(finding),
         marginTop: 6,
       });
     }
