@@ -15,6 +15,7 @@ import {
 } from "@fieldpulse/module-crop-intelligence";
 import {
   describeFrostRiskNarrative,
+  describeWeatherSignalNarrative,
   findSprayWindows,
   formatFieldLocalTime,
   summarizeForecastDays,
@@ -148,54 +149,6 @@ function inferDailyForecastConditions(input: {
   if (wind >= 40) return "High wind";
   if (precip > 0) return "Chance of showers";
   return "Dry";
-}
-
-/** Generate advisory note for a weather signal based on its name and value. */
-function signalNote(label: string, value: number | null): string {
-  if (value === null) return "Data unavailable";
-  const lbl = label.toLowerCase();
-  if (lbl.includes("vpd") && !lbl.includes("peak")) {
-    if (value < 0.4) return "Low crop water demand. Fungal disease risk elevated.";
-    if (value > 1.5) return "High crop water demand. Rapid transpiration likely.";
-    return "Within a comfortable crop water demand range.";
-  }
-  if (lbl.includes("peak") && lbl.includes("vpd")) {
-    if (value > 2.0) return "Extreme crop water demand forecast. Expect crop stress.";
-    if (value > 1.2) return "Elevated peak crop water demand. Monitor plant turgor.";
-    return "Peak crop water demand is within range.";
-  }
-  if (lbl.includes("water balance") && lbl.includes("24")) {
-    if (value < -5) return "Significant deficit. Irrigation needed soon.";
-    if (value < 0) return "Mild deficit. Acceptable short-term.";
-    return "Positive balance. Adequate moisture supply.";
-  }
-  if (lbl.includes("water balance") && lbl.includes("72")) {
-    if (value < -10) return "Severe 3-day deficit. Prioritize irrigation.";
-    if (value < -3) return "Moderate deficit over 72h.";
-    return "3-day balance is positive.";
-  }
-  if (lbl.includes("frost")) {
-    return describeFrostRiskNarrative({
-      minTempC: value,
-      probabilityPct7d: null,
-      riskNights7d: null,
-    }).signalNote;
-  }
-  if (lbl.includes("gdd")) {
-    if (value < 5) return "Minimal heat accumulation. Growth stalled.";
-    return "Accumulating growing degree days.";
-  }
-  if (lbl.includes("leaf wet")) {
-    if (value > 12) return "Extended wetness. High disease pressure.";
-    if (value > 6) return "Moderate leaf wetness. Scout for disease.";
-    return "Leaf wetness within safe range.";
-  }
-  if (lbl.includes("spray")) {
-    if (value === 0) return "No spray windows. Conditions unfavorable.";
-    if (value < 2) return "Limited windows. Plan applications carefully.";
-    return "Multiple spray windows available.";
-  }
-  return "Within expected range.";
 }
 
 /** Generate advisory note for moisture levels. */
@@ -571,7 +524,7 @@ export function buildFieldReportPdfRenderInput({
         value: `${fmt(sig.currentVpdKpa, 2)} kPa`,
         range: "0.4 – 1.5 kPa",
         status: sig.currentVpdKpa !== null && sig.currentVpdKpa < 0.4 ? "Low" : sig.currentVpdKpa !== null && sig.currentVpdKpa > 1.5 ? "High" : "OK",
-        note: signalNote("vpd now", sig.currentVpdKpa),
+        note: describeWeatherSignalNarrative("crop-water-demand", sig.currentVpdKpa),
         color: sig.currentVpdKpa !== null && (sig.currentVpdKpa < 0.4 || sig.currentVpdKpa > 1.5) ? AMBER : undefined,
       },
       {
@@ -579,7 +532,7 @@ export function buildFieldReportPdfRenderInput({
         value: `${fmt(sig.peakForecastVpdKpa24h, 2)} kPa`,
         range: "< 2.0 kPa",
         status: sig.peakForecastVpdKpa24h !== null && sig.peakForecastVpdKpa24h > 2.0 ? "High" : "OK",
-        note: signalNote("peak vpd", sig.peakForecastVpdKpa24h),
+        note: describeWeatherSignalNarrative("peak-vpd-24h", sig.peakForecastVpdKpa24h),
         color: sig.peakForecastVpdKpa24h !== null && sig.peakForecastVpdKpa24h > 2.0 ? RED : undefined,
       },
       {
@@ -587,7 +540,7 @@ export function buildFieldReportPdfRenderInput({
         value: `${fmt(sig.netWaterBalance24hMm, 1)} mm`,
         range: "> -5 mm",
         status: sig.netWaterBalance24hMm !== null && sig.netWaterBalance24hMm < -5 ? "Deficit" : sig.netWaterBalance24hMm !== null && sig.netWaterBalance24hMm < 0 ? "Mild" : "OK",
-        note: signalNote("water balance 24h", sig.netWaterBalance24hMm),
+        note: describeWeatherSignalNarrative("water-balance-24h", sig.netWaterBalance24hMm),
         color: sig.netWaterBalance24hMm !== null && sig.netWaterBalance24hMm < -5 ? AMBER : undefined,
       },
       {
@@ -595,7 +548,7 @@ export function buildFieldReportPdfRenderInput({
         value: `${fmt(sig.netWaterBalance72hMm, 1)} mm`,
         range: "> -10 mm",
         status: sig.netWaterBalance72hMm !== null && sig.netWaterBalance72hMm < -10 ? "Deficit" : sig.netWaterBalance72hMm !== null && sig.netWaterBalance72hMm < -3 ? "Watch" : "OK",
-        note: signalNote("water balance 72h", sig.netWaterBalance72hMm),
+        note: describeWeatherSignalNarrative("water-balance-72h", sig.netWaterBalance72hMm),
         color: sig.netWaterBalance72hMm !== null && sig.netWaterBalance72hMm < -10 ? RED : undefined,
       },
       {
@@ -603,7 +556,7 @@ export function buildFieldReportPdfRenderInput({
         value: `${fmt(sig.frostRiskMinTempC)}°C`,
         range: "> 2°C",
         status: sig.frostRiskMinTempC !== null && sig.frostRiskMinTempC < 0 ? "Risk" : sig.frostRiskMinTempC !== null && sig.frostRiskMinTempC < 2 ? "Watch" : "OK",
-        note: signalNote("frost risk", sig.frostRiskMinTempC),
+        note: describeWeatherSignalNarrative("frost-risk", sig.frostRiskMinTempC),
         color: sig.frostRiskMinTempC !== null && sig.frostRiskMinTempC < 0 ? RED : undefined,
       },
       {
@@ -611,7 +564,7 @@ export function buildFieldReportPdfRenderInput({
         value: `${sig.leafWetHours24h ?? "—"} h`,
         range: "< 6 h",
         status: sig.leafWetHours24h > 12 ? "High" : sig.leafWetHours24h > 6 ? "Watch" : "OK",
-        note: signalNote("leaf wet hours", sig.leafWetHours24h),
+        note: describeWeatherSignalNarrative("leaf-wet-hours-24h", sig.leafWetHours24h),
         color: sig.leafWetHours24h > 12 ? AMBER : undefined,
       },
       {
@@ -619,7 +572,7 @@ export function buildFieldReportPdfRenderInput({
         value: String(sig.sprayWindowCount24h ?? "—"),
         range: "> 2",
         status: sig.sprayWindowCount24h === 0 ? "None" : sig.sprayWindowCount24h < 2 ? "Limited" : "OK",
-        note: signalNote("spray windows", sig.sprayWindowCount24h),
+        note: describeWeatherSignalNarrative("spray-windows-24h", sig.sprayWindowCount24h),
         color: sig.sprayWindowCount24h === 0 ? AMBER : undefined,
       },
       {
@@ -627,7 +580,7 @@ export function buildFieldReportPdfRenderInput({
         value: fmt(sig.gdd72h, 1),
         range: "> 5",
         status: sig.gdd72h !== null && sig.gdd72h < 5 ? "Low" : "OK",
-        note: signalNote("gdd", sig.gdd72h),
+        note: describeWeatherSignalNarrative("gdd-72h", sig.gdd72h),
       },
     ];
 

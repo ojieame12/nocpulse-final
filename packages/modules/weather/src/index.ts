@@ -82,6 +82,10 @@ export {
   type FrostRiskNarrative,
 } from "./application/describeFrostRiskNarrative";
 export {
+  describeWeatherSignalNarrative,
+  type WeatherSignalNarrativeKey,
+} from "./application/describeWeatherSignalNarrative";
+export {
   describeFrostRiskSummary,
   type FrostRiskSummary,
 } from "./application/describeFrostRiskSummary";

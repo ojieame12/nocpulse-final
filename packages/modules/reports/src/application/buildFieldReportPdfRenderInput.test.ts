@@ -389,3 +389,63 @@ test("buildFieldReportPdfRenderInput uses shared frost narrative copy in signal 
     "Persistent frost pattern — not safe for tender seedlings",
   );
 });
+
+test("buildFieldReportPdfRenderInput uses shared generic weather-signal narrative copy", () => {
+  const renderInput = buildFieldReportPdfRenderInput({
+    artifactKey: "test-artifact",
+    readModel: createReadModel({
+      cropType: "Canola",
+      surfacePct: 58,
+      signalSet: {
+        ...createSignalSet({
+          soilTemp6cmCurrentC: 5.2,
+          soilTemp6cmSustainedDays: 2,
+          frostRiskMinTempC7d: 1.5,
+          frostRiskNights7d: 1,
+          frostProbabilityPct7d: 25,
+        }),
+        currentVpdKpa: 0.2,
+        peakForecastVpdKpa24h: 2.1,
+        netWaterBalance24hMm: -6,
+        netWaterBalance72hMm: -4,
+        leafWetHours24h: 8,
+        sprayWindowCount24h: 0,
+        gdd72h: 3,
+      },
+    }),
+  });
+
+  const weatherSignalsTable = renderInput.blocks.find(
+    (block) => block.kind === "table" && block.columns[0]?.label === "Signal",
+  );
+
+  assert.equal(weatherSignalsTable?.kind, "table");
+  assert.equal(
+    weatherSignalsTable.rows.find((row) => row.cells[0] === "Crop Water Demand (current)")?.cells[4],
+    "Low crop water demand. Fungal disease risk elevated.",
+  );
+  assert.equal(
+    weatherSignalsTable.rows.find((row) => row.cells[0] === "Peak Crop Water Demand (24h)")?.cells[4],
+    "Extreme crop water demand forecast. Expect crop stress.",
+  );
+  assert.equal(
+    weatherSignalsTable.rows.find((row) => row.cells[0] === "Water Balance (24h)")?.cells[4],
+    "Significant deficit. Irrigation needed soon.",
+  );
+  assert.equal(
+    weatherSignalsTable.rows.find((row) => row.cells[0] === "Water Balance (72h)")?.cells[4],
+    "Moderate deficit over 72h.",
+  );
+  assert.equal(
+    weatherSignalsTable.rows.find((row) => row.cells[0] === "Leaf Wet Hours (24h)")?.cells[4],
+    "Moderate leaf wetness. Scout for disease.",
+  );
+  assert.equal(
+    weatherSignalsTable.rows.find((row) => row.cells[0] === "Spray Windows (24h)")?.cells[4],
+    "No spray windows. Conditions unfavorable.",
+  );
+  assert.equal(
+    weatherSignalsTable.rows.find((row) => row.cells[0] === "GDD (72h)")?.cells[4],
+    "Minimal heat accumulation. Growth stalled.",
+  );
+});
