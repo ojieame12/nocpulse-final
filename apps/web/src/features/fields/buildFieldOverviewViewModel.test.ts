@@ -1505,6 +1505,47 @@ test("deriveSummaryFrostRisk hides the summary when no actionable frost signal e
   assert.equal(frostRisk, null);
 });
 
+test("deriveSummaryFrostRisk uses crop-aware frost thresholds", () => {
+  const canolaRisk = deriveSummaryFrostRisk({
+    cropContext: {
+      cropType: "canola",
+      growthStage: "pre-seed",
+    },
+    weather: {
+      signals: {
+        frostRiskMinTempC7d: -1.2,
+        frostRiskNights7d: 0,
+        frostProbabilityPct7d: 12,
+        freezeThawCycles7d: 1,
+      },
+    },
+  });
+  const wheatRisk = deriveSummaryFrostRisk({
+    cropContext: {
+      cropType: "wheat",
+      growthStage: "pre-seed",
+    },
+    weather: {
+      signals: {
+        frostRiskMinTempC7d: -1.2,
+        frostRiskNights7d: 0,
+        frostProbabilityPct7d: 12,
+        freezeThawCycles7d: 1,
+      },
+    },
+  });
+
+  assert.deepEqual(canolaRisk, {
+    minTempC: -1.2,
+    frostNights: 0,
+    probabilityPct: 12,
+    freezeThawCycles: 1,
+    verdict: "watch",
+    verdictSub: "Near-frost conditions in the next 7 days",
+  });
+  assert.equal(wheatRisk, null);
+});
+
 test("buildActionProps deduplicates active signals while preserving active intelligence counts", () => {
   const readModel = {
     ...createBaseReadModel(),

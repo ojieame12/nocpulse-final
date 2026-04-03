@@ -1,5 +1,7 @@
 'use client';
 
+import React from 'react';
+
 interface SectionHeaderProps {
   label: string;
   meta?: React.ReactNode;

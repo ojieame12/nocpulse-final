@@ -1327,13 +1327,25 @@ export function deriveSummaryDataSources(
   return { satellite, weather, soil };
 }
 
-export function deriveSummaryFrostRisk(
-  readModel: { weather?: { signals?: Record<string, unknown> | null } },
-): FieldSummaryProps["frostRisk"] {
+export function deriveSummaryFrostRisk(readModel: {
+  cropContext?: { cropType?: string | null; growthStage?: string | null } | null;
+  summary?: { cropType?: string | null; growthStage?: string | null } | null;
+  weather?: { signals?: Record<string, unknown> | null } | null;
+}): FieldSummaryProps["frostRisk"] {
   const signals = readModel.weather?.signals;
   if (!signals) {
     return null;
   }
+
+  const resolvedRules = resolveCropRuleContext({
+    rulePack: prairieDefaultRulePack,
+    cropContext: {
+      cropType: readModel.cropContext?.cropType ?? readModel.summary?.cropType ?? null,
+      growthStage: readModel.cropContext?.growthStage ?? readModel.summary?.growthStage ?? null,
+    },
+  });
+  const damageTempC = resolvedRules.weatherRisk.frost.damageTempC;
+  const killTempC = resolvedRules.weatherRisk.frost.killTempC;
 
   const minTempC =
     typeof signals.frostRiskMinTempC7d === "number" && Number.isFinite(signals.frostRiskMinTempC7d)
@@ -1354,18 +1366,18 @@ export function deriveSummaryFrostRisk(
       ? Math.max(0, Math.round(signals.freezeThawCycles7d))
       : null;
 
-  const hasActionableRisk =
-    (minTempC != null && minTempC <= 2) ||
-    frostNights > 0 ||
-    (probabilityPct != null && probabilityPct >= 15);
+  const damageThresholdBreached = minTempC != null && minTempC <= damageTempC;
+  const killThresholdBreached = minTempC != null && minTempC <= killTempC;
+  const elevatedProbability = probabilityPct != null && probabilityPct >= 60;
+  const hasActionableRisk = damageThresholdBreached || frostNights > 0 || elevatedProbability;
   if (!hasActionableRisk) {
     return null;
   }
 
   const verdict: "watch" | "protect" =
-    (minTempC != null && minTempC <= -2) ||
-    frostNights >= 3 ||
-    (probabilityPct != null && probabilityPct >= 60)
+    killThresholdBreached ||
+    frostNights >= 2 ||
+    (damageThresholdBreached && elevatedProbability)
       ? "protect"
       : "watch";
 
