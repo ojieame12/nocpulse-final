@@ -20,6 +20,7 @@ import {
   REPORT_SLATE as SLATE,
   REPORT_TEAL as TEAL,
 } from "./reportPalette";
+import { slugifyReportSegment } from "./reportSlug";
 
 export type CropReportGrowthSegment = {
   label: string;
@@ -165,13 +166,6 @@ export type PreparedFieldCropReportArtifact = {
     sha256: string;
   };
 };
-
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 function joinParts(parts: Array<string | null | undefined>, separator = " · ") {
   const compact = parts.map((part) => part?.trim()).filter((part): part is string => Boolean(part));
@@ -618,9 +612,10 @@ export function prepareFieldCropReportArtifact(
   const blocks = buildBlocks(input);
   const generatedAt = input.generatedAt ?? new Date().toISOString();
   const now = formatReportDateStamp(generatedAt);
+  const fieldSlug = slugifyReportSegment(input.fieldName);
 
   const renderInput: PdfRenderInput = {
-    artifactKey: `crop-reports/${slugify(input.fieldName)}/${now}.pdf`,
+    artifactKey: `crop-reports/${fieldSlug}/${now}.pdf`,
     title: `${input.fieldName} Crop Report`,
     subject: `Crop report for ${input.fieldName}`,
     author: "NocPulse",
@@ -629,7 +624,7 @@ export function prepareFieldCropReportArtifact(
   };
 
   const result = renderPdfDocument(renderInput);
-  const fileName = `${slugify(input.fieldName)}-crop-report-${now}.pdf`;
+  const fileName = `${fieldSlug}-crop-report-${now}.pdf`;
 
   return {
     bytes: result.bytes,

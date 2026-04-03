@@ -1,15 +1,9 @@
 import { renderPdfDocument } from "@fieldpulse/pdf";
 import { buildFieldReportPdfRenderInput } from "./buildFieldReportPdfRenderInput";
 import { formatReportDateStamp } from "./reportFormat";
+import { slugifyReportSegment } from "./reportSlug";
 import type { RenderFieldReportInput } from "../contracts/RenderFieldReportInput";
 import type { RenderFieldReportResult } from "../contracts/RenderFieldReportResult";
-
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 export type PreparedFieldReportArtifact = {
   result: RenderFieldReportResult;
@@ -23,7 +17,7 @@ export function prepareFieldReportArtifact(
 ): PreparedFieldReportArtifact {
   const { readModel } = input;
   const reportDate = formatReportDateStamp(readModel.reportDate);
-  const fieldSlug = slugify(readModel.field.name);
+  const fieldSlug = slugifyReportSegment(readModel.field.name);
   const artifactId = `${readModel.field.id}:${reportDate}`;
   const artifactKey = `reports/${readModel.field.workspaceId}/${fieldSlug}/${reportDate}.pdf`;
   const pdfDocument = renderPdfDocument(
