@@ -12,6 +12,14 @@ import {
   inferCropDiseaseRiskSeverity,
 } from "./reportSeverity";
 import { formatReportDateStamp } from "./reportFormat";
+import {
+  parseReportHexColor,
+  REPORT_AMBER as AMBER,
+  REPORT_GREEN as GREEN,
+  REPORT_RED as RED,
+  REPORT_SLATE as SLATE,
+  REPORT_TEAL as TEAL,
+} from "./reportPalette";
 
 export type CropReportGrowthSegment = {
   label: string;
@@ -165,22 +173,6 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-const GREEN: RGB = [0.08, 0.24, 0.17];
-const RED: RGB = [0.93, 0.27, 0.27];
-const AMBER: RGB = [0.96, 0.62, 0.04];
-const TEAL: RGB = [0.09, 0.64, 0.29];
-const SLATE: RGB = [0.42, 0.44, 0.47];
-
-function hexToRgb(hex: string) {
-  const c = hex.replace("#", "");
-  if (c.length !== 6) return undefined;
-  const r = parseInt(c.slice(0, 2), 16) / 255;
-  const g = parseInt(c.slice(2, 4), 16) / 255;
-  const b = parseInt(c.slice(4, 6), 16) / 255;
-  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return undefined;
-  return [r, g, b] as RGB;
-}
-
 function joinParts(parts: Array<string | null | undefined>, separator = " · ") {
   const compact = parts.map((part) => part?.trim()).filter((part): part is string => Boolean(part));
   return compact.length > 0 ? compact.join(separator) : undefined;
@@ -251,8 +243,8 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
     blocks.push({
       kind: "metric-strip",
       cells: [
-        { label: "Health", value: c.healthIndex.label, valueColor: hexToRgb(c.healthIndex.fillColor) ?? GREEN },
-        { label: "Moisture", value: c.moistureBalance.label, valueColor: hexToRgb(c.moistureBalance.fillColor) ?? AMBER },
+        { label: "Health", value: c.healthIndex.label, valueColor: parseReportHexColor(c.healthIndex.fillColor) ?? GREEN },
+        { label: "Moisture", value: c.moistureBalance.label, valueColor: parseReportHexColor(c.moistureBalance.fillColor) ?? AMBER },
         { label: "Alerts", value: String(c.alerts.length), valueColor: c.alerts.length > 0 ? RED : TEAL },
         { label: "Disease Risks", value: String(c.diseaseRisks.length), valueColor: c.diseaseRisks.length > 0 ? AMBER : TEAL },
       ],
@@ -375,7 +367,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
         label: tile.label,
         value: tile.value,
         sub: tile.sub ?? undefined,
-        valueColor: hexToRgb(tile.valueColor ?? ""),
+        valueColor: parseReportHexColor(tile.valueColor),
       })),
       columns: c.fieldTiles.length <= 3 ? 3 : 4,
       marginTop: 4,
@@ -408,13 +400,13 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
           label: c.healthIndexTitle,
           value: c.healthIndex.label,
           sub: c.healthIndex.subLabel ?? undefined,
-          valueColor: hexToRgb(c.healthIndex.fillColor),
+          valueColor: parseReportHexColor(c.healthIndex.fillColor),
         },
         {
           label: c.moistureBalanceTitle,
           value: c.moistureBalance.label,
           sub: c.moistureBalance.subLabel ?? undefined,
-          valueColor: hexToRgb(c.moistureBalance.fillColor),
+          valueColor: parseReportHexColor(c.moistureBalance.fillColor),
         },
         {
           label: "Accumulated GDD",
@@ -438,7 +430,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
         cells: c.healthIndex.metrics.map((metric) => ({
           label: metric.label,
           value: metric.value,
-          valueColor: hexToRgb(metric.valueColor ?? ""),
+          valueColor: parseReportHexColor(metric.valueColor),
         })),
         columns: c.healthIndex.metrics.length <= 3 ? 3 : 4,
         marginTop: 4,
@@ -457,7 +449,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
         cells: c.moistureBalance.metrics.map((metric) => ({
           label: metric.label,
           value: metric.value,
-          valueColor: hexToRgb(metric.valueColor ?? ""),
+          valueColor: parseReportHexColor(metric.valueColor),
         })),
         columns: c.moistureBalance.metrics.length <= 3 ? 3 : 4,
         marginTop: 4,
@@ -519,7 +511,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
         label: tile.label,
         value: tile.value,
         sub: tile.sub ?? undefined,
-        valueColor: hexToRgb(tile.valueColor ?? ""),
+        valueColor: parseReportHexColor(tile.valueColor),
       })),
       columns: c.fieldTiles.length <= 3 ? 3 : 4,
       marginTop: 4,

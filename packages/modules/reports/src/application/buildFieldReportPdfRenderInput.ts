@@ -1,5 +1,4 @@
 import type { PdfRenderInput, PdfBlock, PdfBrandLogo, RGB } from "@fieldpulse/pdf";
-import { STATUS, BRAND, SURFACE } from "@fieldpulse/pdf";
 import type { FieldAlert } from "@fieldpulse/module-alerts";
 import { describeMoistureBandNarrative } from "@fieldpulse/module-moisture";
 import {
@@ -34,6 +33,14 @@ import {
   formatReportNumber as fmt,
   formatReportPercent as fmtPct,
 } from "./reportFormat";
+import {
+  REPORT_AMBER as AMBER,
+  REPORT_GREEN as GREEN,
+  REPORT_POSITIVE as GREEN_SOFT,
+  REPORT_RED as RED,
+  REPORT_SLATE as SLATE,
+  REPORT_TEAL as TEAL,
+} from "./reportPalette";
 import { normalizeReportSeverity, type ReportSeverity } from "./reportSeverity";
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -48,15 +55,6 @@ type BuildFieldReportPdfRenderInput = {
   readModel: FieldReportReadModel;
   brandLogo?: PdfBrandLogo;
 };
-
-/* ── Palette aliases from stylesheet ── */
-
-const GREEN = BRAND.forest900;
-const GREEN_SOFT = BRAND.positive;
-const RED = STATUS.critical;
-const AMBER = STATUS.warning;
-const TEAL = STATUS.info;
-const SLATE = SURFACE.border;
 
 /* ── Seeding Intelligence Helpers ── */
 
