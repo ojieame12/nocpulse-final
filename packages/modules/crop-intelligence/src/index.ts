@@ -136,6 +136,13 @@ export {
   type SeedingAdvisoryReasonCode,
 } from "./application/resolveSeedingAdvisoryDecision";
 export {
+  describeAgronomicTruthBasis,
+  formatAgronomicSourceBasisLabel,
+  resolveAgronomicSourceBasis,
+  type AgronomicSourceBasis,
+  type ResolvedAgronomicSourceBasis,
+} from "./application/resolveAgronomicSourceBasis";
+export {
   syncFindingZones,
   type SyncFindingZoneInput,
   type SyncFindingZonesInput,

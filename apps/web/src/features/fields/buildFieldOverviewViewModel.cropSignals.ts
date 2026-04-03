@@ -1,3 +1,5 @@
+import { formatAgronomicSourceBasisLabel } from "@fieldpulse/module-crop-intelligence";
+
 export function titleCaseStage(stage: string) {
   return stage
     .split("-")
@@ -189,7 +191,7 @@ export function resolveCanopySignalPresentation(input: {
       reportVegetationSubtitle: input.opticalSeasonality.label,
       diseaseClearDescription:
         "Optical canopy layers are being shown for preseason context only while crop stage is still being verified.",
-      actionConfidenceLabel: "Context-only optical",
+      actionConfidenceLabel: `${formatAgronomicSourceBasisLabel("context-only")} imagery`,
     };
   }
 
@@ -207,7 +209,7 @@ export function resolveCanopySignalPresentation(input: {
       diseaseClearDescription:
         "No usable optical pass is available yet. Crop-health and vigor interpretation will begin automatically " +
         "once a cloud-free satellite image is processed for this field. This usually takes 5–10 days after registration.",
-      actionConfidenceLabel: "Imagery pending — check back in a few days",
+      actionConfidenceLabel: `${formatAgronomicSourceBasisLabel("pending")} imagery`,
     };
   }
 
@@ -222,6 +224,6 @@ export function resolveCanopySignalPresentation(input: {
         : `${stageLabel} Developing`,
     reportVegetationSubtitle: `${stageLabel} canopy history`,
     diseaseClearDescription: `No in-season disease findings are being flagged in the ${normalizedStageLabel} canopy signal.`,
-    actionConfidenceLabel: `${stageLabel} optical`,
+    actionConfidenceLabel: `${formatAgronomicSourceBasisLabel("source-backed")} imagery`,
   };
 }

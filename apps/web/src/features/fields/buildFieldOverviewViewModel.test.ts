@@ -648,7 +648,54 @@ test("resolveCanopySignalPresentation returns richer in-season stage language", 
   assert.equal(presentation.cropSubLabel, "Vegetative stage");
   assert.equal(presentation.reportHealthStatus, "Vegetative Developing");
   assert.equal(presentation.reportVegetationSubtitle, "Vegetative canopy history");
-  assert.equal(presentation.actionConfidenceLabel, "Vegetative optical");
+  assert.equal(presentation.actionConfidenceLabel, "Source-backed imagery");
+});
+
+test("resolveCanopySignalPresentation normalizes context-only and pending imagery confidence labels", () => {
+  const contextOnly = resolveCanopySignalPresentation({
+    cropStagePresentation: {
+      displayStageLabel: "Stage unverified",
+      ruleStage: "seedling",
+      thresholdStageLabel: "Seedling default stage",
+      accumulatedGddLabel: "—",
+      gddUnitLabel: "Season heat units unavailable (base 5°C)",
+      stageSourceLabel: "Weather-derived stage still initializing",
+      hasCredibleAccumulatedGdd: false,
+    },
+    opticalSeasonality: {
+      status: "context-only",
+      label: "Preseason optical context",
+      detail: "Optical canopy values are being shown for context only.",
+      renderConfidence: "low",
+    },
+    ndviAvg: 0.08,
+    ndreAvg: 0.03,
+    hasOpticalRaster: true,
+  });
+
+  const pending = resolveCanopySignalPresentation({
+    cropStagePresentation: {
+      displayStageLabel: "Vegetative",
+      ruleStage: "vegetative",
+      thresholdStageLabel: "Vegetative stage",
+      accumulatedGddLabel: "148",
+      gddUnitLabel: "GDD accumulated (base 5°C)",
+      stageSourceLabel: "Weather-derived crop stage",
+      hasCredibleAccumulatedGdd: true,
+    },
+    opticalSeasonality: {
+      status: "in-season",
+      label: "Seasonally interpretable",
+      detail: "Optical canopy values are seasonally valid for agronomic interpretation.",
+      renderConfidence: null,
+    },
+    ndviAvg: null,
+    ndreAvg: null,
+    hasOpticalRaster: false,
+  });
+
+  assert.equal(contextOnly.actionConfidenceLabel, "Context-only imagery");
+  assert.equal(pending.actionConfidenceLabel, "Pending imagery");
 });
 
 test("buildReportProps surfaces unavailable alert data without presenting an all-clear empty state", () => {

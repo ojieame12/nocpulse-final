@@ -12,6 +12,7 @@ import {
   formatMetricDisplayValue,
   describeMetricSource,
 } from "@fieldpulse/map";
+import { resolveAgronomicSourceBasis } from "@fieldpulse/module-crop-intelligence";
 
 /* ═══════════════════════════════════════════════════════════
    FieldPulse V3 — Metric Legend Card (unified)
@@ -482,67 +483,15 @@ function resolveMetricAvailabilityBadge(sourceLabel?: string): {
   short: string;
   long: string;
 } {
-  const normalized = sourceLabel?.trim().toLowerCase() ?? "";
-
-  if (!normalized) {
-    return { short: "UNK", long: "Unknown source" };
-  }
-
-  if (normalized.includes("synthetic")) {
-    return { short: "SYN", long: "Synthetic fallback" };
-  }
-
-  if (normalized.includes("preseason-optical-context")) {
-    return { short: "CTX", long: "Preseason optical context" };
-  }
-
-  if (normalized.includes("sentinel-1") || normalized.includes("sar")) {
-    return { short: "SAR", long: "SAR-backed" };
-  }
-
-  if (
-    normalized.includes("sentinel-2") ||
-    normalized.includes("planet") ||
-    normalized.includes("optical")
-  ) {
-    return { short: "OPT", long: "Optical" };
-  }
-
-  if (normalized.includes("model") || normalized.includes("twi")) {
-    return { short: "EST", long: "Modeled" };
-  }
-
-  return { short: "LIVE", long: "Live source" };
+  const basis = resolveAgronomicSourceBasis(sourceLabel);
+  return {
+    short: basis.badgeShort,
+    long: basis.badgeLong,
+  };
 }
 
 function resolveMetricValidity(sourceLabel?: string): string | null {
-  const normalized = sourceLabel?.trim().toLowerCase() ?? "";
-
-  if (!normalized) {
-    return null;
-  }
-
-  if (normalized.includes("preseason-optical-context")) {
-    return "Preseason optical context";
-  }
-
-  if (
-    normalized.includes("sentinel-2") ||
-    normalized.includes("planet") ||
-    normalized.includes("optical")
-  ) {
-    return "Seasonally interpretable";
-  }
-
-  if (normalized.includes("sentinel-1") || normalized.includes("sar")) {
-    return "SAR-backed surface";
-  }
-
-  if (normalized.includes("synthetic")) {
-    return "Synthetic fallback";
-  }
-
-  return null;
+  return resolveAgronomicSourceBasis(sourceLabel).validityLabel;
 }
 
 function resolveUnavailableMetricReason(

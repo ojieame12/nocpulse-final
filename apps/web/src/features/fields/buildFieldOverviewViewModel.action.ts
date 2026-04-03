@@ -1,6 +1,7 @@
 import { resolveMetricModeContract } from "@fieldpulse/map/server";
 import {
   buildFieldActionCurationVersion,
+  formatAgronomicSourceBasisLabel,
   prairieDefaultRulePack,
   resolveCropRuleContext,
   type FieldActionCuration,
@@ -656,7 +657,7 @@ export function buildActionProps(
           cropLabel,
           sprayWindowCount24h: weatherSignals?.sprayWindowCount24h ?? null,
           forecasts,
-          fieldLabelPoint: rm.field.labelPoint,
+          fieldLabelPoint: rm.field?.labelPoint ?? null,
           weatherSourceLabel,
         })
       : null;
@@ -1089,14 +1090,14 @@ export function buildActionProps(
   const confidence =
     intelligenceState === "active"
       ? opticalSeasonality.status === "context-only"
-        ? `${canopySignalPresentation.actionConfidenceLabel} · ${moisture?.confidence != null ? `${moisture.confidence} moisture` : "model-backed"}`
+        ? `${canopySignalPresentation.actionConfidenceLabel} · ${moisture?.confidence != null ? `${moisture.confidence} moisture` : `${formatAgronomicSourceBasisLabel("modeled")} moisture`}`
         : latestOpticalRaster != null && moisture?.confidence != null
           ? `${canopySignalPresentation.actionConfidenceLabel} · ${moisture.confidence} moisture`
           : latestOpticalRaster != null
             ? canopySignalPresentation.actionConfidenceLabel
             : moisture?.confidence != null
               ? `${moisture.confidence.charAt(0).toUpperCase()}${moisture.confidence.slice(1)} confidence`
-              : "Model-backed"
+              : formatAgronomicSourceBasisLabel("modeled")
       : intelligenceState === "watchlist"
         ? watchlistSummary!.confidence
         : "No active intelligence";

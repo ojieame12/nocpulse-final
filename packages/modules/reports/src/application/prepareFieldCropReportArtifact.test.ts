@@ -201,5 +201,6 @@ test("prepareFieldCropReportArtifact includes truth and weather pressure context
   assert.match(pdfText, /TRUTH & FRESHNESS/i);
   assert.match(pdfText, /RECENT WEATHER PRESSURE/i);
   assert.match(pdfText, /Limited Context/i);
-  assert.match(pdfText, /Model estimate/i);
+  assert.match(pdfText, /Modeled \\267 weather \+ soil/i);
+  assert.match(pdfText, /source-backed, modeled, or still pending/i);
 });

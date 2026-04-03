@@ -1,4 +1,8 @@
 import { renderPdfDocument, type PdfBlock, type PdfRenderInput, type RGB } from "@fieldpulse/pdf";
+import {
+  describeAgronomicTruthBasis,
+  formatAgronomicSourceBasisLabel,
+} from "@fieldpulse/module-crop-intelligence";
 
 export type CropReportGrowthSegment = {
   label: string;
@@ -187,14 +191,11 @@ function dataQualityColor(summary: FieldCropReportSummary | null | undefined): R
 }
 
 function deriveTruthSource(summary: FieldCropReportSummary): string | undefined {
-  if (summary.sourceTagExtended?.trim()) return summary.sourceTagExtended.trim();
-  if (summary.moistureDerivationMode === "source-backed") {
-    return joinParts(["Satellite-derived", summary.confidenceSub !== "No source" ? summary.confidenceSub : undefined]);
-  }
-  if (summary.moistureDerivationMode && summary.moistureDerivationMode !== "unknown") {
-    return joinParts(["Modeled estimate", summary.confidenceSub !== "No source" ? summary.confidenceSub : undefined]);
-  }
-  return undefined;
+  return describeAgronomicTruthBasis({
+    sourceTagExtended: summary.sourceTagExtended,
+    derivationMode: summary.moistureDerivationMode,
+    confidenceSub: summary.confidenceSub,
+  });
 }
 
 function inferDiseaseAction(name: string, sev: "critical" | "warning" | "info") {
@@ -621,7 +622,7 @@ function buildBlocks(input: PrepareFieldCropReportArtifactInput): PdfBlock[] {
       blocks.push({
         kind: "text",
         style: "caption",
-        text: `Crop interpretation is currently constrained by ${s.dataQuality?.label?.toLowerCase()} field context. Provenance is included so the reader can see which signals are source-backed versus held back.`,
+        text: `Crop interpretation is currently constrained by ${s.dataQuality?.label?.toLowerCase()} field context. Provenance is included so the reader can see which inputs are ${formatAgronomicSourceBasisLabel("source-backed").toLowerCase()}, ${formatAgronomicSourceBasisLabel("modeled").toLowerCase()}, or still ${formatAgronomicSourceBasisLabel("pending").toLowerCase()}.`,
       });
     }
     blocks.push({
