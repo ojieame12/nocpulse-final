@@ -917,114 +917,28 @@ export async function buildFieldOverviewViewModel(
   }));
 
   /* ── Summary panel data (from whatever the catalog provides) ── */
-  const summary: FieldSummaryProps = {
-    name: field.name,
-    lld: readModel.intake.legalLandDescription ?? "",
-    crop: readModel.cropContext?.cropType ?? "",
-    cropStage:
-      cropStagePresentation.displayStageLabel === "Stage unavailable"
-        ? ""
-        : cropStagePresentation.displayStageLabel,
-    contextLabel: "Field overview",
-    conditionsMeta: "Field average",
-    updatedLabel: `UPDATED ${new Date(readModel.generatedAt).toLocaleString("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).toUpperCase()}`,
-    moisture: hasRootPct ? rootPct / 100 : 0,
-    cloudCover:
-      latestPrimaryCapture?.cloudCoverPct != null
-        ? toCapturePercentLabel(latestPrimaryCapture.cloudCoverPct)
-        : latestPrimaryCapture?.providerKey === "sentinel-1"
-          ? "SAR"
-          : "—",
-    surfaceMoisture: hasSurfPct ? `${surfPct.toFixed(0)}%` : "—",
-    fieldState: !hasRootPct ? "Unknown" : rootPct < 30 ? "Dry" : rootPct < 60 ? "Adequate" : "Wet",
-    fieldStateColor: !hasRootPct ? "#6b7280" : rootPct < 30 ? "#f59e0b" : "#16a34a",
-    rootMoisture: hasRootPct ? `${rootPct.toFixed(1)}%` : "—",
-    rootMoistureSub: !hasRootPct ? "No moisture reading" : rootPct < 30 ? "Below threshold" : "Adequate",
-    trend: formatSignedPercentDelta(moistureTrendDelta),
-    trendSub:
-      moistureTrendDelta != null && previousMoistureObservation
-        ? `vs ${shortProviderLabel(previousMoistureObservation.providerKey)} raster · ${formatMediumDateTime(previousMoistureObservation.observedAt)}`
-        : "Insufficient raster history",
-    spread: effectiveMoisture.rootZoneMinPct != null && effectiveMoisture.rootZoneMaxPct != null
-      ? (effectiveMoisture.rootZoneMaxPct - effectiveMoisture.rootZoneMinPct).toFixed(1)
-      : "—",
-    spreadSub: effectiveMoisture.latestCellCount > 0
-      ? `${effectiveMoisture.latestCellCount} mapped cells`
-      : "Insufficient data",
-    confidence: confidence === "unknown" ? "—" : confidence.charAt(0).toUpperCase() + confidence.slice(1),
-    confidenceSub: latestMoisture?.sourceKey ?? "No source",
-    moistureConfidenceLevel: confidence === "high" || confidence === "medium" || confidence === "low" ? confidence : "unknown",
-    moistureDerivationMode: (latestMoisture as any)?.inputs?.derivationMode ?? "unknown",
-    sourceTagExtended: buildSourceTagExtended(latestMoisture),
-    precipitation: latestObservation?.precipitationMm != null
-      ? `${latestObservation.precipitationMm.toFixed(1)} mm`
-      : "—",
-    precipitationSub: !weatherDataAvailability.latestObservation
-      ? "Weather unavailable"
-      : latestObservation
-        ? "Current observation"
-        : "No weather data",
-    nextRain: nextRainForecast
-      ? formatTimeAgo(nextRainForecast.validAt)
-      : "—",
-    nextRainSub: nextRainForecast
-      ? "Forecast precipitation signal"
-      : !weatherDataAvailability.forecasts
-        ? "Forecast unavailable"
-        : "No forecast signal",
-    rainChance: forecastDays[0]?.precipitationProbabilityPct != null
-      ? `${Math.round(forecastDays[0].precipitationProbabilityPct)}%`
-      : "—",
-    rainChanceSub: !weatherDataAvailability.forecasts
-      ? "Forecast unavailable"
-      : forecastDays[0]
-        ? "Next forecast day"
-        : "No forecast",
-    sevenDayTotal: forecastDays.length > 0
-      ? `${forecastDays.reduce((sum, entry) => sum + entry.precipitationMm, 0).toFixed(1)} mm`
-      : "—",
-    sevenDayTotalSub: !weatherDataAvailability.forecasts
-      ? "Forecast unavailable"
-      : forecastDays.length > 0
-        ? "Loaded 7-day forecast"
-        : "No forecast",
-    alerts: alertItems.slice(0, 3).map((alert) => ({
-      label: alert.title,
-      desc: alert.subtitle,
-      severity: alert.severity === "critical" ? "danger" : "warning",
-    })),
-    outlook: forecastDays.map((entry) => ({
-      day: entry.label.split(",")[0] ?? entry.label,
-      high: entry.airTemperatureMaxC != null ? Math.round(entry.airTemperatureMaxC) : 0,
-      low: entry.airTemperatureMinC != null ? Math.round(entry.airTemperatureMinC) : 0,
-      precip: entry.precipitationProbabilityPct != null
-        ? `${Math.round(entry.precipitationProbabilityPct)}%`
-        : `${entry.precipitationMm.toFixed(1)}mm`,
-    })),
-    historicalAnomaly: resolveHistoricalAnomalyFromReadModel(readModel),
-
-    // Depletion model
-    depletionPct: (latestMoisture as any)?.inputs?.depletionPct ?? null,
-    availableWaterMm:
-      (latestMoisture as any)?.inputs?.availableWaterMm != null
-        ? `~${Math.round((latestMoisture as any).inputs.availableWaterMm)}mm`
-        : null,
-    statusLabel: deriveSummaryStatusLabel(
-      (latestMoisture as any)?.inputs?.depletionPct ?? null,
-      hasRootPct ? rootPct : null,
-    ),
-
-    // Confidence breakdown
-    confidenceBreakdown: deriveSummaryConfidenceBreakdown(latestMoisture),
-
-    // Data sources
-    dataSources: deriveSummaryDataSources(latestMoisture, weatherDataAvailability),
-    dataQuality: summaryDataQuality,
-    frostRisk: deriveSummaryFrostRisk(readModel),
-  };
+  const summary = buildSummaryProps({
+    field,
+    readModel,
+    cropStagePresentation,
+    latestPrimaryCapture,
+    hasRootPct,
+    rootPct,
+    hasSurfPct,
+    surfPct,
+    moistureTrendDelta,
+    previousMoistureObservation,
+    effectiveMoisture,
+    confidence,
+    latestMoisture,
+    latestObservation,
+    weatherDataAvailability,
+    nextRainForecast,
+    forecastDays,
+    alertItems,
+    summaryDataQuality,
+    formatTimeAgo,
+  });
 
   const viewModel = {
     status: "ready" as const,
@@ -1395,6 +1309,166 @@ export function deriveSummaryFrostRisk(readModel: {
         : frostNights > 0
           ? `${frostNights} marginal night${frostNights === 1 ? "" : "s"} ahead`
           : "Near-frost conditions in the next 7 days",
+  };
+}
+
+export function buildSummaryProps(input: {
+  field: { name: string };
+  readModel: any;
+  cropStagePresentation: { displayStageLabel: string };
+  latestPrimaryCapture: { cloudCoverPct?: number | null; providerKey?: string | null } | null;
+  hasRootPct: boolean;
+  rootPct: number;
+  hasSurfPct: boolean;
+  surfPct: number;
+  moistureTrendDelta: number | null;
+  previousMoistureObservation: { providerKey?: string | null; observedAt: string } | null;
+  effectiveMoisture: any;
+  confidence: string;
+  latestMoisture: any;
+  latestObservation: { precipitationMm?: number | null } | null;
+  weatherDataAvailability: { latestObservation: boolean; forecasts: boolean };
+  nextRainForecast: { validAt: string } | null;
+  forecastDays: readonly {
+    label: string;
+    airTemperatureMaxC: number | null;
+    airTemperatureMinC: number | null;
+    precipitationMm: number;
+    precipitationProbabilityPct?: number | null;
+  }[];
+  alertItems: readonly { title: string; subtitle: string; severity: string }[];
+  summaryDataQuality: FieldDataQualitySummary | null;
+  formatTimeAgo: (isoDate: string) => string;
+}): FieldSummaryProps {
+  const {
+    field,
+    readModel,
+    cropStagePresentation,
+    latestPrimaryCapture,
+    hasRootPct,
+    rootPct,
+    hasSurfPct,
+    surfPct,
+    moistureTrendDelta,
+    previousMoistureObservation,
+    effectiveMoisture,
+    confidence,
+    latestMoisture,
+    latestObservation,
+    weatherDataAvailability,
+    nextRainForecast,
+    forecastDays,
+    alertItems,
+    summaryDataQuality,
+    formatTimeAgo,
+  } = input;
+
+  return {
+    name: field.name,
+    lld: readModel.intake.legalLandDescription ?? "",
+    crop: readModel.cropContext?.cropType ?? "",
+    cropStage:
+      cropStagePresentation.displayStageLabel === "Stage unavailable"
+        ? ""
+        : cropStagePresentation.displayStageLabel,
+    contextLabel: "Field overview",
+    conditionsMeta: "Field average",
+    updatedLabel: `UPDATED ${new Date(readModel.generatedAt).toLocaleString("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).toUpperCase()}`,
+    moisture: hasRootPct ? rootPct / 100 : 0,
+    cloudCover:
+      latestPrimaryCapture?.cloudCoverPct != null
+        ? toCapturePercentLabel(latestPrimaryCapture.cloudCoverPct)
+        : latestPrimaryCapture?.providerKey === "sentinel-1"
+          ? "SAR"
+          : "—",
+    surfaceMoisture: hasSurfPct ? `${surfPct.toFixed(0)}%` : "—",
+    fieldState: !hasRootPct ? "Unknown" : rootPct < 30 ? "Dry" : rootPct < 60 ? "Adequate" : "Wet",
+    fieldStateColor: !hasRootPct ? "#6b7280" : rootPct < 30 ? "#f59e0b" : "#16a34a",
+    rootMoisture: hasRootPct ? `${rootPct.toFixed(1)}%` : "—",
+    rootMoistureSub: !hasRootPct ? "No moisture reading" : rootPct < 30 ? "Below threshold" : "Adequate",
+    trend: formatSignedPercentDelta(moistureTrendDelta),
+    trendSub:
+      moistureTrendDelta != null && previousMoistureObservation
+        ? `vs ${shortProviderLabel(previousMoistureObservation.providerKey)} raster · ${formatMediumDateTime(previousMoistureObservation.observedAt)}`
+        : "Insufficient raster history",
+    spread:
+      effectiveMoisture.rootZoneMinPct != null && effectiveMoisture.rootZoneMaxPct != null
+        ? (effectiveMoisture.rootZoneMaxPct - effectiveMoisture.rootZoneMinPct).toFixed(1)
+        : "—",
+    spreadSub:
+      effectiveMoisture.latestCellCount > 0
+        ? `${effectiveMoisture.latestCellCount} mapped cells`
+        : "Insufficient data",
+    confidence:
+      confidence === "unknown" ? "—" : confidence.charAt(0).toUpperCase() + confidence.slice(1),
+    confidenceSub: latestMoisture?.sourceKey ?? "No source",
+    moistureConfidenceLevel:
+      confidence === "high" || confidence === "medium" || confidence === "low"
+        ? confidence
+        : "unknown",
+    moistureDerivationMode: latestMoisture?.inputs?.derivationMode ?? "unknown",
+    sourceTagExtended: buildSourceTagExtended(latestMoisture),
+    precipitation:
+      latestObservation?.precipitationMm != null
+        ? `${latestObservation.precipitationMm.toFixed(1)} mm`
+        : "—",
+    precipitationSub: !weatherDataAvailability.latestObservation
+      ? "Weather unavailable"
+      : latestObservation
+        ? "Current observation"
+        : "No weather data",
+    nextRain: nextRainForecast ? formatTimeAgo(nextRainForecast.validAt) : "—",
+    nextRainSub: nextRainForecast
+      ? "Forecast precipitation signal"
+      : !weatherDataAvailability.forecasts
+        ? "Forecast unavailable"
+        : "No forecast signal",
+    rainChance:
+      forecastDays[0]?.precipitationProbabilityPct != null
+        ? `${Math.round(forecastDays[0].precipitationProbabilityPct)}%`
+        : "—",
+    rainChanceSub: !weatherDataAvailability.forecasts
+      ? "Forecast unavailable"
+      : forecastDays[0]
+        ? "Next forecast day"
+        : "No forecast",
+    sevenDayTotal:
+      forecastDays.length > 0
+        ? `${forecastDays.reduce((sum, entry) => sum + entry.precipitationMm, 0).toFixed(1)} mm`
+        : "—",
+    sevenDayTotalSub: !weatherDataAvailability.forecasts
+      ? "Forecast unavailable"
+      : forecastDays.length > 0
+        ? "Loaded 7-day forecast"
+        : "No forecast",
+    alerts: alertItems.slice(0, 3).map((alert) => ({
+      label: alert.title,
+      desc: alert.subtitle,
+      severity: alert.severity === "critical" ? "danger" : "warning",
+    })),
+    outlook: forecastDays.map((entry) => ({
+      day: entry.label.split(",")[0] ?? entry.label,
+      high: entry.airTemperatureMaxC != null ? Math.round(entry.airTemperatureMaxC) : 0,
+      low: entry.airTemperatureMinC != null ? Math.round(entry.airTemperatureMinC) : 0,
+      precip:
+        entry.precipitationProbabilityPct != null
+          ? `${Math.round(entry.precipitationProbabilityPct)}%`
+          : `${entry.precipitationMm.toFixed(1)}mm`,
+    })),
+    historicalAnomaly: resolveHistoricalAnomalyFromReadModel(readModel),
+    depletionPct: latestMoisture?.inputs?.depletionPct ?? null,
+    availableWaterMm:
+      latestMoisture?.inputs?.availableWaterMm != null
+        ? `~${Math.round(latestMoisture.inputs.availableWaterMm)}mm`
+        : null,
+    statusLabel: deriveSummaryStatusLabel(latestMoisture?.inputs?.depletionPct ?? null, hasRootPct ? rootPct : null),
+    confidenceBreakdown: deriveSummaryConfidenceBreakdown(latestMoisture),
+    dataSources: deriveSummaryDataSources(latestMoisture, weatherDataAvailability),
+    dataQuality: summaryDataQuality,
+    frostRisk: deriveSummaryFrostRisk(readModel),
   };
 }
 

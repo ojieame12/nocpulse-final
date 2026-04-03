@@ -4,6 +4,7 @@ import { buildFieldActionCurationVersion } from "@fieldpulse/module-crop-intelli
 import {
   buildEffectiveMoistureSummary,
   buildMarketProps,
+  buildSummaryProps,
   buildReportProps,
   resolveCanopySignalPresentation,
   resolveCropStagePresentation,
@@ -1544,6 +1545,80 @@ test("deriveSummaryFrostRisk uses crop-aware frost thresholds", () => {
     verdictSub: "Near-frost conditions in the next 7 days",
   });
   assert.equal(wheatRisk, null);
+});
+
+test("buildSummaryProps carries frostRisk onto the built summary model", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    generatedAt: "2026-04-03T12:00:00.000Z",
+    cropContext: {
+      cropType: "canola",
+      growthStage: "pre-seed",
+      seasonYear: 2026,
+    },
+    weather: {
+      signals: {
+        frostRiskMinTempC7d: -2.4,
+        frostRiskNights7d: 2,
+        frostProbabilityPct7d: 61,
+        freezeThawCycles7d: 1,
+      },
+    },
+  };
+
+  const summary = buildSummaryProps({
+    field: {
+      name: "North Quarter Demo",
+    },
+    readModel,
+    cropStagePresentation: {
+      displayStageLabel: "Pre Seed",
+    },
+    latestPrimaryCapture: null,
+    hasRootPct: true,
+    rootPct: 42.6,
+    hasSurfPct: true,
+    surfPct: 37.8,
+    moistureTrendDelta: null,
+    previousMoistureObservation: null,
+    effectiveMoisture: {
+      latestCellCount: 24,
+      rootZoneMinPct: 36.4,
+      rootZoneMaxPct: 48.9,
+    },
+    confidence: "high",
+    latestMoisture: {
+      sourceKey: "sentinel-hub-stats-v1:sentinel-1",
+      inputs: {
+        derivationMode: "source-backed",
+        depletionPct: 38,
+      },
+    },
+    latestObservation: null,
+    weatherDataAvailability: {
+      latestObservation: false,
+      forecasts: false,
+    },
+    nextRainForecast: null,
+    forecastDays: [],
+    alertItems: [],
+    summaryDataQuality: {
+      label: "Ready",
+      tone: "positive",
+      summary: "Strong signal support.",
+      reasons: ["Satellite and weather signals are aligned."],
+    },
+    formatTimeAgo: () => "soon",
+  });
+
+  assert.deepEqual(summary.frostRisk, {
+    minTempC: -2.4,
+    frostNights: 2,
+    probabilityPct: 61,
+    freezeThawCycles: 1,
+    verdict: "protect",
+    verdictSub: "2 frost nights forecast",
+  });
 });
 
 test("buildActionProps deduplicates active signals while preserving active intelligence counts", () => {
