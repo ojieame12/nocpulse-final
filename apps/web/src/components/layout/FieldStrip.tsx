@@ -34,6 +34,11 @@ const SCROLL_AMOUNT = 200;
 const HOLD_DELAY_MS = 180;
 const QUARTER_ORDER = ["NE", "NW", "SE", "SW"] as const;
 
+type MenuPosition = {
+  top: number;
+  right: number;
+};
+
 /* ── Grouping strategies ── */
 
 type GroupStrategy = "none" | "crop" | "status" | "alerts";
@@ -261,6 +266,17 @@ function formatLocationSummary(legalLandDescription?: string | null): string | n
   return `${parsed.length} parcels`;
 }
 
+function resolveFloatingMenuPosition(trigger: HTMLElement | null): MenuPosition | null {
+  if (!trigger) return null;
+
+  const rect = trigger.getBoundingClientRect();
+
+  return {
+    top: Math.max(12, rect.top - 6),
+    right: Math.max(12, window.innerWidth - rect.right),
+  };
+}
+
 export type FieldOnboardingStatus = {
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   progressPct: number | null;
@@ -396,11 +412,17 @@ export function FieldStrip({
   const [activeTabKey, setActiveTabKey] = useState("all");
   const [groupMenuOpen, setGroupMenuOpen] = useState(false);
   const groupContainerRef = useRef<HTMLDivElement>(null);
+  const groupTriggerRef = useRef<HTMLButtonElement>(null);
+  const groupMenuRef = useRef<HTMLDivElement>(null);
+  const [groupMenuPos, setGroupMenuPos] = useState<MenuPosition | null>(null);
 
   /* ── Sorting ── */
   const [sortStrategy, setSortStrategy] = useState<SortStrategy>("name-asc");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const sortContainerRef = useRef<HTMLDivElement>(null);
+  const sortTriggerRef = useRef<HTMLButtonElement>(null);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
+  const [sortMenuPos, setSortMenuPos] = useState<MenuPosition | null>(null);
   const lastRevealFieldIdRef = useRef<string | null>(null);
   const lastScrolledRevealFieldIdRef = useRef<string | null>(null);
 
@@ -446,7 +468,9 @@ export function FieldStrip({
     if (!groupMenuOpen) return;
     function handleClick(e: MouseEvent) {
       if (groupContainerRef.current?.contains(e.target as Node)) return;
+      if (groupMenuRef.current?.contains(e.target as Node)) return;
       setGroupMenuOpen(false);
+      setGroupMenuPos(null);
     }
     window.addEventListener("pointerdown", handleClick);
     return () => window.removeEventListener("pointerdown", handleClick);
@@ -457,11 +481,34 @@ export function FieldStrip({
     if (!sortMenuOpen) return;
     function handleClick(e: MouseEvent) {
       if (sortContainerRef.current?.contains(e.target as Node)) return;
+      if (sortMenuRef.current?.contains(e.target as Node)) return;
       setSortMenuOpen(false);
+      setSortMenuPos(null);
     }
     window.addEventListener("pointerdown", handleClick);
     return () => window.removeEventListener("pointerdown", handleClick);
   }, [sortMenuOpen]);
+
+  useEffect(() => {
+    if (!groupMenuOpen && !sortMenuOpen) return;
+
+    const updatePositions = () => {
+      if (groupMenuOpen) {
+        setGroupMenuPos(resolveFloatingMenuPosition(groupTriggerRef.current));
+      }
+      if (sortMenuOpen) {
+        setSortMenuPos(resolveFloatingMenuPosition(sortTriggerRef.current));
+      }
+    };
+
+    updatePositions();
+    window.addEventListener("resize", updatePositions);
+    window.addEventListener("scroll", updatePositions, true);
+    return () => {
+      window.removeEventListener("resize", updatePositions);
+      window.removeEventListener("scroll", updatePositions, true);
+    };
+  }, [groupMenuOpen, sortMenuOpen]);
 
   /* Close kebab menu on outside click */
   useEffect(() => {
@@ -751,9 +798,20 @@ export function FieldStrip({
           {strategies.length > 1 ? (
             <div ref={groupContainerRef} className="field-strip__group-by">
               <button
+                ref={groupTriggerRef}
                 type="button"
                 className={`field-strip__group-btn${groupStrategy !== "none" ? " field-strip__group-btn--active" : ""}`}
-                onClick={() => setGroupMenuOpen((v) => !v)}
+                onClick={() => {
+                  setGroupMenuOpen((v) => {
+                    const next = !v;
+                    if (next) {
+                      setGroupMenuPos(resolveFloatingMenuPosition(groupTriggerRef.current));
+                    } else {
+                      setGroupMenuPos(null);
+                    }
+                    return next;
+                  });
+                }}
                 aria-label="Group fields"
                 title="Group by…"
               >
@@ -767,40 +825,26 @@ export function FieldStrip({
                   <polyline points="18 15 12 9 6 15" />
                 </svg>
               </button>
-              {groupMenuOpen ? (
-                <div className="field-strip__group-menu">
-                  {strategies.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      className={`field-strip__group-option${s === groupStrategy ? " field-strip__group-option--active" : ""}`}
-                      onClick={() => {
-                        setGroupStrategy(s);
-                        setActiveTabKey("all");
-                        setGroupMenuOpen(false);
-                      }}
-                    >
-                      {s === groupStrategy ? (
-                        <svg className="field-strip__group-check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      ) : (
-                        <span className="field-strip__group-check" />
-                      )}
-                      <span>{GROUP_LABELS[s]}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
             </div>
           ) : null}
 
           {/* Sort-by dropdown */}
           <div ref={sortContainerRef} className="field-strip__sort-by">
             <button
+              ref={sortTriggerRef}
               type="button"
               className={`field-strip__sort-btn${sortStrategy !== "name-asc" ? " field-strip__sort-btn--active" : ""}`}
-              onClick={() => setSortMenuOpen((v) => !v)}
+              onClick={() => {
+                setSortMenuOpen((v) => {
+                  const next = !v;
+                  if (next) {
+                    setSortMenuPos(resolveFloatingMenuPosition(sortTriggerRef.current));
+                  } else {
+                    setSortMenuPos(null);
+                  }
+                  return next;
+                });
+              }}
               aria-label="Sort fields"
               title="Sort by…"
             >
@@ -813,30 +857,6 @@ export function FieldStrip({
                 <polyline points="18 15 12 9 6 15" />
               </svg>
             </button>
-            {sortMenuOpen ? (
-              <div className="field-strip__sort-menu">
-                {(Object.keys(SORT_LABELS) as SortStrategy[]).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    className={`field-strip__group-option${s === sortStrategy ? " field-strip__group-option--active" : ""}`}
-                    onClick={() => {
-                      setSortStrategy(s);
-                      setSortMenuOpen(false);
-                    }}
-                  >
-                    {s === sortStrategy ? (
-                      <svg className="field-strip__group-check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    ) : (
-                      <span className="field-strip__group-check" />
-                    )}
-                    <span>{SORT_LABELS[s]}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
           </div>
 
           <div className="field-strip__arrows">
@@ -1061,6 +1081,85 @@ export function FieldStrip({
       </div>
 
       {/* ── Kebab dropdown menu — portaled to body to escape overflow:hidden ── */}
+      {groupMenuOpen && groupMenuPos
+        ? createPortal(
+            <div
+              ref={groupMenuRef}
+              className="field-strip__group-menu"
+              style={{
+                position: "fixed",
+                top: groupMenuPos.top,
+                right: groupMenuPos.right,
+                bottom: "auto",
+                transform: "translateY(-100%)",
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              {strategies.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`field-strip__group-option${s === groupStrategy ? " field-strip__group-option--active" : ""}`}
+                  onClick={() => {
+                    setGroupStrategy(s);
+                    setActiveTabKey("all");
+                    setGroupMenuOpen(false);
+                    setGroupMenuPos(null);
+                  }}
+                >
+                  {s === groupStrategy ? (
+                    <svg className="field-strip__group-check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  ) : (
+                    <span className="field-strip__group-check" />
+                  )}
+                  <span>{GROUP_LABELS[s]}</span>
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
+      {sortMenuOpen && sortMenuPos
+        ? createPortal(
+            <div
+              ref={sortMenuRef}
+              className="field-strip__sort-menu"
+              style={{
+                position: "fixed",
+                top: sortMenuPos.top,
+                right: sortMenuPos.right,
+                bottom: "auto",
+                transform: "translateY(-100%)",
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              {(Object.keys(SORT_LABELS) as SortStrategy[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`field-strip__group-option${s === sortStrategy ? " field-strip__group-option--active" : ""}`}
+                  onClick={() => {
+                    setSortStrategy(s);
+                    setSortMenuOpen(false);
+                    setSortMenuPos(null);
+                  }}
+                >
+                  {s === sortStrategy ? (
+                    <svg className="field-strip__group-check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  ) : (
+                    <span className="field-strip__group-check" />
+                  )}
+                  <span>{SORT_LABELS[s]}</span>
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
       {kebabFieldId && kebabPos && (() => {
         const menuField = fields.find((f) => f.id === kebabFieldId);
         if (!menuField) return null;

@@ -120,6 +120,7 @@ export async function middleware(request: NextRequest) {
  *   - /fonts/*          (self-hosted fonts)
  *   - /logo.svg         (brand mark)
  *   - /favicon.ico      (browser icon)
+ *   - /manifest.webmanifest (PWA manifest asset)
  *   - /api/*            (API routes handle auth as JSON)
  *   - /auth/*           (sign-in, check-email, callback pages)
  *   - /request-access   (public lead capture)
@@ -132,6 +133,6 @@ export const config = {
      *   - Negative lookahead (?!...) excludes the listed prefixes.
      *   - The trailing /:path* matches everything else.
      */
-    "/((?!_next|fonts|images|logo[^/]*\\.svg|nocpulse[^/]*\\.png|favicon\\.ico|api|auth|request-access|share).*)",
+    "/((?!_next|fonts|images|logo[^/]*\\.svg|nocpulse[^/]*\\.png|favicon\\.ico|manifest\\.webmanifest|api|auth|request-access|share).*)",
   ],
 };
