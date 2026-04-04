@@ -15,6 +15,9 @@ import type { FieldWeatherObservationRepository } from "./FieldWeatherObservatio
 type FieldWeatherObservationRow =
   DatabaseSchema["app"]["Tables"]["field_weather_observations"]["Row"];
 
+const MISSING_SOIL_TEMP_COLUMN_FRAGMENT =
+  "Could not find the 'soil_temperature_6cm_c' column";
+
 function isRecord(value: JsonValue): value is Record<string, JsonValue> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -71,6 +74,42 @@ function mapFieldWeatherObservation(
   };
 }
 
+function isMissingSoilTemperatureColumnError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string" &&
+    (error as { message: string }).message.includes(MISSING_SOIL_TEMP_COLUMN_FRAGMENT)
+  );
+}
+
+function buildObservationUpsertRow(
+  input: UpsertFieldWeatherObservationInput,
+  options?: { includeSoilTemperature6cmC?: boolean },
+) {
+  const row: DatabaseSchema["app"]["Tables"]["field_weather_observations"]["Insert"] = {
+    workspace_id: input.workspaceId,
+    field_id: input.fieldId,
+    observed_at: input.observedAt,
+    source_key: input.sourceKey,
+    provider_key: input.providerKey,
+    air_temperature_c: input.airTemperatureC,
+    precipitation_mm: input.precipitationMm,
+    wind_speed_kph: input.windSpeedKph,
+    relative_humidity_pct: input.relativeHumidityPct ?? null,
+    soil_moisture_pct: input.soilMoisturePct ?? null,
+    evapotranspiration_mm: input.evapotranspirationMm ?? null,
+    provenance: input.provenance ?? {},
+  };
+
+  if (options?.includeSoilTemperature6cmC !== false) {
+    row.soil_temperature_6cm_c = input.soilTemperature6cmC ?? null;
+  }
+
+  return row;
+}
+
 export function createSupabaseFieldWeatherObservationRepository(
   client: DatabaseClient,
 ): FieldWeatherObservationRepository {
@@ -94,30 +133,25 @@ export function createSupabaseFieldWeatherObservationRepository(
     },
 
     async upsertObservation(input) {
-      const result = await client
-        .from("field_weather_observations")
-        .upsert(
-          {
-            workspace_id: input.workspaceId,
-            field_id: input.fieldId,
-            observed_at: input.observedAt,
-            source_key: input.sourceKey,
-            provider_key: input.providerKey,
-            air_temperature_c: input.airTemperatureC,
-            precipitation_mm: input.precipitationMm,
-            wind_speed_kph: input.windSpeedKph,
-            relative_humidity_pct: input.relativeHumidityPct ?? null,
-            soil_moisture_pct: input.soilMoisturePct ?? null,
-            soil_temperature_6cm_c: input.soilTemperature6cmC ?? null,
-            evapotranspiration_mm: input.evapotranspirationMm ?? null,
-            provenance: input.provenance ?? {},
-          },
-          {
+      const upsert = async (includeSoilTemperature6cmC: boolean) =>
+        client
+          .from("field_weather_observations")
+          .upsert(buildObservationUpsertRow(input, { includeSoilTemperature6cmC }), {
             onConflict: "field_id,observed_at,source_key",
-          },
-        )
-        .select("*")
-        .single();
+          })
+          .select("*")
+          .single();
+
+      const result = await upsert(true);
+
+      if (result.error && isMissingSoilTemperatureColumnError(result.error)) {
+        return mapFieldWeatherObservation(
+          requireSupabaseData(
+            await upsert(false),
+            "weather.upsertObservation.withoutSoilTemperature6cmC",
+          ),
+        );
+      }
 
       return mapFieldWeatherObservation(
         requireSupabaseData(result, "weather.upsertObservation"),

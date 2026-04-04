@@ -15,6 +15,16 @@ import type { FieldWeatherDerivedSignalSetRepository } from "./FieldWeatherDeriv
 type FieldWeatherDerivedSignalSetRow =
   DatabaseSchema["app"]["Tables"]["field_weather_signal_sets"]["Row"];
 
+const OPTIONAL_AGRONOMIC_SIGNAL_COLUMNS = [
+  "frost_risk_min_temp_c_7d",
+  "frost_risk_nights_7d",
+  "frost_probability_pct_7d",
+  "recent_precip_total_72h_mm",
+  "freeze_thaw_cycles_7d",
+  "soil_temp_6cm_current_c",
+  "soil_temp_6cm_sustained_days",
+] as const;
+
 function isRecord(value: JsonValue): value is Record<string, JsonValue> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -142,6 +152,61 @@ function mapSignalSet(
   };
 }
 
+function isMissingAgronomicSignalColumnError(error: unknown) {
+  if (
+    typeof error !== "object" ||
+    error === null ||
+    !("message" in error) ||
+    typeof (error as { message?: unknown }).message !== "string"
+  ) {
+    return false;
+  }
+
+  const message = (error as { message: string }).message;
+  return OPTIONAL_AGRONOMIC_SIGNAL_COLUMNS.some((column) =>
+    message.includes(`Could not find the '${column}' column`),
+  );
+}
+
+function buildSignalSetUpsertRow(
+  input: UpsertFieldWeatherDerivedSignalSetInput,
+  options?: { includeAgronomicColumns?: boolean },
+) {
+  const row: DatabaseSchema["app"]["Tables"]["field_weather_signal_sets"]["Insert"] = {
+    workspace_id: input.workspaceId,
+    field_id: input.fieldId,
+    weather_observation_id: input.weatherObservationId ?? null,
+    observed_at: input.observedAt,
+    forecast_run_at: input.forecastRunAt ?? null,
+    source_key: input.sourceKey,
+    provider_key: input.providerKey,
+    signal_version: input.signalVersion,
+    current_vpd_kpa: input.currentVpdKpa ?? null,
+    peak_forecast_vpd_kpa_24h: input.peakForecastVpdKpa24h ?? null,
+    net_water_balance_24h_mm: input.netWaterBalance24hMm ?? null,
+    net_water_balance_72h_mm: input.netWaterBalance72hMm ?? null,
+    leaf_wet_hours_24h: input.leafWetHours24h ?? 0,
+    spray_window_count_24h: input.sprayWindowCount24h ?? 0,
+    frost_risk_min_temp_c: input.frostRiskMinTempC ?? null,
+    gdd_24h: input.gdd24h ?? null,
+    gdd_72h: input.gdd72h ?? null,
+    gdd_base_c: input.gddBaseC ?? 5,
+    provenance: input.provenance ?? {},
+  };
+
+  if (options?.includeAgronomicColumns !== false) {
+    row.frost_risk_min_temp_c_7d = input.frostRiskMinTempC7d ?? null;
+    row.frost_risk_nights_7d = input.frostRiskNights7d ?? null;
+    row.frost_probability_pct_7d = input.frostProbabilityPct7d ?? null;
+    row.recent_precip_total_72h_mm = input.recentPrecipTotal72hMm ?? null;
+    row.freeze_thaw_cycles_7d = input.freezeThawCycles7d ?? null;
+    row.soil_temp_6cm_current_c = input.soilTemp6cmCurrentC ?? null;
+    row.soil_temp_6cm_sustained_days = input.soilTemp6cmSustainedDays ?? null;
+  }
+
+  return row;
+}
+
 export function createSupabaseFieldWeatherDerivedSignalSetRepository(
   client: DatabaseClient,
 ): FieldWeatherDerivedSignalSetRepository {
@@ -182,43 +247,25 @@ export function createSupabaseFieldWeatherDerivedSignalSetRepository(
     },
 
     async upsertSignalSet(input) {
-      const result = await client
-        .from("field_weather_signal_sets")
-        .upsert(
-          {
-            workspace_id: input.workspaceId,
-            field_id: input.fieldId,
-            weather_observation_id: input.weatherObservationId ?? null,
-            observed_at: input.observedAt,
-            forecast_run_at: input.forecastRunAt ?? null,
-            source_key: input.sourceKey,
-            provider_key: input.providerKey,
-            signal_version: input.signalVersion,
-            current_vpd_kpa: input.currentVpdKpa ?? null,
-            peak_forecast_vpd_kpa_24h: input.peakForecastVpdKpa24h ?? null,
-            net_water_balance_24h_mm: input.netWaterBalance24hMm ?? null,
-            net_water_balance_72h_mm: input.netWaterBalance72hMm ?? null,
-            leaf_wet_hours_24h: input.leafWetHours24h ?? 0,
-            spray_window_count_24h: input.sprayWindowCount24h ?? 0,
-            frost_risk_min_temp_c: input.frostRiskMinTempC ?? null,
-            frost_risk_min_temp_c_7d: input.frostRiskMinTempC7d ?? null,
-            frost_risk_nights_7d: input.frostRiskNights7d ?? null,
-            frost_probability_pct_7d: input.frostProbabilityPct7d ?? null,
-            recent_precip_total_72h_mm: input.recentPrecipTotal72hMm ?? null,
-            freeze_thaw_cycles_7d: input.freezeThawCycles7d ?? null,
-            soil_temp_6cm_current_c: input.soilTemp6cmCurrentC ?? null,
-            soil_temp_6cm_sustained_days: input.soilTemp6cmSustainedDays ?? null,
-            gdd_24h: input.gdd24h ?? null,
-            gdd_72h: input.gdd72h ?? null,
-            gdd_base_c: input.gddBaseC ?? 5,
-            provenance: input.provenance ?? {},
-          },
-          {
+      const upsert = async (includeAgronomicColumns: boolean) =>
+        client
+          .from("field_weather_signal_sets")
+          .upsert(buildSignalSetUpsertRow(input, { includeAgronomicColumns }), {
             onConflict: "field_id,observed_at,source_key,signal_version",
-          },
-        )
-        .select("*")
-        .single();
+          })
+          .select("*")
+          .single();
+
+      const result = await upsert(true);
+
+      if (result.error && isMissingAgronomicSignalColumnError(result.error)) {
+        return mapSignalSet(
+          requireSupabaseData(
+            await upsert(false),
+            "weather.upsertSignalSet.withoutAgronomicColumns",
+          ),
+        );
+      }
 
       return mapSignalSet(
         requireSupabaseData(result, "weather.upsertSignalSet"),
