@@ -6,7 +6,48 @@ import type {
 } from "../contracts/SpreadsheetImport";
 
 function stableJson(value: unknown) {
-  return JSON.stringify(value);
+  return JSON.stringify(canonicalizeJsonValue(value));
+}
+
+function canonicalizeJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeJsonValue);
+  }
+
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nestedValue]) => [key, canonicalizeJsonValue(nestedValue)] as const);
+
+    return Object.fromEntries(entries);
+  }
+
+  return value;
+}
+
+function roundNumber(value: number, digits: number) {
+  return Number(value.toFixed(digits));
+}
+
+function roundBoundaryValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(roundBoundaryValue);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+        key,
+        roundBoundaryValue(nestedValue),
+      ]),
+    );
+  }
+
+  if (typeof value === "number") {
+    return roundNumber(value, 6);
+  }
+
+  return value;
 }
 
 function normalizeIssue(issue: SpreadsheetImportIssue) {
@@ -21,8 +62,8 @@ function normalizeIssue(issue: SpreadsheetImportIssue) {
 function normalizePreviewCandidate(candidate: SpreadsheetImportCandidate) {
   return {
     name: candidate.draft.name,
-    areaHa: candidate.draft.areaHa,
-    boundary: candidate.draft.boundary,
+    areaHa: roundNumber(candidate.draft.areaHa, 1),
+    boundary: roundBoundaryValue(candidate.draft.boundary),
     cropType: candidate.cropType ?? null,
     rowCount: candidate.rowCount,
     rowNumbers: [...candidate.rowNumbers],
@@ -42,8 +83,8 @@ function normalizePreviewCandidate(candidate: SpreadsheetImportCandidate) {
 function normalizePersistedCandidate(candidate: FieldImportCandidate) {
   return {
     name: candidate.draft.name,
-    areaHa: candidate.draft.areaHa,
-    boundary: candidate.draft.boundary,
+    areaHa: roundNumber(candidate.draft.areaHa, 1),
+    boundary: roundBoundaryValue(candidate.draft.boundary),
     cropType: candidate.cropType ?? null,
     rowCount: candidate.rowCount,
     rowNumbers: [...candidate.rowNumbers],

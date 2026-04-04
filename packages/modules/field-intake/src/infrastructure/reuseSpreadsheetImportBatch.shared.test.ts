@@ -133,3 +133,55 @@ test("isReusableSpreadsheetImportBatch rejects different candidate payloads", ()
     false,
   );
 });
+
+test("isReusableSpreadsheetImportBatch ignores json object key order", () => {
+  const persistedCandidate = {
+    ...createCandidate(),
+    draft: {
+      name: "North Quarter",
+      areaHa: 64.8,
+      boundary: {
+        coordinates: boundary.coordinates,
+        type: boundary.type,
+      },
+    },
+  };
+
+  assert.equal(
+    isReusableSpreadsheetImportBatch({
+      preview: createPreview(),
+      batch: createBatch(),
+      candidates: [persistedCandidate],
+    }),
+    true,
+  );
+});
+
+test("isReusableSpreadsheetImportBatch tolerates persisted geometry rounding", () => {
+  const persistedCandidate = {
+    ...createCandidate(),
+    draft: {
+      name: "North Quarter",
+      areaHa: 64.8,
+      boundary: {
+        type: "MultiPolygon" as const,
+        coordinates: [[[
+          [-110, 50],
+          [-109.9, 50],
+          [-109.9, 49.9],
+          [-110, 49.9],
+          [-110, 50],
+        ]]],
+      },
+    },
+  };
+
+  assert.equal(
+    isReusableSpreadsheetImportBatch({
+      preview: createPreview(),
+      batch: createBatch(),
+      candidates: [persistedCandidate],
+    }),
+    true,
+  );
+});
