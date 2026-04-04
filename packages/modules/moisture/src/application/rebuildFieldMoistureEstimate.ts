@@ -163,6 +163,34 @@ function isOpticalRasterSource(sourceKey: string | null | undefined) {
   return normalized.includes("sentinel-2") || normalized.includes("planet");
 }
 
+function withContextOnlySourceKey(sourceKey: string | null | undefined) {
+  if (!sourceKey) {
+    return "context-only:imagery-weather-derived-v1";
+  }
+
+  return sourceKey.toLowerCase().includes("context-only")
+    ? sourceKey
+    : `context-only:${sourceKey}`;
+}
+
+function shouldDowngradeOpticalWeatherEstimateToContextOnly(input: {
+  rasterSourceKey: string | null;
+  weatherSoilMoisture: number | null;
+  rootZonePct: number;
+  surfacePct: number;
+}) {
+  if (!isOpticalRasterSource(input.rasterSourceKey) || isSarRasterSource(input.rasterSourceKey)) {
+    return false;
+  }
+
+  if (input.weatherSoilMoisture == null || input.weatherSoilMoisture < 12) {
+    return false;
+  }
+
+  const zeroLikeEstimate = input.rootZonePct <= 5 && input.surfacePct <= 5;
+  return zeroLikeEstimate;
+}
+
 // ---------------------------------------------------------------------------
 // Freshness-weighted confidence helpers
 // ---------------------------------------------------------------------------
@@ -541,6 +569,19 @@ function deriveSourceBackedEstimate(
     confidenceReasonParts.push("confidence-capped-stale-neutral");
   }
 
+  const contextOnlyOpticalEstimate = shouldDowngradeOpticalWeatherEstimateToContextOnly({
+    rasterSourceKey,
+    weatherSoilMoisture,
+    rootZonePct,
+    surfacePct,
+  });
+
+  if (contextOnlyOpticalEstimate) {
+    confidence = "low";
+    confidenceScore = Math.min(confidenceScore, 0.34);
+    confidenceReasonParts.push("preseason-optical-context");
+  }
+
   // -----------------------------------------------------------------------
   // Depletion computation (mm-based water storage)
   // -----------------------------------------------------------------------
@@ -596,11 +637,11 @@ function deriveSourceBackedEstimate(
     waterStorageMm,
     provenance: {
       moistureModelVersion: "derived-moisture-v1",
-      derivationMode: "source-backed",
+      derivationMode: contextOnlyOpticalEstimate ? "context-only" : "source-backed",
       rasterSourceKey: rasterSourceKey ?? undefined,
       weatherSourceKey: weatherSourceKey ?? undefined,
       baselineDataset: baselineDataset ?? undefined,
-      rasterMode,
+      rasterMode: contextOnlyOpticalEstimate ? "optical-context" : rasterMode,
       signalBlend,
       usedOptical: isOpticalRasterSource(rasterSourceKey),
       usedSar: isSarRasterSource(rasterSourceKey),
@@ -671,11 +712,16 @@ export async function rebuildFieldMoistureEstimate(input: {
         usedWeatherSoilMoisture: false,
         confidenceReason: "seeded fallback range",
       };
+  const snapshotSourceKey =
+    derivedInputs.derivationMode === "context-only"
+      ? withContextOnlySourceKey(input.estimate.sourceKey)
+      : input.estimate.sourceKey;
 
   return ensureFieldMoistureSnapshot({
     repository: input.repository,
     snapshot: {
       ...input.estimate,
+      sourceKey: snapshotSourceKey,
       rootZonePct,
       surfacePct,
       confidence,

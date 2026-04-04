@@ -14,8 +14,8 @@ export type MoistureInputProvenance = {
   rasterSourceKey?: string;
   weatherSourceKey?: string;
   moistureModelVersion?: string;
-  derivationMode?: "source-backed" | "seeded-range";
-  rasterMode?: "provider" | "synthetic" | "none";
+  derivationMode?: "source-backed" | "seeded-range" | "context-only";
+  rasterMode?: "provider" | "synthetic" | "none" | "optical-context";
   signalBlend?: "raster+weather" | "raster-only" | "weather-only" | "seeded";
   usedOptical?: boolean;
   usedSar?: boolean;

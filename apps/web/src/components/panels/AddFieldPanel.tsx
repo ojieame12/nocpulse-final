@@ -92,8 +92,8 @@ export type CommitMoistureConfidence = {
   level: 'low' | 'medium' | 'high' | 'unknown';
   score: number | null;
   reason: string | null;
-  derivationMode: 'source-backed' | 'seeded-range' | null;
-  rasterMode: 'provider' | 'synthetic' | 'none' | null;
+  derivationMode: 'source-backed' | 'seeded-range' | 'context-only' | null;
+  rasterMode: 'provider' | 'synthetic' | 'none' | 'optical-context' | null;
   signalBlend: 'raster+weather' | 'raster-only' | 'weather-only' | 'seeded' | null;
   usedOptical: boolean;
   usedSar: boolean;

@@ -56,6 +56,26 @@ type BuildFieldReportPdfRenderInput = {
   brandLogo?: PdfBrandLogo;
 };
 
+function isContextOnlyMoistureSnapshot(snapshot: {
+  sourceKey?: string | null;
+  inputs?: { derivationMode?: string | null; rasterMode?: string | null } | null;
+} | null | undefined) {
+  const sourceKey = snapshot?.sourceKey?.toLowerCase() ?? "";
+  return (
+    sourceKey.includes("context-only") ||
+    sourceKey.includes("preseason-optical-context") ||
+    snapshot?.inputs?.derivationMode === "context-only" ||
+    snapshot?.inputs?.rasterMode === "optical-context"
+  );
+}
+
+function formatMoistureValue(
+  value: number | null | undefined,
+  contextOnly: boolean,
+) {
+  return contextOnly ? "CTX" : fmtPct(value);
+}
+
 /* ── Seeding Intelligence Helpers ── */
 
 function buildPdfSeedingRecommendation(input: {
@@ -91,6 +111,7 @@ export function buildFieldReportPdfRenderInput({
   const blocks: PdfBlock[] = [];
   const m = readModel;
   const snap = m.moisture.latestSnapshot;
+  const moistureContextOnly = isContextOnlyMoistureSnapshot(snap);
   const obs = m.weather.profile.latestObservation;
   const sig = m.weather.signals;
   const crop = m.cropContext;
@@ -153,12 +174,15 @@ export function buildFieldReportPdfRenderInput({
     cells: [
       {
         label: "Root Zone",
-        value: snap ? fmtPct(snap.rootZonePct) : "—",
-        valueColor: snap && snap.rootZonePct !== null && snap.rootZonePct < 30 ? RED : undefined,
+        value: snap ? formatMoistureValue(snap.rootZonePct, moistureContextOnly) : "—",
+        valueColor:
+          !moistureContextOnly && snap && snap.rootZonePct !== null && snap.rootZonePct < 30
+            ? RED
+            : undefined,
       },
       {
         label: "Surface",
-        value: snap ? fmtPct(snap.surfacePct) : "—",
+        value: snap ? formatMoistureValue(snap.surfacePct, moistureContextOnly) : "—",
       },
       {
         label: "Temperature",
@@ -253,19 +277,24 @@ export function buildFieldReportPdfRenderInput({
       cells: [
         {
           label: "Root Zone",
-          value: fmtPct(snap.rootZonePct),
-          sub: `Field avg ${fmtPct(m.moisture.rootZoneAvgPct)}`,
-          valueColor: snap.rootZonePct !== null && snap.rootZonePct < 30 ? RED : undefined,
+          value: formatMoistureValue(snap.rootZonePct, moistureContextOnly),
+          sub: moistureContextOnly ? "Context only" : `Field avg ${fmtPct(m.moisture.rootZoneAvgPct)}`,
+          valueColor:
+            !moistureContextOnly && snap.rootZonePct !== null && snap.rootZonePct < 30
+              ? RED
+              : undefined,
         },
         {
           label: "Surface",
-          value: fmtPct(snap.surfacePct),
-          sub: `Field avg ${fmtPct(m.moisture.surfaceAvgPct)}`,
+          value: formatMoistureValue(snap.surfacePct, moistureContextOnly),
+          sub: moistureContextOnly ? "Context only" : `Field avg ${fmtPct(m.moisture.surfaceAvgPct)}`,
         },
         {
           label: "Confidence",
-          value: snap.confidence ?? "—",
-          sub: `${m.moisture.lowConfidenceCellCount} low-confidence cells`,
+          value: moistureContextOnly ? "Context" : snap.confidence ?? "—",
+          sub: moistureContextOnly
+            ? "Wait for SAR-backed moisture"
+            : `${m.moisture.lowConfidenceCellCount} low-confidence cells`,
         },
         {
           label: "Mapped Cells",
@@ -277,29 +306,37 @@ export function buildFieldReportPdfRenderInput({
       marginTop: 6,
     });
 
-    // Root zone progress bar
-    blocks.push({
-      kind: "progress-bar",
-      label: "Root Zone Moisture",
-      value: fmtPct(m.moisture.rootZoneAvgPct),
-      percent: m.moisture.rootZoneAvgPct ?? 50,
-      fillColor: (m.moisture.rootZoneAvgPct ?? 50) < 25 ? RED : GREEN_SOFT,
-      rangeLabels: ["0%", "100%"],
-      marginTop: 8,
-    });
+    if (moistureContextOnly) {
+      blocks.push({
+        kind: "text",
+        style: "caption",
+        text: "Moisture context only. Optical + weather signals are present, but this field should wait for SAR-backed moisture before treating root-zone values as truth.",
+      });
+    } else {
+      // Root zone progress bar
+      blocks.push({
+        kind: "progress-bar",
+        label: "Root Zone Moisture",
+        value: fmtPct(m.moisture.rootZoneAvgPct),
+        percent: m.moisture.rootZoneAvgPct ?? 50,
+        fillColor: (m.moisture.rootZoneAvgPct ?? 50) < 25 ? RED : GREEN_SOFT,
+        rangeLabels: ["0%", "100%"],
+        marginTop: 8,
+      });
 
-    // Surface progress bar
-    blocks.push({
-      kind: "progress-bar",
-      label: "Surface Moisture",
-      value: fmtPct(m.moisture.surfaceAvgPct),
-      percent: m.moisture.surfaceAvgPct ?? 50,
-      fillColor: (m.moisture.surfaceAvgPct ?? 50) < 20 ? RED : GREEN_SOFT,
-      rangeLabels: ["0%", "100%"],
-      marginTop: 4,
-    });
+      // Surface progress bar
+      blocks.push({
+        kind: "progress-bar",
+        label: "Surface Moisture",
+        value: fmtPct(m.moisture.surfaceAvgPct),
+        percent: m.moisture.surfaceAvgPct ?? 50,
+        fillColor: (m.moisture.surfaceAvgPct ?? 50) < 20 ? RED : GREEN_SOFT,
+        rangeLabels: ["0%", "100%"],
+        marginTop: 4,
+      });
+    }
     // Moisture cell-level summary table
-    if (m.moisture.latestCells.length > 0) {
+    if (!moistureContextOnly && m.moisture.latestCells.length > 0) {
       const cells = m.moisture.latestCells;
       const highConf = cells.filter((c) => c.confidence === "high");
       const medConf = cells.filter((c) => c.confidence === "medium");

@@ -71,6 +71,19 @@ function formatWholePercent(value: number | null | undefined) {
   return `${Math.round(value)}%`;
 }
 
+function isContextOnlyMoistureSnapshot(snapshot: {
+  sourceKey?: string | null;
+  inputs?: { derivationMode?: string | null; rasterMode?: string | null } | null;
+} | null | undefined) {
+  const sourceKey = snapshot?.sourceKey?.toLowerCase() ?? "";
+  return (
+    sourceKey.includes("context-only") ||
+    sourceKey.includes("preseason-optical-context") ||
+    snapshot?.inputs?.derivationMode === "context-only" ||
+    snapshot?.inputs?.rasterMode === "optical-context"
+  );
+}
+
 /** Build a compact detail string for hail alerts (size + time window). */
 function buildAlertDetail(alert: any): string | null {
   if (alert.family !== "hail_risk") return null;
@@ -208,11 +221,15 @@ export function buildReportProps(
   });
   const peakVpd = weatherSignals?.peakForecastVpdKpa24h ?? null;
   const waterBalance72h = weatherSignals?.netWaterBalance72hMm ?? null;
+  const moistureContextOnly = isContextOnlyMoistureSnapshot(
+    moisture?.latestSnapshot ?? null,
+  );
 
   /* Derive a short human-readable source tag from a sourceKey or providerKey.
      Intentionally terse — these appear as tiny hints next to values. */
   const moistureMode = moisture?.latestSnapshot?.inputs?.derivationMode;
   const moistureSourceTag =
+    moistureContextOnly ? "CTX" :
     moistureMode === "source-backed" ? "SAR" :
     moistureMode === "seeded-range" ? "Modeled" : undefined;
 
@@ -256,7 +273,7 @@ export function buildReportProps(
     {
       iconKey: "root-moisture" as ReadingIconKey,
       label: "Root-Zone Moisture",
-      value: rootMoistureAvg != null ? `${rootMoistureAvg.toFixed(1)}%` : "—",
+      value: moistureContextOnly ? "CTX" : rootMoistureAvg != null ? `${rootMoistureAvg.toFixed(1)}%` : "—",
       sourceTag: moistureSourceTag,
     },
     {
@@ -370,7 +387,8 @@ export function buildReportProps(
       ? "Needs Attention"
       : latestOpticalRaster != null
         ? canopySignalPresentation.reportHealthStatus
-        : rootMoistureAvg != null &&
+        : !moistureContextOnly &&
+            rootMoistureAvg != null &&
             rootMoistureAvg <= resolvedRules.moistureStress.rootZoneMonitorPct
           ? "Moisture Watch"
           : "Healthy";
@@ -382,21 +400,25 @@ export function buildReportProps(
   const cropParams: ReportCropParam[] = [
     {
       label: "Root-Zone Moisture",
-      value: rootMoistureAvg != null ? `${rootMoistureAvg.toFixed(1)}%` : "—",
-      rangeLow: `${resolvedRules.moistureStress.rootZoneCriticalPct}%`,
-      rangeHigh: "70%",
+      value: moistureContextOnly ? "CTX" : rootMoistureAvg != null ? `${rootMoistureAvg.toFixed(1)}%` : "—",
+      rangeLow: moistureContextOnly ? "CTX" : `${resolvedRules.moistureStress.rootZoneCriticalPct}%`,
+      rangeHigh: moistureContextOnly ? "CTX" : "70%",
       fillPercent:
-        rootMoistureAvg != null
+        moistureContextOnly
+          ? 50
+          : rootMoistureAvg != null
           ? Math.max(0, Math.min((rootMoistureAvg / 70) * 100, 100))
           : 0,
     },
     {
       label: "Surface Moisture",
-      value: surfaceMoistureAvg != null ? `${surfaceMoistureAvg.toFixed(1)}%` : "—",
-      rangeLow: `${resolvedRules.moistureStress.cellCriticalPct}%`,
-      rangeHigh: "60%",
+      value: moistureContextOnly ? "CTX" : surfaceMoistureAvg != null ? `${surfaceMoistureAvg.toFixed(1)}%` : "—",
+      rangeLow: moistureContextOnly ? "CTX" : `${resolvedRules.moistureStress.cellCriticalPct}%`,
+      rangeHigh: moistureContextOnly ? "CTX" : "60%",
       fillPercent:
-        surfaceMoistureAvg != null
+        moistureContextOnly
+          ? 50
+          : surfaceMoistureAvg != null
           ? Math.max(0, Math.min((surfaceMoistureAvg / 60) * 100, 100))
           : 0,
     },
@@ -453,6 +475,7 @@ export function buildReportProps(
   const recentSnapshots: readonly { observedAt: string; rootZonePct: number; surfacePct: number; confidence: string; sourceKey: string }[] =
     Array.isArray(rm.moisture?.recentSnapshots) ? rm.moisture.recentSnapshots : [];
   const modelSnapshotPoints = recentSnapshots
+    .filter((snap) => !isContextOnlyMoistureSnapshot(snap))
     .slice(0, 10)
     .reverse()
     .map((snap) => ({
@@ -518,7 +541,9 @@ export function buildReportProps(
       : usingModelFallback
         ? undefined
         : moisture?.latestSnapshot != null
-          ? "Waiting for more raster passes to draw a trend."
+          ? moistureContextOnly
+            ? "Moisture context only. Wait for SAR-backed passes before drawing a trend."
+            : "Waiting for more raster passes to draw a trend."
           : "No moisture observations yet.";
   const temperatureWindowEmptyText =
     !weatherDataAvailability.latestObservation && !weatherDataAvailability.forecasts
@@ -672,7 +697,9 @@ export function buildReportProps(
     findings: findingItems,
     zones: zoneItems,
     provenanceText: moisture?.latestSnapshot
-      ? `Root zone moisture: avg ${moisture.rootZoneAvgPct?.toFixed(1) ?? "—"}%, range ${moisture.rootZoneMinPct?.toFixed(1) ?? "—"}–${moisture.rootZoneMaxPct?.toFixed(1) ?? "—"}%. ${moisture.latestCellCount} cells, ${moisture.lowConfidenceCellCount} low-confidence.`
+      ? moistureContextOnly
+        ? `Moisture context only. ${moisture.latestCellCount} mapped cells are present, but this field should wait for SAR-backed moisture before treating root-zone values as truth.`
+        : `Root zone moisture: avg ${moisture.rootZoneAvgPct?.toFixed(1) ?? "—"}%, range ${moisture.rootZoneMinPct?.toFixed(1) ?? "—"}–${moisture.rootZoneMaxPct?.toFixed(1) ?? "—"}%. ${moisture.latestCellCount} cells, ${moisture.lowConfidenceCellCount} low-confidence.`
       : "No moisture data available for provenance.",
     sources: [...sourceKeys].map((s) => ({ label: s })),
   };

@@ -578,8 +578,8 @@ export type FieldMoistureConfidenceSummary = {
   reason: string | null;
   observedAt: string | null;
   sourceKey: string | null;
-  derivationMode: "source-backed" | "seeded-range" | null;
-  rasterMode: "provider" | "synthetic" | "none" | null;
+  derivationMode: "source-backed" | "seeded-range" | "context-only" | null;
+  rasterMode: "provider" | "synthetic" | "none" | "optical-context" | null;
   signalBlend:
     | "raster+weather"
     | "raster-only"

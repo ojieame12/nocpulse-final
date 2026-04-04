@@ -213,6 +213,72 @@ function findSeedingCard(readModel: FieldReportReadModel) {
     .find((block) => block.kind === "severity-card");
 }
 
+test("buildFieldReportPdfRenderInput shows compact CTX moisture when the snapshot is context-only", () => {
+  const readModel = createReadModel({
+    cropType: "Canola",
+    surfacePct: 0,
+    signalSet: createSignalSet({
+      soilTemp6cmCurrentC: 5.2,
+      soilTemp6cmSustainedDays: 2,
+      frostRiskMinTempC7d: 1.5,
+      frostRiskNights7d: 1,
+      frostProbabilityPct7d: 25,
+    }),
+  });
+
+  readModel.moisture.latestSnapshot = {
+    ...readModel.moisture.latestSnapshot!,
+    rootZonePct: 0,
+    surfacePct: 0,
+    confidence: "low",
+    sourceKey: "context-only:imagery-weather-derived-v1",
+    inputs: {
+      derivationMode: "context-only",
+      rasterMode: "optical-context",
+      signalBlend: "raster+weather",
+      usedOptical: true,
+      usedSar: false,
+      usedWeather: true,
+      usedWeatherSoilMoisture: true,
+    },
+  };
+  readModel.moisture.rootZoneAvgPct = 0;
+  readModel.moisture.surfaceAvgPct = 0;
+  readModel.moisture.rootZoneMinPct = 0;
+  readModel.moisture.rootZoneMaxPct = 0;
+  readModel.moisture.latestCellCount = 64;
+
+  const renderInput = buildFieldReportPdfRenderInput({
+    artifactKey: "test-artifact",
+    readModel,
+  });
+
+  const coverStrip = renderInput.blocks.find((block) => block.kind === "metric-strip");
+  const moistureGridIndex = renderInput.blocks.findIndex(
+    (block) => block.kind === "section-header" && block.label === "Moisture Conditions",
+  );
+  const moistureGrid =
+    moistureGridIndex === -1
+      ? null
+      : renderInput.blocks
+          .slice(moistureGridIndex + 1)
+          .find((block) => block.kind === "metric-grid");
+  const contextNote = renderInput.blocks.find(
+    (block) =>
+      block.kind === "text" &&
+      /wait for SAR-backed moisture/i.test(block.text),
+  );
+
+  assert.equal(coverStrip?.kind, "metric-strip");
+  assert.equal(coverStrip?.cells[0]?.value, "CTX");
+  assert.equal(coverStrip?.cells[1]?.value, "CTX");
+  assert.equal(moistureGrid?.kind, "metric-grid");
+  assert.equal(moistureGrid?.cells[0]?.value, "CTX");
+  assert.equal(moistureGrid?.cells[1]?.value, "CTX");
+  assert.equal(moistureGrid?.cells[2]?.value, "Context");
+  assert.ok(contextNote);
+});
+
 test("buildFieldReportPdfRenderInput surfaces a too-early canola verdict from the shared engine", () => {
   const card = findSeedingCard(
     createReadModel({

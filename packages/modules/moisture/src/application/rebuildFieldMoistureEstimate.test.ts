@@ -259,6 +259,39 @@ test("legacy thermal fallback restored when dropFakeThermal is false", async () 
   );
 });
 
+test("optical-plus-weather zero estimate is downgraded to context-only when it diverges from the weather baseline", async () => {
+  const { repository } = makeRepository();
+
+  const result = await rebuildFieldMoistureEstimate({
+    repository,
+    estimate: makeEstimate(),
+    sources: {
+      rasterObservation: {
+        sourceKey: "sentinel-hub-stats-v1:sentinel-2",
+        observedAt: "2026-04-01T18:20:20.000Z",
+        cells: [{ measurements: { ndmi: 0.02, ndvi: 0.12, shadow: 0.1 } }],
+      },
+      weatherObservation: {
+        sourceKey: "open-meteo:hourly-v1",
+        airTemperatureC: 9,
+        precipitationMm: 0,
+        relativeHumidityPct: 48,
+        soilMoisturePct: 20.1,
+        evapotranspirationMm: 0,
+        provenance: {
+          soilDataset: "open-meteo-hourly",
+        },
+      },
+    },
+  });
+
+  assert.equal(result.snapshot.sourceKey, "context-only:imagery-weather-derived-v1");
+  assert.equal(result.snapshot.inputs.derivationMode, "context-only");
+  assert.equal(result.snapshot.inputs.rasterMode, "optical-context");
+  assert.equal(result.snapshot.confidence, "low");
+  assert.match(result.snapshot.inputs.confidenceReason ?? "", /preseason-optical-context/i);
+});
+
 // ---------------------------------------------------------------------------
 // Water balance from weather signal set is used when available
 // ---------------------------------------------------------------------------

@@ -978,6 +978,70 @@ test("buildReportProps returns a full seven-day outlook when seven forecast days
   assert.equal(props.charts[2]?.series[0]?.points.length, 8);
 });
 
+test("buildReportProps shows compact CTX moisture when the latest snapshot is context-only", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    moisture: {
+      latestSnapshot: {
+        rootZonePct: 0,
+        surfacePct: 0,
+        confidence: "low",
+        sourceKey: "context-only:imagery-weather-derived-v1",
+        observedAt: "2026-04-04T03:29:42.695Z",
+        inputs: {
+          derivationMode: "context-only",
+          rasterMode: "optical-context",
+          signalBlend: "raster+weather",
+          usedOptical: true,
+          usedSar: false,
+          usedWeather: true,
+          usedWeatherSoilMoisture: true,
+        },
+      },
+      rootZoneAvgPct: 0,
+      surfaceAvgPct: 0,
+      rootZoneMinPct: 0,
+      rootZoneMaxPct: 0,
+      latestCellCount: 64,
+      lowConfidenceCellCount: 0,
+      recentSnapshots: [
+        {
+          observedAt: "2026-04-04T03:29:42.695Z",
+          rootZonePct: 0,
+          surfacePct: 0,
+          confidence: "low",
+          sourceKey: "context-only:imagery-weather-derived-v1",
+        },
+      ],
+    },
+    weather: {
+      profile: {
+        latestObservation: {
+          airTemperatureC: 6.5,
+          soilMoisturePct: 20.1,
+          windSpeedKph: 14,
+          providerKey: "open-meteo",
+        },
+        forecasts: [],
+      },
+      signals: null,
+    },
+    alerts: [],
+    findings: [],
+    zones: { zones: [] },
+  };
+
+  const props = buildReportProps(readModel, "North Quarter Demo", () => "just now");
+  const rootReading = props.readings.find((reading) => reading.label === "Root-Zone Moisture");
+
+  assert.equal(rootReading?.value, "CTX");
+  assert.equal(rootReading?.sourceTag, "CTX");
+  assert.equal(props.cropParams[0]?.value, "CTX");
+  assert.equal(props.cropParams[0]?.fillPercent, 50);
+  assert.match(props.provenanceText, /moisture context only/i);
+  assert.match(props.charts[1]?.emptyText ?? "", /wait for SAR-backed passes/i);
+});
+
 test("buildReportProps aggregates hourly forecast periods into daily outlook rows", () => {
   const readModel = {
     ...createBaseReadModel(),

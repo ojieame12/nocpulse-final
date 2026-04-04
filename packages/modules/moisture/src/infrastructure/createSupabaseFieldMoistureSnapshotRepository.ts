@@ -60,13 +60,16 @@ function toMoistureInputProvenance(value: JsonValue): MoistureInputProvenance {
     weatherSourceKey: readString(value, "weatherSourceKey"),
     moistureModelVersion: readString(value, "moistureModelVersion"),
     derivationMode:
-      value.derivationMode === "source-backed" || value.derivationMode === "seeded-range"
+      value.derivationMode === "source-backed" ||
+      value.derivationMode === "seeded-range" ||
+      value.derivationMode === "context-only"
         ? value.derivationMode
         : undefined,
     rasterMode:
       value.rasterMode === "provider" ||
       value.rasterMode === "synthetic" ||
-      value.rasterMode === "none"
+      value.rasterMode === "none" ||
+      value.rasterMode === "optical-context"
         ? value.rasterMode
         : undefined,
     signalBlend:

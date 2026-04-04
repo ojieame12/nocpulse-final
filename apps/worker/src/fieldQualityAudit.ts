@@ -75,8 +75,8 @@ export interface FieldQualityRow {
   latestMoistureObservedAt: string | null;
   latestConfidence: "low" | "medium" | "high" | "unknown" | null;
   latestSourceKey: string | null;
-  derivationMode: "source-backed" | "seeded-range" | null;
-  rasterMode: "provider" | "synthetic" | "none" | null;
+  derivationMode: "source-backed" | "seeded-range" | "context-only" | null;
+  rasterMode: "provider" | "synthetic" | "none" | "optical-context" | null;
   signalBlend: "raster+weather" | "raster-only" | "weather-only" | "seeded" | null;
   hasSoilContext: boolean;
   usedOptical: boolean;
@@ -94,8 +94,8 @@ type ClassificationInput = {
   hasSoilContext: boolean;
   vegetationReadiness: ChartReadiness;
   moistureReadiness: ChartReadiness;
-  derivationMode: "source-backed" | "seeded-range" | null;
-  rasterMode: "provider" | "synthetic" | "none" | null;
+  derivationMode: "source-backed" | "seeded-range" | "context-only" | null;
+  rasterMode: "provider" | "synthetic" | "none" | "optical-context" | null;
   signalBlend: "raster+weather" | "raster-only" | "weather-only" | "seeded" | null;
   confidence: "low" | "medium" | "high" | "unknown" | null;
 };
@@ -124,8 +124,8 @@ function parseMoistureInputs(value: unknown): MoistureInputProvenance {
   }
 
   return {
-    derivationMode: readString<"source-backed" | "seeded-range">(value, "derivationMode"),
-    rasterMode: readString<"provider" | "synthetic" | "none">(value, "rasterMode"),
+    derivationMode: readString<"source-backed" | "seeded-range" | "context-only">(value, "derivationMode"),
+    rasterMode: readString<"provider" | "synthetic" | "none" | "optical-context">(value, "rasterMode"),
     signalBlend: readString<"raster+weather" | "raster-only" | "weather-only" | "seeded">(
       value,
       "signalBlend",
@@ -210,8 +210,10 @@ export function classifyFieldQuality(input: ClassificationInput): {
 
   if (
     input.derivationMode === "seeded-range" ||
+    input.derivationMode === "context-only" ||
     input.signalBlend === "seeded" ||
     input.rasterMode === "synthetic" ||
+    input.rasterMode === "optical-context" ||
     !input.hasSoilContext
   ) {
     return { state: "fallback", reasons };

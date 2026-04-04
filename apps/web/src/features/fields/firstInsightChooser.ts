@@ -19,8 +19,8 @@ export type FirstInsightHydrationSummary = {
   };
   moistureConfidence?: {
     level: 'low' | 'medium' | 'high' | 'unknown';
-    derivationMode: 'source-backed' | 'seeded-range' | null;
-    rasterMode: 'provider' | 'synthetic' | 'none' | null;
+    derivationMode: 'source-backed' | 'seeded-range' | 'context-only' | null;
+    rasterMode: 'provider' | 'synthetic' | 'none' | 'optical-context' | null;
     score: number | null;
   } | null;
 };
