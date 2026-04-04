@@ -72,6 +72,8 @@ import {
   saveOfflineFieldSnapshot,
 } from '../../features/offline/offlineRecentFieldCache';
 import { flushOfflineScoutNotesQueue } from '../../features/offline/offlineScoutNotesQueue';
+import { isLiveMarketFeedCropSymbol } from "@fieldpulse/module-market";
+import { resolveMarketCropSymbol } from "../../features/fields/buildFieldOverviewViewModel.market";
 
 /* ── Types ── */
 
@@ -314,7 +316,7 @@ function patchFieldViewModelLld(
   };
 }
 
-function patchFieldViewModelCrop(
+export function patchFieldViewModelCrop(
   field: FieldViewModel,
   crop: {
     cropName: string;
@@ -375,6 +377,172 @@ function patchFieldViewModelCrop(
               : `${nextCropStageLabel} stage`,
         }
       : field.cropPanel,
+    marketPanel: buildFieldCropChangeMarketPanel(field, crop.cropName),
+  };
+}
+
+function buildFieldCropChangeMarketPanel(
+  field: FieldViewModel,
+  cropName: string,
+): FieldMarketProps | null {
+  const nextCropLabel = cropName.trim();
+  if (!nextCropLabel) {
+    return null;
+  }
+
+  const cropSymbol = resolveMarketCropSymbol(nextCropLabel);
+  const liveFeedSupported = isLiveMarketFeedCropSymbol(cropSymbol);
+  const availabilityState =
+    !cropSymbol
+      ? "unsupported-crop"
+      : !liveFeedSupported
+        ? "unsupported-feed"
+        : "quote-and-yield-unavailable";
+  const feedStatusLabel =
+    !cropSymbol
+      ? "N/A"
+      : availabilityState === "unsupported-feed"
+        ? "Unsupported"
+        : "Supported";
+  const availabilityReasonLabel =
+    availabilityState === "unsupported-crop"
+      ? `No market symbol is configured for ${nextCropLabel.toLowerCase()} yet.`
+      : availabilityState === "unsupported-feed"
+        ? `No ${cropSymbol} quote source is wired in FieldPulse yet.`
+        : `No stored ${cropSymbol} quote or field yield is available yet.`;
+
+  return {
+    fieldId: field.fieldId,
+    cropSymbol,
+    availabilityState,
+    availabilityReasonLabel,
+    valuationState:
+      availabilityState === "quote-and-yield-unavailable"
+        ? "reference-only"
+        : "unsupported",
+    feedStatusLabel,
+    referenceStatusLabel:
+      availabilityState === "quote-and-yield-unavailable" ? "Missing" : "Unsupported",
+    quoteFreshnessState:
+      availabilityState === "quote-and-yield-unavailable" ? "missing" : "unsupported",
+    quoteFreshnessLabel:
+      availabilityState === "quote-and-yield-unavailable" ? "Missing" : "Unsupported",
+    quoteAgeLabel: null,
+    historyStatusLabel: "0 captures",
+    yieldStatusLabel: "N/A",
+    harvestPriceStatusLabel: "N/A",
+    basisStatusLabel: "N/A",
+    topSummaryLabel: [feedStatusLabel, "0 captures", field.areaHaLabel]
+      .filter(Boolean)
+      .join(" · "),
+    revenueSummaryLabel: "Yield N/A · Price N/A · Basis N/A",
+    valuationStatusLabel:
+      availabilityState === "quote-and-yield-unavailable"
+        ? "Quote N/A · Yield N/A"
+        : "Unsupported",
+    missingInputs:
+      availabilityState === "quote-and-yield-unavailable"
+        ? ["quote", "yield"]
+        : [],
+    primaryActionLabel:
+      availabilityState === "quote-and-yield-unavailable"
+        ? "Add manual quote and yield"
+        : "N/A",
+    primaryActionHint: availabilityReasonLabel,
+    primaryActionHintCompact:
+      availabilityState === "unsupported-crop"
+        ? `No symbol for ${nextCropLabel.toLowerCase()} yet.`
+        : availabilityState === "unsupported-feed"
+          ? cropSymbol
+            ? `${cropSymbol} feed unsupported.`
+            : "Feed unsupported."
+          : "Add quote + yield to unlock field revenue.",
+    referenceRows: [
+      { label: "Market Symbol", value: cropSymbol ?? "—" },
+      { label: "Feed", value: feedStatusLabel },
+      { label: "Stored History", value: "0 captures" },
+      { label: "Field Area", value: field.areaHaLabel || "—" },
+    ],
+    provisionalRevenueLabel: "—",
+    provisionalRevenueSubLabel:
+      availabilityState === "quote-and-yield-unavailable" ? "Missing" : "Unsupported",
+    seasonYear: null,
+    closePriceCadPerTonne: null,
+    basisCadPerTonne: null,
+    yieldTonnesPerHa: null,
+    basisAssumptionCadPerTonne: null,
+    basisAssumptionCapturedAtLabel: null,
+    basisAssumptionSourceLabel: null,
+    basisAssumptionNoteText: null,
+    yieldAssumptionCapturedAtLabel: null,
+    yieldAssumptionSourceLabel: null,
+    yieldAssumptionNoteText: null,
+    priceSubmitUrl:
+      availabilityState === "quote-and-yield-unavailable" ? "/api/market/prices" : null,
+    basisSubmitUrl: `/api/fields/${field.fieldId}/basis-assumption`,
+    yieldSubmitUrl: `/api/fields/${field.fieldId}/yield-assumption`,
+    name: field.fieldName,
+    lld: field.summary?.lld ?? field.cropPanel?.lld ?? "",
+    sectionLabel: `${nextCropLabel.toUpperCase()} MARKET`,
+    capturedAtLabel: "Pending refresh",
+    contextLabel: "Refreshing market context",
+    priceLabel: "—",
+    priceUnitLabel:
+      availabilityState === "quote-and-yield-unavailable"
+        ? "quote unavailable"
+        : "unsupported crop",
+    priceDeltaLabel: null,
+    priceBars: [],
+    rangeLowLabel: "Recent low: —",
+    rangeHighLabel: "Recent high: —",
+    quoteStatusLabel:
+      availabilityState === "quote-and-yield-unavailable" ? "Missing" : "N/A",
+    estimatedGrossLabel: "—",
+    estimatedGrossSubLabel: "gross estimate unavailable",
+    revenueRows: [
+      { label: "Expected Yield", value: "N/A" },
+      { label: "Price at Harvest", value: "N/A" },
+      { label: "Local Basis", value: "N/A" },
+      { label: "Field Area", value: field.areaHaLabel || "—" },
+    ],
+    grossRevenueLabel: "—",
+    revenueNote:
+      availabilityState === "quote-and-yield-unavailable"
+        ? "Stored market context is refreshing for the updated crop."
+        : availabilityReasonLabel,
+    revenueNoteCompact:
+      availabilityState === "quote-and-yield-unavailable"
+        ? "Refreshing crop market context."
+        : availabilityReasonLabel,
+    contextTiles: [],
+    disclaimerText:
+      availabilityState === "quote-and-yield-unavailable"
+        ? "Market context is refreshing for the updated crop."
+        : availabilityReasonLabel,
+    footerText:
+      availabilityState === "quote-and-yield-unavailable"
+        ? "Market context is refreshing for the updated crop."
+        : availabilityReasonLabel,
+  };
+}
+
+export function mergeDeferredFieldPanels(
+  field: FieldViewModel,
+  panels: Partial<FieldViewModel>,
+  expectedFieldId: string,
+): FieldViewModel {
+  if (field.fieldId !== expectedFieldId) {
+    return field;
+  }
+
+  return {
+    ...field,
+    reportPanel: field.reportPanel ?? panels.reportPanel ?? null,
+    actionPanel: field.actionPanel ?? panels.actionPanel ?? null,
+    notesPanel: field.notesPanel ?? panels.notesPanel ?? null,
+    marketPanel: field.marketPanel ?? panels.marketPanel ?? null,
+    cropPanel: field.cropPanel ?? panels.cropPanel ?? null,
+    activityPanel: field.activityPanel ?? panels.activityPanel ?? null,
   };
 }
 
@@ -2569,7 +2737,20 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
             <StreamingPanels
               promise={initialPanelsPromise}
               onResolve={(panels) =>
-                setFieldData((prev) => ({ ...prev, ...panels }))
+                setFieldData((prev) => {
+                  const next = mergeDeferredFieldPanels(
+                    prev,
+                    panels,
+                    initial.fieldId,
+                  );
+
+                  if (next !== prev) {
+                    fieldCacheRef.current.set(next.fieldId, next);
+                    setFieldCacheRevision((revision) => revision + 1);
+                  }
+
+                  return next;
+                })
               }
             />
           </React.Suspense>

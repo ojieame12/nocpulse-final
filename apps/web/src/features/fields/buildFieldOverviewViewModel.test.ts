@@ -371,6 +371,41 @@ test("buildMarketProps explains unsupported market crops", () => {
   assert.equal(props.priceBars.length, 0);
 });
 
+test("buildMarketProps ignores crop-scoped assumptions when the current crop has no market symbol", () => {
+  const readModel = createBaseReadModel();
+  readModel.cropContext.cropType = "faba bean";
+  readModel.summary.cropType = "faba bean";
+
+  const props = buildMarketProps(
+    readModel,
+    "field-123",
+    "North Quarter Demo",
+    64.2,
+    null,
+    [],
+    {
+      cropSymbol: "RYE",
+      basisCadPerTonne: 0,
+      sourceKey: "manual-panel",
+      assumedAt: "2026-03-28T00:00:00Z",
+      noteText: null,
+    },
+    {
+      cropSymbol: "RYE",
+      yieldTonnesPerHa: 4,
+      sourceKey: "manual-panel",
+      assumedAt: "2026-03-28T00:00:00Z",
+      noteText: null,
+    },
+  );
+
+  assert.equal(props.cropSymbol, null);
+  assert.equal(props.basisCadPerTonne, null);
+  assert.equal(props.yieldTonnesPerHa, null);
+  assert.equal(props.revenueSummaryLabel, "Yield N/A · Price N/A · Basis N/A");
+  assert.equal(props.provisionalRevenueLabel, "—");
+});
+
 test("buildMarketProps treats rye as a live-feed crop even before quotes are stored", () => {
   const readModel = createBaseReadModel();
   readModel.cropContext.cropType = "rye";

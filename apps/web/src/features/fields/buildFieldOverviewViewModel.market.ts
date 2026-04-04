@@ -51,6 +51,23 @@ export function resolveMarketCropSymbol(cropType: string | null | undefined) {
   }
 }
 
+function isCompatibleAssumptionCropSymbol(
+  marketCropSymbol: string | null,
+  assumptionCropSymbol: string | null | undefined,
+) {
+  const normalizedAssumptionSymbol =
+    assumptionCropSymbol?.trim().toUpperCase() ?? null;
+
+  if (!marketCropSymbol) {
+    return normalizedAssumptionSymbol == null;
+  }
+
+  return (
+    normalizedAssumptionSymbol == null ||
+    normalizedAssumptionSymbol === marketCropSymbol
+  );
+}
+
 function formatSignedMillimetres(value: number | null | undefined) {
   if (value == null) {
     return "—";
@@ -339,16 +356,18 @@ export function buildMarketProps(
   });
   const effectiveYieldAssumption =
     fieldYieldAssumption &&
-    (!marketCropSymbol ||
-      !fieldYieldAssumption.cropSymbol ||
-      fieldYieldAssumption.cropSymbol === marketCropSymbol)
+    isCompatibleAssumptionCropSymbol(
+      marketCropSymbol,
+      fieldYieldAssumption.cropSymbol,
+    )
       ? fieldYieldAssumption
       : null;
   const effectiveBasisAssumption =
     fieldBasisAssumption &&
-    (!marketCropSymbol ||
-      !fieldBasisAssumption.cropSymbol ||
-      fieldBasisAssumption.cropSymbol === marketCropSymbol)
+    isCompatibleAssumptionCropSymbol(
+      marketCropSymbol,
+      fieldBasisAssumption.cropSymbol,
+    )
       ? fieldBasisAssumption
       : null;
   const effectiveBasisCadPerTonne =

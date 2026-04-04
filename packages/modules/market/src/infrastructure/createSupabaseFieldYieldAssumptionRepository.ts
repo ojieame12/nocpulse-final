@@ -42,6 +42,8 @@ export function createSupabaseFieldYieldAssumptionRepository(
 
       if (cropSymbol && cropSymbol.trim().length > 0) {
         query = query.eq("crop_symbol", cropSymbol.trim().toUpperCase());
+      } else {
+        query = query.is("crop_symbol", null);
       }
 
       const result = await query
