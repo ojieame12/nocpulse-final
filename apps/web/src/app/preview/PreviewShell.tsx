@@ -2701,7 +2701,7 @@ export function PreviewShell({ initial, initialPanelsPromise, viewer = null, gue
 
   return (
     <ThemeContext.Provider value={theme}>
-    <div className="app-shell" data-theme={theme}>
+    <div className="app-shell" data-theme={theme} data-preview-shell="true">
       {showWelcome && (
         <WelcomeModal
           onAddField={() => {
