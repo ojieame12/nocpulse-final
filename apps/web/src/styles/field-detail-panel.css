@@ -915,10 +915,11 @@
 
 [data-theme="dark"] .fdp {
   background:
-    linear-gradient(180deg, rgba(18, 26, 20, 0.92) 0%, rgba(12, 18, 14, 0.96) 100%);
+    linear-gradient(180deg, rgba(18, 26, 20, 0.96) 0%, rgba(12, 18, 14, 0.98) 100%);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  /* Hardened opaque shell — avoids browser crashes from full-panel blur over the live map. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4), 0 2px 10px rgba(0, 0, 0, 0.2);
 
   /* Override semantic tokens within dark panel scope */
@@ -1189,10 +1190,10 @@
 
 [data-theme="light"] .fdp {
   background:
-    linear-gradient(180deg, rgba(248, 250, 248, 0.88) 0%, rgba(236, 241, 236, 0.92) 100%);
+    linear-gradient(180deg, rgba(248, 250, 248, 0.97) 0%, rgba(236, 241, 236, 0.98) 100%);
   border: 1px solid rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.08), 0 2px 10px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.6);
   --text-primary: rgba(0, 0, 0, 0.82);
   --text-secondary: rgba(0, 0, 0, 0.55);
