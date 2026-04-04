@@ -206,6 +206,31 @@ test("preseason context: ndvi mode changes headline to preseason messaging", () 
   assert.ok(result.headline.toLowerCase().includes("preseason"));
 });
 
+test("context-only moisture uses compact context headline and hero label", () => {
+  const mapModel = createSurfaceMapModel({
+    metricKey: "root-zone-moisture-pct",
+    metricAveragePct: 0,
+    sourceLabel: "context-only:imagery-raster-derived-v1:sentinel-hub-stats-v1:sentinel-2",
+  });
+  const result = buildFieldDetailModeData(
+    createMinimalInput({
+      mode: "moisture",
+      mapModel,
+      summary: {
+        rootMoisture: "CTX",
+        surfaceMoisture: "CTX",
+        trendSub: "Waiting on radar or source-backed moisture",
+      },
+    }),
+  );
+
+  assert.equal(result.contextOnly, true);
+  assert.equal(result.hero.d, "CTX");
+  assert.equal(result.riskLevel, "Context Only");
+  assert.match(result.headline, /context/i);
+  assert.match(result.sub, /context/i);
+});
+
 test("hover: hoveredCell with matching metricKey overrides headline to include 'cell'", () => {
   const mapModel = createSurfaceMapModel();
   const hoveredCell = {

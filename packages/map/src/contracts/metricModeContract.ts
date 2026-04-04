@@ -241,6 +241,10 @@ function normalizeMetricSourceLabel(sourceLabel?: string): string | null {
   const normalized = raw.toLowerCase();
   const isPreseasonOpticalContext =
     normalized.includes("preseason-optical-context");
+  const isContextOnly =
+    isPreseasonOpticalContext ||
+    normalized.includes("context-only") ||
+    normalized.includes("context only");
 
   if (normalized.includes("synthetic-preview")) {
     return "Synthetic preview surface";
@@ -268,8 +272,14 @@ function normalizeMetricSourceLabel(sourceLabel?: string): string | null {
     const deduped = Array.from(new Set(parts)).join(" · ");
     return isPreseasonOpticalContext
       ? `Preseason optical context · ${deduped}`
+      : isContextOnly
+        ? `Context-only · ${deduped}`
       : deduped;
   }
 
-  return isPreseasonOpticalContext ? "Preseason optical context" : raw;
+  return isPreseasonOpticalContext
+    ? "Preseason optical context"
+    : isContextOnly
+      ? "Context-only"
+      : raw;
 }

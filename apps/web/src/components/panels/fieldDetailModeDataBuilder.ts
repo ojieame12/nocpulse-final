@@ -96,6 +96,7 @@ export function buildFieldDetailModeData({
       : surface?.metricAveragePct ?? null;
   const sourceSummary = describeMetricSource(surface?.sourceLabel, surface?.confidence);
   const preseasonOpticalContext = isPreseasonOpticalContextSurface(surface);
+  const moistureContextOnly = mode === "moisture" && preseasonOpticalContext;
   const heroParts = splitMetricDisplayParts(metricKey, effectiveMetricPct);
   const cellsList = surface ? (Array.isArray(surface.cells) ? surface.cells : Object.values(surface.cells)) : [];
   const sortedMetricValues = cellsList.map((cell) => cell.metricValuePct).sort((left, right) => left - right);
@@ -388,7 +389,9 @@ export function buildFieldDetailModeData({
 
   const headlineByMode: Record<ModeKey, string> = {
     moisture:
-      stressedPct >= 30
+      moistureContextOnly
+        ? "Optical moisture context loaded"
+        : stressedPct >= 30
         ? "Moisture stress is widespread"
         : localizedContrastSignal
           ? "Moisture pockets need attention"
@@ -441,7 +444,9 @@ export function buildFieldDetailModeData({
   };
 
   const subByMode: Record<ModeKey, string> = {
-    moisture: `${summary?.rootMoisture ?? "—"} soil moisture · ${summary?.surfaceMoisture ?? "—"} surface · ${sourceSummary}`,
+    moisture: moistureContextOnly
+      ? `${summary?.rootMoisture ?? "CTX"} moisture context · ${sourceSummary}`
+      : `${summary?.rootMoisture ?? "—"} soil moisture · ${summary?.surfaceMoisture ?? "—"} surface · ${sourceSummary}`,
     ndvi: preseasonOpticalContext
       ? `${ndviValue} crop health · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`
       : `${ndviValue} crop health · ${ndreValue} canopy vigor · ${summary?.rootMoisture ?? "—"} soil moisture · ${sourceSummary}`,
@@ -467,9 +472,11 @@ export function buildFieldDetailModeData({
       : null;
 
   const interpretationByMode: Record<ModeKey, string> = {
-    moisture: summary?.rootMoistureSub
-      ? `${summary.rootMoistureSub}. ${summary.trendSub}`
-      : contract.valueMeaning,
+    moisture: moistureContextOnly
+      ? "Optical-only context. Confirm with radar or source-backed moisture."
+      : summary?.rootMoistureSub
+        ? `${summary.rootMoistureSub}. ${summary.trendSub}`
+        : contract.valueMeaning,
     ndvi: preseasonOpticalContext
       ? `${crop?.healthIndex.subLabel ?? "Preseason optical context"}. Use moisture and ${radarWetnessLabel} for current field decisions until crop stage and season GDD are verified.`
       : `${crop?.healthIndexTitle ?? "Canopy signal"} · ${healthMetric}. ${crop?.healthIndex.subLabel ?? "Field-average vigor context"}`,
@@ -485,8 +492,8 @@ export function buildFieldDetailModeData({
   return {
     hero: {
       v: Math.max(0, Math.min(1, (effectiveMetricPct ?? 0) / 100)),
-      d: heroParts.display,
-      u: heroParts.unit,
+      d: moistureContextOnly ? "CTX" : heroParts.display,
+      u: moistureContextOnly ? "" : heroParts.unit,
       sev: riskSeverity,
     },
     contextOnly: preseasonOpticalContext,
@@ -559,6 +566,9 @@ export function buildFieldDetailModeData({
             .filter(Boolean)
             .join(" "),
     risk:
+      moistureContextOnly
+        ? `Hold hard moisture calls until radar or source-backed moisture lands.`
+      : 
       preseasonOpticalContext && (mode === "ndvi" || mode === "ndre" || mode === "ndmi")
         ? `Use Moisture and ${radarWetnessLabel} for current decisions. Optical layers are preseason context until stage is verified.`
         : trackedZoneFocusSignal

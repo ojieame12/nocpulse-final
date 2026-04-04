@@ -127,10 +127,12 @@ export function MetricLegendCard({
   const meta = resolveMetricModeContract(metricKey, sourceLabel);
   const ramp = resolveColorRamp(metricKey);
   const gradient = useMemo(() => rampToGradient(ramp), [ramp]);
+  const sourceBasis = resolveAgronomicSourceBasis(sourceLabel);
+  const contextOnlyMetric = sourceBasis.basis === "context-only";
   const legendValue = hoveredMetricPct ?? metricAveragePct;
-  const legendValueLabel = formatMetricDisplayValue(metricKey, legendValue);
-  const avgValueLabel = formatMetricDisplayValue(metricKey, metricAveragePct);
-  const hoverValueLabel = formatMetricDisplayValue(metricKey, hoveredMetricPct);
+  const legendValueLabel = contextOnlyMetric ? "CTX" : formatMetricDisplayValue(metricKey, legendValue);
+  const avgValueLabel = contextOnlyMetric ? "CTX" : formatMetricDisplayValue(metricKey, metricAveragePct);
+  const hoverValueLabel = contextOnlyMetric ? "CTX" : formatMetricDisplayValue(metricKey, hoveredMetricPct);
   const sourceDescription = describeMetricSource(sourceLabel, confidence);
   const validityDescription = resolveMetricValidity(sourceLabel);
 

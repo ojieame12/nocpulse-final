@@ -134,6 +134,42 @@ function countUsableObservations(
   return keys.size;
 }
 
+const CONTEXT_ONLY_SOURCE_PREFIX = "context-only:";
+
+function isContextOnlySourceLabel(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized.includes("context-only") || normalized.includes("context only");
+}
+
+function isOpticalRasterSource(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    (normalized.includes("sentinel-2") ||
+      normalized.includes("planet") ||
+      normalized.includes("optical")) &&
+    !normalized.includes("sentinel-1") &&
+    !normalized.includes("sar")
+  );
+}
+
+function withContextOnlySourceLabel(sourceLabel: string) {
+  return isContextOnlySourceLabel(sourceLabel)
+    ? sourceLabel
+    : `${CONTEXT_ONLY_SOURCE_PREFIX}${sourceLabel}`;
+}
+
+function isMoistureContextOnlySnapshot(snapshot: any | null | undefined) {
+  return (
+    isContextOnlySourceLabel(snapshot?.sourceKey) ||
+    snapshot?.inputs?.derivationMode === "context-only" ||
+    snapshot?.inputs?.rasterMode === "optical-context"
+  );
+}
+
 export function buildEffectiveMoistureSummary(rm: any) {
   const moisture = rm.moisture ?? {};
   const latestSnapshot = moisture.latestSnapshot ?? null;
@@ -148,16 +184,34 @@ export function buildEffectiveMoistureSummary(rm: any) {
           rasterObservation: latestRaster,
         })
       : null;
+  const rasterDerivedSourceKey = latestRaster
+    ? `imagery-raster-derived-v1:${latestRaster.sourceKey}`
+    : null;
+  const opticalContextOnlyFallback =
+    latestSnapshot == null &&
+    latestRaster != null &&
+    isOpticalRasterSource(latestRaster.sourceKey);
 
   const baseSnapshot =
     latestSnapshot ??
-    (rasterEstimate && latestRaster
+    (rasterEstimate && latestRaster && rasterDerivedSourceKey
       ? {
           observedAt: latestRaster.observedAt,
-          sourceKey: `imagery-raster-derived-v1:${latestRaster.sourceKey}`,
+          sourceKey: opticalContextOnlyFallback
+            ? withContextOnlySourceLabel(rasterDerivedSourceKey)
+            : rasterDerivedSourceKey,
           rootZonePct: rasterEstimate.rootZonePct,
           surfacePct: rasterEstimate.surfacePct,
-          confidence: rasterEstimate.confidence,
+          confidence: opticalContextOnlyFallback ? "low" : rasterEstimate.confidence,
+          inputs: {
+            derivationMode: opticalContextOnlyFallback ? "context-only" : "source-backed",
+            signalBlend: "raster-only",
+            rasterMode: opticalContextOnlyFallback ? "optical-context" : "provider",
+            usedOptical: isOpticalRasterSource(latestRaster.sourceKey),
+            usedSar: !isOpticalRasterSource(latestRaster.sourceKey),
+            usedWeather: false,
+            usedWeatherSoilMoisture: false,
+          },
         }
       : null);
 
@@ -174,7 +228,7 @@ export function buildEffectiveMoistureSummary(rm: any) {
           centroid: cell.centroid,
           boundary: cell.boundary,
           observedAt: latestRaster.observedAt,
-          sourceKey: `imagery-raster-derived-v1:${latestRaster.sourceKey}`,
+          sourceKey: baseSnapshot.sourceKey,
           confidence: baseSnapshot.confidence,
           ...deriveRasterCellMoisture(cell, {
             rootZonePct: baseSnapshot.rootZonePct,
@@ -1149,6 +1203,9 @@ export function deriveSummaryConfidenceBreakdown(
   snapshot: any | null | undefined,
 ): { freshness: string; agreement: string; resolution: string; scaleFit: string; sourceAge: string; coverage: string } | null {
   if (!snapshot?.inputs) return null;
+  if (isMoistureContextOnlySnapshot(snapshot)) {
+    return null;
+  }
   const inputs = snapshot.inputs;
 
   // Freshness
@@ -1210,9 +1267,9 @@ export function deriveSummaryDataSources(
   let satellite: string | null = null;
   if (snapshot?.sourceKey) {
     const sk = snapshot.sourceKey.toLowerCase();
-    if (sk.includes("sentinel-1")) satellite = "Sentinel-1 (SAR)";
-    else if (sk.includes("sentinel-2")) satellite = "Sentinel-2 (Optical)";
-    else if (sk.includes("planet")) satellite = "Planet (Optical)";
+    if (sk.includes("sentinel-1")) satellite = isContextOnlySourceLabel(sk) ? "Sentinel-1 (SAR context)" : "Sentinel-1 (SAR)";
+    else if (sk.includes("sentinel-2")) satellite = isContextOnlySourceLabel(sk) ? "Sentinel-2 (Optical context)" : "Sentinel-2 (Optical)";
+    else if (sk.includes("planet")) satellite = isContextOnlySourceLabel(sk) ? "Planet (Optical context)" : "Planet (Optical)";
     else satellite = snapshot.sourceKey;
   }
 
@@ -1362,6 +1419,7 @@ export function buildSummaryProps(input: {
     summaryDataQuality,
     formatTimeAgo,
   } = input;
+  const moistureContextOnly = isMoistureContextOnlySnapshot(latestMoisture);
 
   return {
     name: field.name,
@@ -1378,38 +1436,68 @@ export function buildSummaryProps(input: {
       timeStyle: "short",
     }).toUpperCase()}`,
     moisture: hasRootPct ? rootPct / 100 : 0,
+    moistureContextOnly,
     cloudCover:
       latestPrimaryCapture?.cloudCoverPct != null
         ? toCapturePercentLabel(latestPrimaryCapture.cloudCoverPct)
         : latestPrimaryCapture?.providerKey === "sentinel-1"
           ? "SAR"
           : "—",
-    surfaceMoisture: hasSurfPct ? `${surfPct.toFixed(0)}%` : "—",
-    fieldState: !hasRootPct ? "Unknown" : rootPct < 30 ? "Dry" : rootPct < 60 ? "Adequate" : "Wet",
-    fieldStateColor: !hasRootPct ? "#6b7280" : rootPct < 30 ? "#f59e0b" : "#16a34a",
-    rootMoisture: hasRootPct ? `${rootPct.toFixed(1)}%` : "—",
-    rootMoistureSub: !hasRootPct ? "No moisture reading" : rootPct < 30 ? "Below threshold" : "Adequate",
-    trend: formatSignedPercentDelta(moistureTrendDelta),
+    surfaceMoisture: moistureContextOnly ? "CTX" : hasSurfPct ? `${surfPct.toFixed(0)}%` : "—",
+    fieldState: moistureContextOnly
+      ? "Context"
+      : !hasRootPct
+        ? "Unknown"
+        : rootPct < 30
+          ? "Dry"
+          : rootPct < 60
+            ? "Adequate"
+            : "Wet",
+    fieldStateColor: moistureContextOnly
+      ? "#64748b"
+      : !hasRootPct
+        ? "#6b7280"
+        : rootPct < 30
+          ? "#f59e0b"
+          : "#16a34a",
+    rootMoisture: moistureContextOnly ? "CTX" : hasRootPct ? `${rootPct.toFixed(1)}%` : "—",
+    rootMoistureSub: moistureContextOnly
+      ? "Optical-only context"
+      : !hasRootPct
+        ? "No moisture reading"
+        : rootPct < 30
+          ? "Below threshold"
+          : "Adequate",
+    trend: moistureContextOnly ? "—" : formatSignedPercentDelta(moistureTrendDelta),
     trendSub:
-      moistureTrendDelta != null && previousMoistureObservation
+      moistureContextOnly
+        ? "Waiting on radar or source-backed moisture"
+        : moistureTrendDelta != null && previousMoistureObservation
         ? `vs ${shortProviderLabel(previousMoistureObservation.providerKey)} raster · ${formatMediumDateTime(previousMoistureObservation.observedAt)}`
         : "Insufficient raster history",
     spread:
-      effectiveMoisture.rootZoneMinPct != null && effectiveMoisture.rootZoneMaxPct != null
+      !moistureContextOnly && effectiveMoisture.rootZoneMinPct != null && effectiveMoisture.rootZoneMaxPct != null
         ? (effectiveMoisture.rootZoneMaxPct - effectiveMoisture.rootZoneMinPct).toFixed(1)
         : "—",
     spreadSub:
-      effectiveMoisture.latestCellCount > 0
+      moistureContextOnly
+        ? "Optical-only context"
+        : effectiveMoisture.latestCellCount > 0
         ? `${effectiveMoisture.latestCellCount} mapped cells`
         : "Insufficient data",
     confidence:
-      confidence === "unknown" ? "—" : confidence.charAt(0).toUpperCase() + confidence.slice(1),
-    confidenceSub: latestMoisture?.sourceKey ?? "No source",
-    moistureConfidenceLevel:
-      confidence === "high" || confidence === "medium" || confidence === "low"
+      moistureContextOnly
+        ? "Context"
+        : confidence === "unknown"
+          ? "—"
+          : confidence.charAt(0).toUpperCase() + confidence.slice(1),
+    confidenceSub: moistureContextOnly ? "Optical-only fallback" : latestMoisture?.sourceKey ?? "No source",
+    moistureConfidenceLevel: moistureContextOnly
+      ? "unknown"
+      : confidence === "high" || confidence === "medium" || confidence === "low"
         ? confidence
         : "unknown",
-    moistureDerivationMode: latestMoisture?.inputs?.derivationMode ?? "unknown",
+    moistureDerivationMode: moistureContextOnly ? "context-only" : latestMoisture?.inputs?.derivationMode ?? "unknown",
     sourceTagExtended: buildSourceTagExtended(latestMoisture),
     precipitation:
       latestObservation?.precipitationMm != null
@@ -1459,12 +1547,14 @@ export function buildSummaryProps(input: {
           : `${entry.precipitationMm.toFixed(1)}mm`,
     })),
     historicalAnomaly: resolveHistoricalAnomalyFromReadModel(readModel),
-    depletionPct: latestMoisture?.inputs?.depletionPct ?? null,
+    depletionPct: moistureContextOnly ? null : latestMoisture?.inputs?.depletionPct ?? null,
     availableWaterMm:
-      latestMoisture?.inputs?.availableWaterMm != null
+      !moistureContextOnly && latestMoisture?.inputs?.availableWaterMm != null
         ? `~${Math.round(latestMoisture.inputs.availableWaterMm)}mm`
         : null,
-    statusLabel: deriveSummaryStatusLabel(latestMoisture?.inputs?.depletionPct ?? null, hasRootPct ? rootPct : null),
+    statusLabel: moistureContextOnly
+      ? undefined
+      : deriveSummaryStatusLabel(latestMoisture?.inputs?.depletionPct ?? null, hasRootPct ? rootPct : null),
     confidenceBreakdown: deriveSummaryConfidenceBreakdown(latestMoisture),
     dataSources: deriveSummaryDataSources(latestMoisture, weatherDataAvailability),
     dataQuality: summaryDataQuality,
@@ -1524,6 +1614,7 @@ export function deriveSummaryDataQuality(input: {
   const opticalReady = input.opticalObservationCount >= 2;
   const confidence = input.confidence ?? snapshot?.confidence ?? "unknown";
   const stale = isSummarySnapshotStale(snapshot);
+  const contextOnly = isMoistureContextOnlySnapshot(snapshot);
 
   const reasons: string[] = [];
   if (weatherReady) reasons.push("Weather context loaded");
@@ -1543,6 +1634,16 @@ export function deriveSummaryDataQuality(input: {
   if (confidence === "high") reasons.push("High moisture confidence");
   else if (confidence === "medium") reasons.push("Moderate moisture confidence");
   else if (confidence === "low") reasons.push("Low moisture confidence");
+
+  if (contextOnly) {
+    reasons.push("Optical-only moisture context");
+    return {
+      label: "Limited",
+      tone: "warning",
+      summary: "Current moisture is optical context only. Wait for radar or source-backed moisture before treating it as root-zone truth.",
+      reasons,
+    };
+  }
 
   if (
     derivationMode === "seeded-range" ||
@@ -1604,7 +1705,8 @@ function buildSourceTagExtended(
   if (!derivation || derivation === "unknown") return undefined;
 
   const sourceKey = snapshot.sourceKey?.toLowerCase() ?? "";
-  const isSatellite = derivation === "source-backed";
+  const isContextOnly = isMoistureContextOnlySnapshot(snapshot);
+  const isSatellite = derivation === "source-backed" || isContextOnly;
 
   // Provider short name
   let provider = "";
@@ -1625,7 +1727,11 @@ function buildSourceTagExtended(
     else freshness = `${Math.floor(ageH / 24)}d ago`;
   }
 
-  const label = isSatellite ? "Satellite-derived" : "Weather-derived";
+  const label = isContextOnly
+    ? "Context-only"
+    : isSatellite
+      ? "Satellite-derived"
+      : "Weather-derived";
   const parts = [label, provider, freshness].filter(Boolean);
   return parts.join(" · ");
 }

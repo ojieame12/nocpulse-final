@@ -157,7 +157,8 @@ export function formatSurfaceMetricValue(
 export function isPreseasonOpticalContextSurface(
   surface: FieldAgronomicSurfaceRenderModel | FieldAgronomicAlternateSurfaceRenderModel | null | undefined,
 ) {
-  return surface?.sourceLabel?.toLowerCase().includes("preseason-optical-context") ?? false;
+  const normalized = surface?.sourceLabel?.toLowerCase() ?? "";
+  return normalized.includes("preseason-optical-context") || normalized.includes("context-only");
 }
 
 /* ── Data finders (null-safe lookups) ───────────────────────────── */

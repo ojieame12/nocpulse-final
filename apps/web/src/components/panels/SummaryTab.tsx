@@ -57,6 +57,7 @@ export interface FieldSummaryProps {
   conditionsMeta?: string;
   updatedLabel?: string;
   moisture: number;
+  moistureContextOnly?: boolean;
   cloudCover: string;
   surfaceMoisture: string;
   fieldState: string;
@@ -178,7 +179,11 @@ const CONFIDENCE_RING: Record<MoistureConfidenceLevel, { color: string; label: s
 
 export function SummaryTab({ field }: { field: FieldSummaryProps }) {
   const [activeLayer, setActiveLayer] = useState<Layer>('Crop Health');
-  const moistureColor = field.moisture < 0.3 ? '#ef4444' : '#16a34a';
+  const moistureColor = field.moistureContextOnly
+    ? '#64748b'
+    : field.moisture < 0.3
+      ? '#ef4444'
+      : '#16a34a';
   const contextLabel = field.contextLabel ?? 'Field overview';
   const conditionsMeta = field.conditionsMeta ?? 'Field average';
   const updatedLabel = field.updatedLabel ?? '—';
@@ -212,9 +217,16 @@ export function SummaryTab({ field }: { field: FieldSummaryProps }) {
             />
             <DonutChart
               value={field.moisture}
+              label={field.moistureContextOnly ? "CTX" : undefined}
               size={120}
               color={moistureColor}
-              caption={field.depletionPct != null ? "Water depletion" : "Soil moisture"}
+              caption={
+                field.moistureContextOnly
+                  ? "Moisture context"
+                  : field.depletionPct != null
+                    ? "Water depletion"
+                    : "Soil moisture"
+              }
             />
           </div>
           <div className="donut-info">

@@ -610,6 +610,51 @@ test("buildEffectiveMoistureSummary prefers a SAR raster over a newer generic op
   assert.equal(summary.latestCells[0]?.sourceKey, "imagery-raster-derived-v1:sentinel-hub-stats-v1:sentinel-1");
 });
 
+test("buildEffectiveMoistureSummary marks optical-only raster fallback as context-only", () => {
+  const summary = buildEffectiveMoistureSummary({
+    moisture: {
+      latestSnapshot: null,
+      latestCells: [],
+    },
+    imagery: {
+      latestRasterObservation: {
+        sourceKey: "sentinel-hub-stats-v1:sentinel-2",
+        observedAt: "2026-03-28T12:00:00Z",
+        cells: [
+          {
+            cellKey: "optical-cell",
+            rowIndex: 0,
+            columnIndex: 0,
+            centroid: [-108.18, 51.89],
+            boundary: {
+              type: "Polygon",
+              coordinates: [[
+                [-108.181, 51.889],
+                [-108.179, 51.889],
+                [-108.179, 51.891],
+                [-108.181, 51.891],
+                [-108.181, 51.889],
+              ]],
+            },
+            measurements: {
+              ndvi: 0.04,
+              ndmi: 0.01,
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  assert.equal(
+    summary.latestSnapshot?.sourceKey,
+    "context-only:imagery-raster-derived-v1:sentinel-hub-stats-v1:sentinel-2",
+  );
+  assert.equal(summary.latestSnapshot?.confidence, "low");
+  assert.equal(summary.latestSnapshot?.inputs?.derivationMode, "context-only");
+  assert.equal(summary.latestSnapshot?.inputs?.rasterMode, "optical-context");
+});
+
 test("resolveCropStagePresentation treats derived zero-GDD stages as unverified and falls back to the crop default stage for thresholds", () => {
   const presentation = resolveCropStagePresentation({
     cropContext: {
@@ -1720,6 +1765,74 @@ test("buildSummaryProps carries frostRisk onto the built summary model", () => {
     verdict: "protect",
     verdictSub: "2 frost nights forecast",
   });
+});
+
+test("buildSummaryProps downgrades optical-only moisture fallback to context-only presentation", () => {
+  const readModel = {
+    ...createBaseReadModel(),
+    generatedAt: "2026-04-03T12:00:00.000Z",
+  };
+
+  const summary = buildSummaryProps({
+    field: {
+      name: "Trent Karst",
+    },
+    readModel,
+    cropStagePresentation: {
+      displayStageLabel: "Vegetative",
+    },
+    latestPrimaryCapture: {
+      providerKey: "sentinel-2",
+      cloudCoverPct: 18,
+    },
+    hasRootPct: true,
+    rootPct: 0,
+    hasSurfPct: true,
+    surfPct: 0,
+    moistureTrendDelta: -4.2,
+    previousMoistureObservation: {
+      providerKey: "sentinel-2",
+      observedAt: "2026-04-01T12:00:00.000Z",
+    },
+    effectiveMoisture: {
+      latestCellCount: 24,
+      rootZoneMinPct: 0,
+      rootZoneMaxPct: 7,
+    },
+    confidence: "low",
+    latestMoisture: {
+      sourceKey: "context-only:imagery-raster-derived-v1:sentinel-hub-stats-v1:sentinel-2",
+      observedAt: "2026-04-03T12:00:00.000Z",
+      inputs: {
+        derivationMode: "context-only",
+        rasterMode: "optical-context",
+      },
+    },
+    latestObservation: null,
+    weatherDataAvailability: {
+      latestObservation: true,
+      forecasts: true,
+    },
+    nextRainForecast: null,
+    forecastDays: [],
+    alertItems: [],
+    summaryDataQuality: {
+      label: "Limited",
+      tone: "warning",
+      summary: "Optical moisture context only.",
+      reasons: ["Optical-only moisture context"],
+    },
+    formatTimeAgo: () => "soon",
+  });
+
+  assert.equal(summary.moistureContextOnly, true);
+  assert.equal(summary.fieldState, "Context");
+  assert.equal(summary.rootMoisture, "CTX");
+  assert.equal(summary.surfaceMoisture, "CTX");
+  assert.equal(summary.trend, "—");
+  assert.equal(summary.confidence, "Context");
+  assert.equal(summary.moistureConfidenceLevel, "unknown");
+  assert.match(summary.sourceTagExtended ?? "", /^Context-only · Optical · /);
 });
 
 test("buildActionProps deduplicates active signals while preserving active intelligence counts", () => {

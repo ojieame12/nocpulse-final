@@ -332,6 +332,39 @@ test("moisture surfaces expose field-relative percentile and anomaly context", (
   assert.equal(highCell.anomalyClass, "above-field");
 });
 
+test("context-only moisture surfaces render with a muted neutral tint", () => {
+  const model = buildFieldMoistureSurfaceRenderModel({
+    fieldId: "field-1",
+    boundaryFeature,
+    bbox: [-108.181, 51.889, -108.171, 51.899],
+    rootZonePct: 0,
+    surfacePct: 0,
+    confidence: "low",
+    sourceLabel: "context-only:imagery-raster-derived-v1:sentinel-hub-stats-v1:sentinel-2",
+    persistedCells: [
+      {
+        cellKey: "cell-context",
+        centroid: [-108.179, 51.891],
+        boundary: {
+          type: "Polygon",
+          coordinates: [[
+            [-108.181, 51.889],
+            [-108.171, 51.889],
+            [-108.171, 51.899],
+            [-108.181, 51.899],
+            [-108.181, 51.889],
+          ]],
+        },
+        rootZonePct: 0,
+        surfacePct: 0,
+        sourceKey: "context-only:imagery-raster-derived-v1:sentinel-hub-stats-v1:sentinel-2",
+      },
+    ],
+  });
+
+  assert.deepEqual(model.cells[0]?.fillColor.slice(0, 3), [100, 116, 139]);
+});
+
 test("moisture surface stamps provenance context onto every cell when provided", () => {
   const provenance = {
     depletionPct: 34.5,

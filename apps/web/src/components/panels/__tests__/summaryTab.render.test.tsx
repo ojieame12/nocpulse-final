@@ -72,3 +72,33 @@ test("SummaryTab hides the frost risk section when no frost risk is present", ()
 
   assert.doesNotMatch(markup, /FROST RISK/);
 });
+
+test("SummaryTab renders moisture context compactly for context-only fallback", () => {
+  const markup = renderToStaticMarkup(
+    <SummaryTab
+      field={createFieldSummary({
+        moisture: 0,
+        moistureContextOnly: true,
+        surfaceMoisture: "CTX",
+        fieldState: "Context",
+        fieldStateColor: "#64748b",
+        rootMoisture: "CTX",
+        rootMoistureSub: "Optical-only context",
+        trend: "—",
+        trendSub: "Waiting on radar or source-backed moisture",
+        spread: "—",
+        spreadSub: "Optical-only context",
+        confidence: "Context",
+        confidenceSub: "Optical-only fallback",
+        moistureConfidenceLevel: "unknown",
+        moistureDerivationMode: "context-only",
+        sourceTagExtended: "Context-only · Optical · yesterday",
+      })}
+    />,
+  );
+
+  assert.match(markup, /CTX/);
+  assert.match(markup, /Moisture context/);
+  assert.match(markup, /Context-only · Optical · yesterday/);
+  assert.doesNotMatch(markup, />0%</);
+});

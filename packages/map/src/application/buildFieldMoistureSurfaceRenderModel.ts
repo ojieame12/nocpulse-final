@@ -64,6 +64,12 @@ const ADEQUATE_MOISTURE_LOW_PCT = 38;
 const ADEQUATE_MOISTURE_HIGH_PCT = 62;
 const SATURATION_ALERT_PCT = 84;
 const BASE_MOISTURE_HEIGHT_M = 12;
+const CONTEXT_ONLY_FILL_COLOR: MapRgbColor = [100, 116, 139];
+
+function isContextOnlySourceLabel(sourceLabel: string | null | undefined) {
+  const normalized = sourceLabel?.toLowerCase() ?? "";
+  return normalized.includes("context-only") || normalized.includes("context only");
+}
 
 function resolveMoistureStressAttention(
   rootZonePct: number,
@@ -264,6 +270,7 @@ export function buildFieldMoistureSurfaceRenderModel({
   provenance = null,
 }: BuildFieldMoistureSurfaceRenderModelInput): FieldAgronomicSurfaceRenderModel {
   const numericConfidence = CONFIDENCE_MAP[confidence] ?? 0.5;
+  const contextOnly = isContextOnlySourceLabel(sourceLabel);
 
   // ── Pass 1: compute raw cell values ──
   type RawCell = {
@@ -324,7 +331,9 @@ export function buildFieldMoistureSurfaceRenderModel({
 
   // ── Pass 2: build render models with analytics ──
   const draftCells: FieldAgronomicCellRenderModel[] = rawCells.map((cell, index) => {
-    const color = resolveRampColor("root-zone-moisture-pct", cell.metricValuePct);
+    const color = contextOnly
+      ? CONTEXT_ONLY_FILL_COLOR
+      : resolveRampColor("root-zone-moisture-pct", cell.metricValuePct);
     const delta = cell.metricValuePct - metricAveragePct;
     const absDelta = Math.abs(delta);
     const vBucket = classifyVariance(absDelta);

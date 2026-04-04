@@ -43,3 +43,24 @@ test("MetricLegendCard defaults the active pill to the rendered metric when no s
 
   assert.match(markup, /<button[^>]*aria-pressed="true"[^>]*>[\s\S]*?Moisture/);
 });
+
+test("MetricLegendCard shows CTX instead of a hard percent for context-only moisture", () => {
+  const markup = renderCard({
+    metricAveragePct: 0,
+    sourceLabel: "context-only:imagery-raster-derived-v1:sentinel-hub-stats-v1:sentinel-2",
+    confidence: "low",
+    availableMetricDetails: {
+      "root-zone-moisture-pct": {
+        sourceLabel: "context-only:imagery-raster-derived-v1:sentinel-hub-stats-v1:sentinel-2",
+        confidence: "low",
+      },
+      ndvi: {
+        sourceLabel: "sentinel-hub-stats-v1:sentinel-2",
+        confidence: "high",
+      },
+    },
+  });
+
+  assert.match(markup, />CTX</);
+  assert.doesNotMatch(markup, />0\.0%</);
+});
