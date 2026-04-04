@@ -92,7 +92,7 @@ export function PrairieCrops() {
         >
           Every crop has different frost damage thresholds, disease
           susceptibility windows, and growth stage progressions. We model all of
-          them — not a generic &ldquo;crop.&rdquo;
+          them, not a generic &ldquo;crop.&rdquo;
         </p>
       </div>
 

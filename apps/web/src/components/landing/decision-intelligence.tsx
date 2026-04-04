@@ -7,25 +7,25 @@ const DECISIONS = [
     number: "01",
     title: "Frost probability",
     verdict: "37% chance of −2°C by Thursday",
-    body: "51 weather models run overnight. By morning you see the probability your field drops below damage threshold — not a generic forecast, a per-field verdict.",
+    body: "51 weather models run overnight. By morning you see the probability your field drops below damage threshold. Not a generic forecast, a per-field verdict.",
   },
   {
     number: "02",
     title: "Spray windows",
-    verdict: "Thu 0600–1000 · Wind 12 km/h · No precip",
-    body: "Four consecutive hours where wind stays under 18 km/h, precipitation probability below 20%, and temperature between 10–30°C. We find them. You pick one.",
+    verdict: "Thu 0600-1000 · Wind 12 km/h · No precip",
+    body: "Four consecutive hours where wind stays under 18 km/h, precipitation probability below 20%, and temperature between 10-30°C. We find them. You pick one.",
   },
   {
     number: "03",
     title: "Seeding verdict",
     verdict: "Seed Now · Soil 8°C at 6cm · 0% frost 7d",
-    body: "Seed Now, Hold, or Too Early. Based on soil temperature at 6 cm, 7-day frost window, and field fitness — not a calendar date.",
+    body: "Seed Now, Hold, or Too Early. Based on soil temperature at 6 cm, 7-day frost window, and field fitness. Not a calendar date.",
   },
   {
     number: "04",
     title: "Disease risk",
     verdict: "Sclerotinia risk HIGH · Canola · Flowering",
-    body: "Crop-specific models for sclerotinia, fusarium, ascochyta, and white mold. Not generic stress — named pathogens with conditions you can verify.",
+    body: "Crop-specific models for sclerotinia, fusarium, ascochyta, and white mold. Named pathogens with conditions you can verify.",
   },
 ];
 
@@ -105,7 +105,7 @@ export function DecisionIntelligence() {
           }}
         >
           Every other tool shows you what&apos;s happening. We tell you what to
-          do about it — with thresholds you can verify and timing you can act on.
+          do about it, with thresholds you can verify and timing you can act on.
         </p>
       </div>
 

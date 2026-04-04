@@ -31,7 +31,7 @@ const FEATURES = [
   {
     number: "06",
     title: "Built for how you farm",
-    body: "LLD-first field entry, familiar crop defaults, and workflows designed around real operations — not office dashboards.",
+    body: "LLD-first field entry, familiar crop defaults, and workflows designed around real operations, not office dashboards.",
   },
 ];
 
