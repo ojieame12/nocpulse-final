@@ -171,7 +171,7 @@ test("isReusableSpreadsheetImportBatch tolerates persisted geometry rounding", (
           [-109.9, 49.9],
           [-110, 49.9],
           [-110, 50],
-        ]]],
+        ]]] as const,
       },
     },
   };
