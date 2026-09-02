@@ -7,6 +7,10 @@ import {
 import type { FieldCropContext } from "@fieldpulse/module-field-crop-context";
 import type { FieldDetail } from "@fieldpulse/module-fields";
 import type { FieldMoistureSnapshot } from "@fieldpulse/module-moisture";
+import {
+  buildFieldReportPdfRenderInput,
+  type FieldReportReadModel,
+} from "@fieldpulse/module-reports";
 import type {
   FieldWeatherDerivedSignalSet,
   FieldWeatherForecast,
@@ -15,8 +19,6 @@ import type {
 import { buildReportProps } from "./buildFieldOverviewViewModel.report";
 import { resolveFieldAccessPresentation, resolveSeedingRecommendation } from "./buildFieldOverviewViewModel.spring";
 import { resolveSprayWindowRecommendation } from "./buildFieldOverviewViewModel.spray";
-import type { FieldReportReadModel } from "../../../../../packages/modules/reports/src/contracts/FieldReportReadModel";
-import { buildFieldReportPdfRenderInput } from "../../../../../packages/modules/reports/src/application/buildFieldReportPdfRenderInput";
 
 const FIELD = {
   id: "field-1",
