@@ -13,10 +13,10 @@ The codebase was developed internally as **FieldPulse v3**. NocPulse is the
 product name used in the interface.
 
 > **Status:** Controlled-beta product build and portfolio case study. No public
-> production URL is advertised from this repository. The web and worker
-> production bundles were rebuilt successfully on 1 September 2026. The root
-> architecture/typecheck gates still contain known test-code violations, listed
-> under [Verification](#verification).
+> production URL is advertised from this repository. The complete repository
+> check passed in public CI on 2 September 2026 at `16f3710`; the dated result
+> and its limits are linked under [Verification](#verification). A passing
+> source check is not evidence of a healthy deployment or customer adoption.
 
 ## The product problem
 
@@ -154,23 +154,22 @@ keys, signing keys or database credentials.
 
 ## Verification
 
-Rechecked on 1 September 2026:
+Latest verified public CI checkpoint: **2 September 2026**, commit
+[`16f3710`](https://github.com/ojieame12/nocpulse-final/commit/16f37104718622b2285989607729d35addf550b2).
+The [successful run](https://github.com/ojieame12/nocpulse-final/actions/runs/33612823266)
+executed the repository's complete check command with Node.js 24 and pnpm 10:
 
 ```bash
-pnpm --filter @fieldpulse/web build
-pnpm --filter @fieldpulse/worker build
+pnpm install --frozen-lockfile
+pnpm check
 ```
 
-Both production bundles complete successfully.
-
-The full root gates are **not currently green**:
-
-- `pnpm lint` reports two internal-source imports in a web parity test.
-- `pnpm typecheck` reports stale test fixtures across crop intelligence, field
-  intake, reports and weather.
-
-Those issues are confined to test and boundary-check code in the current
-revision, but they should be resolved before describing CI as fully passing.
+`check` runs the architecture boundary gate, TypeScript checks, the configured
+test suite, and the web and worker builds. The boundary/test-fixture failures
+recorded on 1 September were addressed by the later revision; they are not
+the current result. This checkpoint was verified from the published workflow,
+not rerun against production infrastructure. Provider health, live data quality,
+deployment readiness and product outcomes need separate evidence.
 
 The repository contains focused tests for field intake, imagery, crop risks,
 weather, report models, map rendering, workspace settings, panel rendering,
